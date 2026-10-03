@@ -1,13 +1,28 @@
 const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",ticks:[],digits:[],engine:"overunder",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—"};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—"};
 
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
 function setStatus(kind,text){statusBadge.className="status "+kind;statusText.textContent=text;$("diagConnection").textContent=text;$("diagSocket").textContent=state.socket?state.socket.readyState===1?"OPEN":"CLOSED":"—";if($("diagEndpoint"))$("diagEndpoint").textContent=WS_URLS[state.endpointIndex%WS_URLS.length];if($("diagMessage"))$("diagMessage").textContent=state.lastMessage;if($("diagError"))$("diagError").textContent=state.lastError}
 function fmtPrice(v){return Number(v).toFixed(Math.max(0,Math.min(8,decimalPlaces(v))))}
 function decimalPlaces(v){const s=String(v);return s.includes(".")?s.split(".")[1].length:0}
-function digitFromQuote(quote){const raw=String(quote);if(raw.includes(".")){const fractional=raw.split(".")[1].replace(/[^0-9]/g,"");if(fractional.length)return Number(fractional.at(-1));}const clean=raw.replace(/[^0-9]/g,"");return clean?Number(clean.at(-1)):null}
+function pipDecimals(pip){const n=Number(pip);if(!Number.isFinite(n))return null;if(Number.isInteger(n)&&n>=0&&n<=8)return n;if(n>0&&n<1)return Math.max(0,Math.round(-Math.log10(n)));return null}
+function digitFromQuote(quote,pipSize=state.pipSize){
+  const raw=String(quote);
+  const decimals=pipDecimals(pipSize);
+  if(decimals!==null){
+    const fixed=Number(quote).toFixed(decimals);
+    const fractional=fixed.includes(".")?fixed.split(".")[1]:"";
+    if(fractional.length)return Number(fractional.at(-1));
+  }
+  if(raw.includes(".")){
+    const fractional=raw.split(".")[1].replace(/[^0-9]/g,"");
+    if(fractional.length)return Number(fractional.at(-1));
+  }
+  const clean=raw.replace(/[^0-9]/g,"");
+  return clean?Number(clean.at(-1)):null;
+}
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
 
 function connect(){
@@ -64,12 +79,12 @@ function handleMessage(d){
   if(d.error){state.lastError=`${d.error.code||"API"}: ${d.error.message||"Deriv data error"}`;if($("diagError"))$("diagError").textContent=state.lastError;console.warn("Deriv API error:",d.error);setStatus("error",d.error.message||"Deriv data error");return}
   if(d.msg_type==="ping"){$("diagSocket").textContent="OPEN • PING OK";return}
   if(d.msg_type==="active_symbols")loadMarkets(d.active_symbols||[]);
-  if(d.msg_type==="history")loadHistory(d.history?.prices||[],d.history?.times||[]);
+  if(d.msg_type==="history")loadHistory(d.history?.prices||[],d.history?.times||[],d.history?.pip_size??d.pip_size??state.pipSize);
   if(d.msg_type==="tick")receiveTick(d.tick);
 }
 function normalizeMarket(m){
   const symbol=m.underlying_symbol||m.symbol; const name=m.underlying_symbol_name||m.display_name||symbol;
-  return {symbol,name,market:m.market||"",submarket:m.submarket||"",subgroup:m.subgroup||""};
+  return {symbol,name,market:m.market||"",submarket:m.submarket||"",subgroup:m.subgroup||"",pipSize:m.pip_size??m.pip??null};
 }
 function loadMarkets(raw){
   const all=raw.map(normalizeMarket).filter(m=>m.symbol);
@@ -81,25 +96,28 @@ function loadMarkets(raw){
   for(const [g,items] of Object.entries(groups)){const og=document.createElement("optgroup");og.label=g;for(const m of items){const o=document.createElement("option");o.value=m.symbol;o.textContent=m.name;o.dataset.name=m.name;og.appendChild(o)}marketSelect.appendChild(og)}
   marketSelect.disabled=!state.markets.length;
   const selected=state.markets.find(m=>m.symbol===state.symbol)||state.markets[0];
-  if(selected){state.symbol=selected.symbol;state.marketName=selected.name;marketSelect.value=selected.symbol;$("marketName").textContent=selected.name;if(!state.marketStarted)startMarket(true)}
+  if(selected){state.symbol=selected.symbol;state.marketName=selected.name;state.pipSize=selected.pipSize;marketSelect.value=selected.symbol;$("marketName").textContent=selected.name;if(!state.marketStarted)startMarket(true)}
 }
 function startMarket(force=false){
   if(!force && state.marketStarted && state.symbol==="R_100")return;
   state.marketStarted=true;
+  const selected=state.markets.find(m=>m.symbol===state.symbol);if(selected?.pipSize!=null)state.pipSize=selected.pipSize;
   state.ticks=[];state.digits=[];$("lastPrice").textContent="—";$("lastDigit").textContent="—";renderStream();renderEngine();
   request({ticks_history:state.symbol,end:"latest",count:1000,style:"ticks",req_id:nextReq()});
   request({ticks:state.symbol,subscribe:1,req_id:nextReq()});
   if($("diagSubscription"))$("diagSubscription").textContent=`Requested ${state.symbol}`;
 }
-function loadHistory(prices,times){
+function loadHistory(prices,times,pipSize=null){
+  if(pipSize!=null)state.pipSize=pipSize;
   const arr=prices.map((p,i)=>({quote:p,epoch:times[i]||0})).filter(x=>Number.isFinite(Number(x.quote)));
-  state.ticks=arr.slice(-MAX_TICKS);state.digits=arr.map(x=>digitFromQuote(x.quote)).filter(Number.isInteger).slice(-MAX_TICKS);
+  state.ticks=arr.slice(-MAX_TICKS);state.digits=arr.map(x=>digitFromQuote(x.quote,state.pipSize)).filter(Number.isInteger).slice(-MAX_TICKS);
   $("diagHistory").textContent=String(arr.length);updateQuality();renderStream();renderEngine();
 }
 function receiveTick(t){
   if(!t||t.symbol!==state.symbol)return;
   const quote=t.quote;if(!Number.isFinite(Number(quote)))return;
-  const digit=digitFromQuote(quote,t.pip_size);if(!Number.isInteger(digit))return;
+  if(t.pip_size!=null)state.pipSize=t.pip_size;
+  const digit=digitFromQuote(quote,state.pipSize);if(!Number.isInteger(digit))return;
   state.ticks.push({quote:Number(quote),epoch:t.epoch||Math.floor(Date.now()/1000)});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
   state.lastTickAt=Date.now();
