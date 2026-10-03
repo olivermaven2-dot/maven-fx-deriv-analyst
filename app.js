@@ -1,4 +1,4 @@
-const WS_URLS=["wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
+const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
 const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",ticks:[],digits:[],engine:"overunder",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—"};
 
@@ -46,7 +46,7 @@ function connect(){
   ws.onclose=e=>{
     clearTimeout(state.connectTimer);
     state.connected=false;
-    state.lastError=`Close ${e.code}${e.reason?": "+e.reason:""}`;
+    state.lastError=`Close ${e.code}${e.reason?": "+e.reason:""}${e.code===1006?" — abnormal close before a WebSocket close frame":""}`;
     state.endpointIndex=(state.endpointIndex+1)%WS_URLS.length;
     setStatus("offline",`Disconnected (${e.code}) — switching endpoint`);
     scheduleReconnect();
