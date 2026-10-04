@@ -183,7 +183,7 @@ function renderOverUnder(root,d,c,last,n){
   root.innerHTML=panel(e.signal,reason,entry,[
     `Selected setup: ${setup}`,
     `Selected probability: ${Math.round(e.selectedRate*100)}% • Complement: ${Math.round(e.oppositeRate*100)}%`,
-    `Recent probability: ${Math.round(e.recentRate*100)}% • Transition support: ${e.transitions?Math.round(e.transitionRate*100)+"%":"+ "not enough occurrences"}`,
+    `Recent probability: ${Math.round(e.recentRate*100)}% • Transition support: ${e.transitions?Math.round(e.transitionRate*100)+"%" :"not enough occurrences"}`,
     e.probabilityConflict?`× Probability Gate blocked by ${state.selectedSide==="OVER"?"UNDER":"OVER"} ${e.oppositeDigit}`:e.signal==="STRONG SIGNAL"?"Multiple evidence layers agree":e.signal==="SIGNAL"?"Evidence is moderately aligned":"× Evidence is not yet aligned"
   ],n);
 }
