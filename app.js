@@ -222,11 +222,32 @@ function renderOverUnder(root,d,c,last,n){
     e.probabilityConflict?`× Probability Gate blocked by ${state.selectedSide==="OVER"?"UNDER":"OVER"} ${e.oppositeDigit}`:entry?`Entry candidate ${entry.main} passed the 3-tick follow-through test`:e.signal==="STRONG SIGNAL"?"Signal is strong, but no entry candidate passed the required confirmation":"× Evidence is not yet aligned"
   ],n);
 }
+function evenOddEntry(d,selectedSide){
+  const patterns=[],target=selectedSide==="EVEN"?0:1,other=target===0?1:0,recent=d.slice(-250),key=x=>x%2===0?0:1;
+  for(let len=1;len<=3;len++){
+    let occurrences=0,favorable=0,recovered=0;
+    for(let i=0;i+len+2<recent.length;i++){
+      let matches=true;for(let j=0;j<len;j++){if(key(recent[i+j])!==target){matches=false;break}}
+      if(!matches)continue;occurrences++;
+      const n1=key(recent[i+len]),n2=key(recent[i+len+1]),n3=key(recent[i+len+2]);
+      if(n1===target&&n2===target&&n3===target)favorable++;
+      else if(n1===target&&(n2===other||n3===other))recovered++;
+    }
+    if(occurrences>=3){const persistence=favorable/occurrences,recovery=recovered/occurrences,score=persistence*.65+recovery*.2+(Math.min(occurrences,20)/20)*.15;patterns.push({len,occurrences,favorable,recovered,persistence,recovery,score});}
+  }
+  patterns.sort((a,b)=>b.score-a.score||b.occurrences-a.occurrences);const best=patterns[0];
+  if(!best||best.occurrences<3||best.score<.55)return null;
+  const confidence=Math.min(95,Math.round(55+best.score*30+Math.min(best.occurrences,10)));
+  return {main:selectedSide,meta:confidence+"% confidence • pattern length "+best.len+" • 3-step persistence "+Math.round(best.persistence*100)+"%",evidence:best.occurrences+" pattern reactions",reason:"The recent "+selectedSide.toLowerCase()+" pattern shows repeated continuation across the next three parity ticks."};
+}
 function renderEvenOdd(root,d,last,n){
-  const even=d.filter(x=>x%2===0).length, odd=n-even, side=even>=odd?"EVEN":"ODD", share=Math.max(even,odd)/n;
+  const even=d.filter(x=>x%2===0).length,odd=n-even,selected=even>=odd?"EVEN":"ODD",share=Math.max(even,odd)/n;
   const signal=share>=.62&&n>=100,strong=share>=.68&&n>=500,st=strong?"STRONG SIGNAL":signal?"SIGNAL":"WAIT";
-  const pattern=d.slice(-4).join(" → ");
-  root.innerHTML=panel(st,signal?`Recent parity distribution currently leans ${side}.`:"Recent parity evidence is inconclusive.",signal?{main:side,meta:"Qualifying parity bias",evidence:Math.round(share*100)+"/100"}:null,[`Recent pattern: ${pattern}`,`Even rate: ${rate(even,n)}% • Odd rate: ${rate(odd,n)}%`,n>=100?"Sample size is sufficient":"× Sample size is still building"],n);
+  const entry=(st==="SIGNAL"||st==="STRONG SIGNAL")?evenOddEntry(d,selected):null;
+  const entryDisplay=entry||((st==="SIGNAL"||st==="STRONG SIGNAL")?{main:"NO VALID ENTRY",meta:"No parity pattern passed the continuation test",evidence:"No qualifying pattern"}:null);
+  const pattern=d.slice(-4).map(x=>x%2===0?"E":"O").join(" → ");
+  root.innerHTML=panel(st,signal?"Recent parity distribution currently leans "+selected+".":"Recent parity evidence is inconclusive.",entryDisplay,[
+    "Recent pattern: "+pattern,"Even rate: "+rate(even,n)+"% • Odd rate: "+rate(odd,n)+"%",entry?"Entry pattern "+entry.main+" passed the 3-step continuation test":st==="STRONG SIGNAL"?"Signal is strong, but no parity pattern passed entry confirmation":"× Parity evidence is not yet sufficiently aligned"],n);
 }
 function renderRiseFall(root,d,last,n){
   if(d.length<3){root.innerHTML=panel("INSUFFICIENT DATA","More ticks are required to measure direction.",null,["Waiting for a larger sequence"],n);return}
