@@ -12,3 +12,5 @@ button,select{font:inherit}.topbar{max-width:920px;margin:auto;padding:20px 16px
 footer{text-align:center;color:#68768d;font-size:10px;padding:10px 16px 28px}
 @media(max-width:420px){.price-grid{grid-template-columns:1fr}.price-grid div:last-child strong{font-size:48px}.live-meta{font-size:10px}.state{font-size:27px}}
 @media(min-width:760px){.app{padding-top:14px}.engine-panel{padding:24px}.stats{grid-template-columns:repeat(4,1fr)}}
+
+.ou-controls{margin-top:2px;padding:14px;background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:var(--radius)}.ou-label{font-size:10px;letter-spacing:.13em;color:var(--muted);font-weight:800;margin-bottom:9px}.ou-row{display:grid;grid-template-columns:repeat(10,1fr);gap:5px}.ou-digit,.ou-side{min-height:38px;border:1px solid var(--line);border-radius:9px;background:#0d1524;color:var(--muted);font-weight:800;font-size:12px}.ou-digit.active,.ou-side.active{color:var(--text);border-color:#466487;background:#142239}.ou-sides{grid-template-columns:1fr 1fr;margin-top:7px;gap:7px}@media(max-width:360px){.ou-row{grid-template-columns:repeat(5,1fr)}}
