@@ -33,7 +33,8 @@ function connect(){
   const url=WS_URLS[state.endpointIndex%WS_URLS.length];
   let ws;
   try{ws=new WebSocket(url);state.socket=ws;}
-  catch(err){state.lastError=`WebSocket constructor: ${err.message||err}`;setStatus("error","Browser blocked WebSocket");state.endpointIndex=(state.endpointIndex+1)%WS_URLS.length;scheduleReconnect();return;}
+  catch(err){state.lastError=`WebSocket constructor: ${err.message||err}`;setStatus("error","Browser blocked WebSocket");state.endpointIndex=(state.endpointIndex+1)%WS_URLS.length;scheduleRerenderOUControls();
+connect();return;}
   state.connectTimer=setTimeout(()=>{
     if(ws.readyState!==WebSocket.OPEN){
       try{ws.onclose=null;ws.close()}catch{}
@@ -163,6 +164,18 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   else if(selectedRate<0.45)signal="AVOID";
   return {oppositeDigit,selectedRate,oppositeRate,recentRate,transitionRate,transitions,streak,probabilityConflict,sample,signal};
 }
+function renderOUControls(){
+  const setupLabel=$("ouSetupLabel");
+  if(setupLabel)setupLabel.textContent=state.selectedSide+" "+state.selectedDigit;
+  document.querySelectorAll(".ou-digit").forEach(btn=>{
+    const d=Number(btn.dataset.digit);
+    const qualifies=state.selectedSide==="OVER"?d>state.selectedDigit:d<state.selectedDigit;
+    btn.classList.toggle("active",d===state.selectedDigit);
+    btn.classList.toggle("qualifying",d!==state.selectedDigit&&qualifies);
+    btn.classList.toggle("nonqualifying",d!==state.selectedDigit&&!qualifies);
+  });
+  document.querySelectorAll(".ou-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.side===state.selectedSide));
+}
 function renderEngine(){
   const d=state.digits, n=d.length, c=counts(d), last=d.at(-1);
   const root=$("engineRoot");
@@ -201,8 +214,8 @@ function renderRiseFall(root,d,last,n){
   const pat=recent.slice(-4).map((x,i,a)=>i?x>a[i-1]?"R":"F":x).join(" → ");
   root.innerHTML=panel(st,signal?`Recent directional movement currently leans ${side}.`:"Recent directional evidence is inconclusive.",signal?{main:side,meta:"Qualifying directional continuation",evidence:Math.round(share*100)+"/100"}:null,[`Recent sequence: ${pat}`,`Rise: ${rise} • Fall: ${fall}`,total>=30?"Directional sample is sufficient":"× Directional sample is still building"],n);
 }
-document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".ou-digit").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.selectedDigit=Number(btn.dataset.digit);renderEngine()}));
-document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".ou-side").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.selectedSide=btn.dataset.side;renderEngine()}));
+document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);renderOUControls();renderEngine()}));
+document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;renderOUControls();renderEngine()}));
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.engine=btn.dataset.engine;renderEngine()}));
 marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true)}});
 let touchX=0,touchY=0;
