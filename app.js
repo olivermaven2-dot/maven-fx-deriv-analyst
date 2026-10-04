@@ -1,6 +1,6 @@
 const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—"};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—"};
 
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
@@ -138,6 +138,31 @@ function renderStream(){
 }
 function counts(d){return d.reduce((a,x)=>(a[x]=(a[x]||0)+1,a),{})}
 function rate(a,b){return b?Math.round(a/b*100):0}
+function overUnderEvidence(d,selectedDigit,selectedSide){
+  const n=d.length;
+  const oppositeDigit=9-selectedDigit;
+  const selectedHits=d.filter(x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit).length;
+  const oppositeHits=d.filter(x=>selectedSide==="OVER"?x<oppositeDigit:x>oppositeDigit).length;
+  const selectedRate=n?selectedHits/n:0, oppositeRate=n?oppositeHits/n:0;
+  const recent=d.slice(-50), recentHits=recent.filter(x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit).length;
+  const recentRate=recent.length?recentHits/recent.length:0;
+  let transitions=0,favorable=0;
+  for(let i=0;i<n-1;i++){
+    if(d[i]===selectedDigit){transitions++;if(selectedSide==="OVER"?d[i+1]>selectedDigit:d[i+1]<selectedDigit)favorable++;}
+  }
+  const transitionRate=transitions?favorable/transitions:0;
+  let streak=0;for(let i=n-1;i>=0;i--){if(selectedSide==="OVER"?d[i]>selectedDigit:d[i]<selectedDigit)streak++;else break;}
+  const recentAgreement=Math.abs(recentRate-selectedRate)<=0.12;
+  const probabilityConflict=oppositeRate>selectedRate+0.03;
+  const sample=n>=500?"GOOD":n>=100?"BUILDING":"INSUFFICIENT";
+  let signal="WAIT";
+  if(n<100)signal="WAIT";
+  else if(probabilityConflict)signal="AVOID";
+  else if(selectedRate>=0.62&&recentRate>=0.58&&recentAgreement)signal="STRONG SIGNAL";
+  else if(selectedRate>=0.55&&recentRate>=0.52)signal="SIGNAL";
+  else if(selectedRate<0.45)signal="AVOID";
+  return {oppositeDigit,selectedRate,oppositeRate,recentRate,transitionRate,transitions,streak,probabilityConflict,sample,signal};
+}
 function renderEngine(){
   const d=state.digits, n=d.length, c=counts(d), last=d.at(-1);
   const root=$("engineRoot");
@@ -152,15 +177,14 @@ function panel(stateText,reason,entry,why,n){
 }
 function entryHtml(e){return `<div class="entry"><div class="entry-head">ENTRY</div><div class="entry-main">${esc(e.main)}</div><div class="entry-meta">${esc(e.meta||"Qualifying setup")}</div></div>`}
 function renderOverUnder(root,d,c,last,n){
-  const high=d.filter(x=>x>=5).length, low=d.filter(x=>x<=4).length, side=high>=low?"OVER":"UNDER", share=Math.max(high,low)/n;
-  const signal=share>=.62&&n>=100, strong=share>=.68&&n>=500;
-  const st=strong?"STRONG SIGNAL":signal?"SIGNAL":"WAIT";
-  const entry=signal?{main:side==="OVER"?"5–9":"0–4",meta:"Current side has qualifying recent dominance",evidence:Math.round(share*100)+"/100"}:null;
-  root.innerHTML=panel(st,signal?`Recent digit distribution currently leans ${side}.`:"Evidence is currently inconclusive; keep collecting data.",entry,[
-    `${side} group rate: ${Math.round(share*100)}%`,
-    n>=100?"Sample size is sufficient for the current screen":"× Sample size is still building",
-    "Live digit stream is being monitored",
-    strong?"Evidence strength is high":signal?"Evidence strength is moderate":"× Evidence strength is not yet qualifying"
+  const e=overUnderEvidence(d,state.selectedDigit,state.selectedSide), setup=`${state.selectedSide} ${state.selectedDigit}`;
+  const entry=(e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL")?{main:"NO VALID ENTRY",meta:"Entry engine will be added after Final Signal is stable",evidence:e.sample}:null;
+  const reason=e.probabilityConflict?`Probability conflict: ${state.selectedSide} ${state.selectedDigit} is weaker than its complementary setup ${state.selectedSide==="OVER"?"UNDER":"OVER"} ${e.oppositeDigit}.`:e.signal==="AVOID"?"The selected setup is not supported strongly enough by current evidence.":e.signal==="WAIT"?"Evidence is developing; continue collecting live data.":`The selected setup ${setup} has aligned recent and historical evidence.`;
+  root.innerHTML=panel(e.signal,reason,entry,[
+    `Selected setup: ${setup}`,
+    `Selected probability: ${Math.round(e.selectedRate*100)}% • Complement: ${Math.round(e.oppositeRate*100)}%`,
+    `Recent probability: ${Math.round(e.recentRate*100)}% • Transition support: ${e.transitions?Math.round(e.transitionRate*100)+"%":"+ "not enough occurrences"}`,
+    e.probabilityConflict?`× Probability Gate blocked by ${state.selectedSide==="OVER"?"UNDER":"OVER"} ${e.oppositeDigit}`:e.signal==="STRONG SIGNAL"?"Multiple evidence layers agree":e.signal==="SIGNAL"?"Evidence is moderately aligned":"× Evidence is not yet aligned"
   ],n);
 }
 function renderEvenOdd(root,d,last,n){
@@ -177,6 +201,8 @@ function renderRiseFall(root,d,last,n){
   const pat=recent.slice(-4).map((x,i,a)=>i?x>a[i-1]?"R":"F":x).join(" → ");
   root.innerHTML=panel(st,signal?`Recent directional movement currently leans ${side}.`:"Recent directional evidence is inconclusive.",signal?{main:side,meta:"Qualifying directional continuation",evidence:Math.round(share*100)+"/100"}:null,[`Recent sequence: ${pat}`,`Rise: ${rise} • Fall: ${fall}`,total>=30?"Directional sample is sufficient":"× Directional sample is still building"],n);
 }
+document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".ou-digit").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.selectedDigit=Number(btn.dataset.digit);renderEngine()}));
+document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".ou-side").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.selectedSide=btn.dataset.side;renderEngine()}));
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.engine=btn.dataset.engine;renderEngine()}));
 marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true)}});
 let touchX=0,touchY=0;
