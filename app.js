@@ -189,15 +189,37 @@ function panel(stateText,reason,entry,why,n){
   return `<section class="engine-panel"><div class="panel-kicker">CURRENT ANALYSIS</div><div class="state ${cls}">${esc(stateText)}</div><div class="reason">${esc(reason)}</div>${entry?entryHtml(entry):""}<div class="why"><div class="why-title">WHY THIS STATE?</div><ul>${why.map(x=>`<li class="${x[0]==="×"?"block":""}">${esc(x)}</li>`).join("")}</ul></div><details class="analysis-details"><summary>Detailed analysis</summary><div class="stats"><div class="stat"><span>Sample</span><strong>${n}</strong></div><div class="stat"><span>Evidence</span><strong>${entry?.evidence||"Building"}</strong></div><div class="stat"><span>Data quality</span><strong>${n>=500?"GOOD":n>=100?"BUILDING":"INSUFFICIENT"}</strong></div><div class="stat"><span>Last digit</span><strong>${state.digits?.at(-1)??"—"}</strong></div></div></details></section>`;
 }
 function entryHtml(e){return `<div class="entry"><div class="entry-head">ENTRY</div><div class="entry-main">${esc(e.main)}</div><div class="entry-meta">${esc(e.meta||"Qualifying setup")}</div></div>`}
+function overUnderEntry(d,selectedDigit,selectedSide){
+  const candidates=[];
+  const qualifies=x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit;
+  for(let candidate=0;candidate<=9;candidate++){
+    if(candidate===selectedDigit||!qualifies(candidate))continue;
+    let occurrences=0,followThrough=0;
+    for(let i=0;i<d.length-3;i++){
+      if(d[i]!==candidate)continue;
+      occurrences++;
+      if(qualifies(d[i+1])&&qualifies(d[i+2])&&qualifies(d[i+3]))followThrough++;
+    }
+    if(occurrences<3)continue;
+    const rate=followThrough/occurrences;
+    candidates.push({candidate,occurrences,followThrough,rate});
+  }
+  candidates.sort((a,b)=>b.rate-a.rate||b.followThrough-a.followThrough||b.occurrences-a.occurrences);
+  const best=candidates[0];
+  if(!best||best.followThrough<3||best.rate<0.67)return null;
+  const confidence=Math.min(95,Math.round(55+best.rate*35+Math.min(best.occurrences,10)));
+  return {main:String(best.candidate),meta:`${confidence}% confidence • 3-tick follow-through ${Math.round(best.rate*100)}% (${best.followThrough}/${best.occurrences})`,evidence:`${best.occurrences} historical reactions`,reason:`Candidate ${best.candidate} repeatedly produces 3 consecutive ticks supporting ${selectedSide} ${selectedDigit}.`};
+}
 function renderOverUnder(root,d,c,last,n){
   const e=overUnderEvidence(d,state.selectedDigit,state.selectedSide), setup=`${state.selectedSide} ${state.selectedDigit}`;
-  const entry=(e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL")?{main:"NO VALID ENTRY",meta:"Entry engine will be added after Final Signal is stable",evidence:e.sample}:null;
+  const entry=(e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL")&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
   const reason=e.probabilityConflict?`Probability conflict: ${state.selectedSide} ${state.selectedDigit} is weaker than its complementary setup ${state.selectedSide==="OVER"?"UNDER":"OVER"} ${e.oppositeDigit}.`:e.signal==="AVOID"?"The selected setup is not supported strongly enough by current evidence.":e.signal==="WAIT"?"Evidence is developing; continue collecting live data.":`The selected setup ${setup} has aligned recent and historical evidence.`;
-  root.innerHTML=panel(e.signal,reason,entry,[
+  const entryDisplay=entry||((e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL")?{main:"NO VALID ENTRY",meta:"No candidate passed the 3-tick follow-through test",evidence:"No qualifying candidate"}:null);
+  root.innerHTML=panel(e.signal,reason,entryDisplay,[
     `Selected setup: ${setup}`,
     `Selected probability: ${Math.round(e.selectedRate*100)}% • Complement: ${Math.round(e.oppositeRate*100)}%`,
     `Recent probability: ${Math.round(e.recentRate*100)}% • Transition support: ${e.transitions?Math.round(e.transitionRate*100)+"%" :"not enough occurrences"}`,
-    e.probabilityConflict?`× Probability Gate blocked by ${state.selectedSide==="OVER"?"UNDER":"OVER"} ${e.oppositeDigit}`:e.signal==="STRONG SIGNAL"?"Multiple evidence layers agree":e.signal==="SIGNAL"?"Evidence is moderately aligned":"× Evidence is not yet aligned"
+    e.probabilityConflict?`× Probability Gate blocked by ${state.selectedSide==="OVER"?"UNDER":"OVER"} ${e.oppositeDigit}`:entry?`Entry candidate ${entry.main} passed the 3-tick follow-through test`:e.signal==="STRONG SIGNAL"?"Signal is strong, but no entry candidate passed the required confirmation":"× Evidence is not yet aligned"
   ],n);
 }
 function renderEvenOdd(root,d,last,n){
