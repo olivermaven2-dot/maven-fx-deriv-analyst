@@ -151,88 +151,31 @@ function panel(stateText,reason,entry,why,n){
   return `<section class="engine-panel"><div class="panel-kicker">CURRENT ANALYSIS</div><div class="state ${cls}">${esc(stateText)}</div><div class="reason">${esc(reason)}</div>${entry?entryHtml(entry):""}<div class="why"><div class="why-title">WHY THIS STATE?</div><ul>${why.map(x=>`<li class="${x[0]==="×"?"block":""}">${esc(x)}</li>`).join("")}</ul></div><details class="analysis-details"><summary>Detailed analysis</summary><div class="stats"><div class="stat"><span>Sample</span><strong>${n}</strong></div><div class="stat"><span>Evidence</span><strong>${entry?.evidence||"Building"}</strong></div><div class="stat"><span>Data quality</span><strong>${n>=500?"GOOD":n>=100?"BUILDING":"INSUFFICIENT"}</strong></div><div class="stat"><span>Last digit</span><strong>${state.digits?.at(-1)??"—"}</strong></div></div></details></section>`;
 }
 function entryHtml(e){return `<div class="entry"><div class="entry-head">ENTRY</div><div class="entry-main">${esc(e.main)}</div><div class="entry-meta">${esc(e.meta||"Qualifying setup")}</div></div>`}
-function windowStats(values, predicate){
-  const sizes=[20,50,100].filter(s=>values.length>=s);
-  return sizes.map(size=>{
-    const w=values.slice(-size), hits=w.filter(predicate).length;
-    return {size,hits,rate:hits/size};
-  });
-}
-function consensusStats(stats){
-  if(!stats.length)return {rate:0,agree:0};
-  const rates=stats.map(x=>x.rate), avg=rates.reduce((a,b)=>a+b,0)/rates.length;
-  const agree=rates.filter(r=>r>=.5).length===rates.length||rates.filter(r=>r<.5).length===rates.length;
-  return {rate:avg,agree:agree?1:0};
-}
-function transitionEntry(d,predicate){
-  const score=Array(10).fill(null).map(()=>({seen:0,qualifying:0}));
-  for(let i=0;i<d.length-1;i++){
-    const digit=d[i], next=d[i+1];
-    score[digit].seen++;
-    if(predicate(next))score[digit].qualifying++;
-  }
-  return score.map((x,digit)=>({...x,digit,rate:x.seen?x.qualifying/x.seen:0}))
-    .filter(x=>x.seen>=4)
-    .sort((a,b)=>b.rate-a.rate||b.seen-a.seen)[0]||null;
-}
-function signalFromEvidence(consensus,latestRate,minSample){
-  if(minSample<100)return "WAIT";
-  const distance=Math.abs(consensus.rate-.5);
-  if(consensus.agree&&distance>=.18&&latestRate>=.65&&minSample>=500)return "STRONG SIGNAL";
-  if(consensus.agree&&distance>=.12&&latestRate>=.60)return "SIGNAL";
-  return "WAIT";
-}
 function renderOverUnder(root,d,c,last,n){
-  const over=x=>x>=5, under=x=>x<5;
-  const overStats=windowStats(d,over), underStats=windowStats(d,under);
-  const overLatest=overStats.at(-1)?.rate||0, underLatest=underStats.at(-1)?.rate||0;
-  const side=overLatest>=underLatest?"OVER":"UNDER";
-  const chosen=side==="OVER"?overStats:underStats;
-  const consensus=consensusStats(chosen);
-  const st=signalFromEvidence(consensus,Math.max(overLatest,underLatest),n);
-  const entry=st==="SIGNAL"||st==="STRONG SIGNAL"?transitionEntry(d,side==="OVER"?over:under):null;
-  const why=[
-    \`Rolling \${chosen.at(-1)?.size||0}-digit \${side} rate: \${Math.round(consensus.rate*100)}%\`,
-    \`Rolling windows agree: \${consensus.agree?"YES":"NO"}\`,
-    \`Opposite side rate: \${Math.round((1-consensus.rate)*100)}%\`
-  ];
-  if(!consensus.agree)why.push("× Multi-window evidence is conflicting");
-  if(entry)why.push(\`Best transition entry: digit \${entry.digit} → \${Math.round(entry.rate*100)}% \${side} follow-through (\${entry.seen} observations)\`);
-  else if(st==="WAIT")why.push("× No entry digit is released until the final state qualifies");
-  const entryView=entry&&entry.rate>=.65?{
-    main:String(entry.digit),
-    meta:\`Entry digit • next-tick \${side} follow-through \${Math.round(entry.rate*100)}%\`,
-    evidence:\`\${entry.seen} transitions\`
-  }:null;
-  root.innerHTML=panel(st,st==="WAIT"?"Multi-window evidence is not yet strong and aligned.":\`Validated rolling evidence currently leans \${side}.\`,entryView,why,n);
+  const high=d.filter(x=>x>=5).length, low=d.filter(x=>x<=4).length, side=high>=low?"OVER":"UNDER", share=Math.max(high,low)/n;
+  const signal=share>=.62&&n>=100, strong=share>=.68&&n>=500;
+  const st=strong?"STRONG SIGNAL":signal?"SIGNAL":"WAIT";
+  const entry=signal?{main:side==="OVER"?"5–9":"0–4",meta:"Current side has qualifying recent dominance",evidence:Math.round(share*100)+"/100"}:null;
+  root.innerHTML=panel(st,signal?`Recent digit distribution currently leans ${side}.`:"Evidence is currently inconclusive; keep collecting data.",entry,[
+    `${side} group rate: ${Math.round(share*100)}%`,
+    n>=100?"Sample size is sufficient for the current screen":"× Sample size is still building",
+    "Live digit stream is being monitored",
+    strong?"Evidence strength is high":signal?"Evidence strength is moderate":"× Evidence strength is not yet qualifying"
+  ],n);
 }
 function renderEvenOdd(root,d,last,n){
-  const even=x=>x%2===0, odd=x=>x%2!==0;
-  const eStats=windowStats(d,even), oStats=windowStats(d,odd);
-  const e=eStats.at(-1)?.rate||0, o=oStats.at(-1)?.rate||0, side=e>=o?"EVEN":"ODD";
-  const chosen=side==="EVEN"?eStats:oStats, consensus=consensusStats(chosen);
-  const st=signalFromEvidence(consensus,Math.max(e,o),n);
-  const pattern=d.slice(-6).join(" → ");
-  const why=[\`Rolling \${chosen.at(-1)?.size||0}-digit \${side} rate: \${Math.round(consensus.rate*100)}%\`,
-    \`Rolling windows agree: \${consensus.agree?"YES":"NO"}\`,\`Recent digits: \${pattern}\`];
-  if(!consensus.agree)why.push("× Multi-window parity evidence is conflicting");
-  root.innerHTML=panel(st,st==="WAIT"?"Parity evidence is still mixed or below the release threshold.":\`Validated rolling parity evidence currently leans \${side}.\`,
-    st==="SIGNAL"||st==="STRONG SIGNAL"?{main:side,meta:"Qualifying parity direction",evidence:Math.round(consensus.rate*100)+"%"}:null,why,n);
+  const even=d.filter(x=>x%2===0).length, odd=n-even, side=even>=odd?"EVEN":"ODD", share=Math.max(even,odd)/n;
+  const signal=share>=.62&&n>=100,strong=share>=.68&&n>=500,st=strong?"STRONG SIGNAL":signal?"SIGNAL":"WAIT";
+  const pattern=d.slice(-4).join(" → ");
+  root.innerHTML=panel(st,signal?`Recent parity distribution currently leans ${side}.`:"Recent parity evidence is inconclusive.",signal?{main:side,meta:"Qualifying parity bias",evidence:Math.round(share*100)+"/100"}:null,[`Recent pattern: ${pattern}`,`Even rate: ${rate(even,n)}% • Odd rate: ${rate(odd,n)}%`,n>=100?"Sample size is sufficient":"× Sample size is still building"],n);
 }
 function renderRiseFall(root,d,last,n){
-  if(d.length<30){root.innerHTML=panel("INSUFFICIENT DATA","More ticks are required to measure directional movement.",null,["Waiting for a larger validated sequence"],n);return}
-  const recent=d.slice(-100), rises=[], falls=[];
-  for(let i=1;i<recent.length;i++){if(recent[i]>recent[i-1])rises.push(1);else if(recent[i]<recent[i-1])falls.push(1)}
-  const total=rises.length+falls.length;
-  const riseRate=total?rises.length/total:0, fallRate=total?falls.length/total:0;
-  const side=riseRate>=fallRate?"RISE":"FALL", chosenRate=Math.max(riseRate,fallRate);
-  const st=signalFromEvidence({rate:chosenRate,agree:1},chosenRate,n);
-  const pat=recent.slice(-6).map((x,i,a)=>i?x>a[i-1]?"R":x<a[i-1]?"F":"=":x).join(" → ");
-  const why=[\`Directional sample: \${total}\`,\`Rise rate: \${Math.round(riseRate*100)}% • Fall rate: \${Math.round(fallRate*100)}%\`,
-    \`Recent direction: \${pat}\`];
-  if(total<30)why.push("× Directional sample is still building");
-  root.innerHTML=panel(st,st==="WAIT"?"Directional evidence is not yet strong enough.":\`Recent validated movement currently leans \${side}.\`,
-    st==="SIGNAL"||st==="STRONG SIGNAL"?{main:side,meta:"Qualifying directional movement",evidence:Math.round(chosenRate*100)+"%"}:null,why,n);
+  if(d.length<3){root.innerHTML=panel("INSUFFICIENT DATA","More ticks are required to measure direction.",null,["Waiting for a larger sequence"],n);return}
+  const recent=d.slice(-100);let rise=0,fall=0;
+  for(let i=1;i<recent.length;i++){if(recent[i]>recent[i-1])rise++;else if(recent[i]<recent[i-1])fall++}
+  const total=rise+fall, side=rise>=fall?"RISE":"FALL",share=total?Math.max(rise,fall)/total:0,signal=share>=.62&&total>=30,strong=share>=.68&&total>=80,st=strong?"STRONG SIGNAL":signal?"SIGNAL":"WAIT";
+  const pat=recent.slice(-4).map((x,i,a)=>i?x>a[i-1]?"R":"F":x).join(" → ");
+  root.innerHTML=panel(st,signal?`Recent directional movement currently leans ${side}.`:"Recent directional evidence is inconclusive.",signal?{main:side,meta:"Qualifying directional continuation",evidence:Math.round(share*100)+"/100"}:null,[`Recent sequence: ${pat}`,`Rise: ${rise} • Fall: ${fall}`,total>=30?"Directional sample is sufficient":"× Directional sample is still building"],n);
 }
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.engine=btn.dataset.engine;renderEngine()}));
 marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true)}});
