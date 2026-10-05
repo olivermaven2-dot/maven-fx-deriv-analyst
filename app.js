@@ -1,15 +1,23 @@
 function renderOverUnder(root,d,c,last,n){
-  const e=overUnderEvidence(d,state.selectedDigit,state.selectedSide), setup=state.selectedSide+" "+state.selectedDigit;
-  const entry=(e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL")&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
-  const reason=e.probabilityConflict?"Probability conflict: the complementary setup has stronger current probability evidence.":e.signal==="AVOID"?"The selected setup lacks enough aligned evidence across probability, transitions and recent behavior.":e.signal==="WAIT"?"Evidence is still building across the required analysis windows.":e.signal==="STRONG SIGNAL"?"Multiple independent evidence layers are aligned for "+setup+".":"The selected setup has moderate agreement across probability and reaction evidence.";
-  const entryDisplay=entry||((e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL")?{main:"NO STRONG ENTRY DIGIT",meta:"No candidate passed the multi-factor validation",evidence:"Candidate ranking rejected weak evidence"}:null);
+  const e=overUnderEvidence(d,state.selectedDigit,state.selectedSide);
+  const setup=state.selectedSide+" "+state.selectedDigit;
+  const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
+  const entry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
+  let reason;
+  if(e.probabilityConflict)reason="Probability Comparison is blocking the selected setup because the complementary setup has stronger live probability evidence.";
+  else if(e.signal==="AVOID")reason="The selected setup does not have enough aligned A-Setup evidence.";
+  else if(e.signal==="WAIT")reason="The selected setup is still building enough independent evidence across the required analysis windows.";
+  else if(e.signal==="STRONG SIGNAL")reason="Probability, momentum, trend, transitions, reaction behavior, recency, consistency and context are aligned for "+setup+".";
+  else reason="The selected setup has sufficient multi-factor evidence, but the evidence is not strong enough for a STRONG SIGNAL.";
+  const entryDisplay=activeSignal?(entry||{main:"NO VALID ENTRY",confidence:"—",status:"NO ENTRY",reason:"No candidate digit passed the required sample-size, transition, reaction and consistency checks.",evidence:"Candidate evaluation completed"}):{main:"NO ACTIVE ENTRY",confidence:"—",status:"INACTIVE",reason:"Entry Engine activates only when the selected Final Signal is SIGNAL or STRONG SIGNAL.",evidence:"Waiting for an active signal"};
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
     "Selected setup: "+setup,
-    "Probability: "+Math.round(e.selectedRate*100)+"% • Complement: "+Math.round(e.oppositeRate*100)+"%",
-    "20/50/100/250/500 context: "+e.recentRate.toFixed(2)+" / "+e.mediumRate.toFixed(2)+" / "+e.longRate.toFixed(2),
-    "Momentum: "+(e.momentum>=.02?"improving":e.momentum<=-.02?"weakening":"stable")+" • Stability: "+Math.round(e.stability*100)+"%",
-    "Transition support: "+Math.round(e.transitionRate*100)+"% • weighted recent support: "+Math.round(e.weightedTransitionRate*100)+"% • samples: "+e.transitions,
-    e.probabilityConflict?"× Probability Comparison is blocking the selected setup":entry?"Entry candidate "+entry.main+" passed multi-tick reaction validation":e.signal==="STRONG SIGNAL"?"Signal is strong, but no entry digit passed all validation requirements":"× Evidence is not sufficiently aligned"
+    "Probability Comparison: "+Math.round(e.selectedRate*100)+"% vs complement "+Math.round(e.oppositeRate*100)+"% • baseline "+Math.round(e.baseline*100)+"%",
+    "Windows 20/50/100/250/500: "+[e.recentRate,e.short50,e.mediumRate,e.mid250,e.longRate].map(x=>Math.round(x*100)+"%").join(" / "),
+    "A-Setup alignment: probability "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentum*100)+" • trend "+Math.round(e.trend*100)+" • transitions "+Math.round(e.transition*100),
+    "Reaction "+Math.round(e.reaction*100)+" • clustering "+Math.round(e.cluster*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
+    "Historical "+Math.round(e.historical*100)+" • current context "+Math.round(e.context*100)+" • evidence "+Math.round(e.evidence*100),
+    e.probabilityConflict?"× Complementary probability conflict — selected setup blocked":entry?"✓ Entry candidate "+entry.main+" passed independent reaction validation":activeSignal?"× No candidate passed all entry validation requirements":"× Entry remains inactive until the Final Signal becomes SIGNAL or STRONG SIGNAL"
   ],n);
 }
 const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
@@ -153,36 +161,162 @@ function renderStream(){
 }
 function counts(d){return d.reduce((a,x)=>(a[x]=(a[x]||0)+1,a),{})}
 function rate(a,b){return b?Math.round(a/b*100):0}
-function ouRate(arr,digit,side){if(!arr.length)return 0;return arr.filter(x=>side==="OVER"?x>digit:x<digit).length/arr.length}
+function ouRate(arr,digit,side){
+  if(!arr.length)return 0;
+  return arr.filter(x=>side==="OVER"?x>digit:x<digit).length/arr.length;
+}
+function ouWindowRates(d,digit,side){
+  const sizes=[20,50,100,250,500];
+  return sizes.map(size=>{
+    const a=d.slice(-size);
+    return {size,n:a.length,rate:a.length?ouRate(a,digit,side):0};
+  }).filter(x=>x.n);
+}
+function ouTrend(rates){
+  if(rates.length<3)return 0;
+  const pts=rates.map((x,i)=>({x:i,y:x.rate}));
+  const mx=(pts.length-1)/2;
+  const my=pts.reduce((a,p)=>a+p.y,0)/pts.length;
+  let num=0,den=0;
+  for(const p of pts){num+=(p.x-mx)*(p.y-my);den+=(p.x-mx)*(p.x-mx)}
+  return den?num/den:0;
+}
+function ouRuns(arr,digit,side){
+  if(!arr.length)return {favorableRuns:0,unfavorableRuns:0,longest:0,last:0};
+  const ok=x=>side==="OVER"?x>digit:x<digit;
+  let favorableRuns=0,unfavorableRuns=0,longest=0,last=0,run=0,prev=null;
+  for(const x of arr){
+    const v=ok(x);
+    if(v){if(!prev)favorableRuns++;run++;longest=Math.max(longest,run)}
+    else{if(prev)unfavorableRuns++;run=0}
+    prev=v;
+  }
+  for(let i=arr.length-1;i>=0&&ok(arr[i]);i--)last++;
+  return {favorableRuns,unfavorableRuns,longest,last};
+}
+function ouClusterScore(arr,digit,side){
+  if(arr.length<6)return .5;
+  const ok=x=>side==="OVER"?x>digit:x<digit;
+  const run=ouRuns(arr,digit,side);
+  const blocks=Math.max(1,Math.floor(arr.length/10));
+  const blockRates=[];
+  for(let i=0;i<arr.length;i+=10){
+    const b=arr.slice(i,i+10);
+    if(b.length>=5)blockRates.push(b.filter(ok).length/b.length);
+  }
+  const mean=blockRates.length?blockRates.reduce((a,x)=>a+x,0)/blockRates.length:.5;
+  const variance=blockRates.length?blockRates.reduce((a,x)=>a+(x-mean)**2,0)/blockRates.length:0;
+  const persistence=Math.min(1,(run.longest/Math.max(2,arr.length*.12)));
+  const dispersion=Math.max(0,1-Math.sqrt(variance)*2);
+  const streakContext=Math.min(1,run.last/4);
+  return Math.max(0,Math.min(1,.4+mean*.25+dispersion*.15+persistence*.1+streakContext*.1));
+}
+function ouTransitionStats(d,candidate,selectedDigit,selectedSide){
+  const qualifies=x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit;
+  const windows=[500,250,100,50];
+  let total=0,favorable=0,weighted=0,weightTotal=0;
+  const recent={total:0,favorable:0},matrix=Array(10).fill(null).map(()=>Array(10).fill(0));
+  for(let i=0;i<d.length-1;i++){
+    if(d[i]!==candidate)continue;
+    const next=d[i+1],ok=qualifies(next),age=d.length-1-i;
+    total++;if(ok)favorable++;
+    const w=age<=50?1.6:age<=100?1.35:age<=250?1.15:1;
+    weighted+=ok?w:0;weightTotal+=w;matrix[candidate][next]++;
+    if(age<=250){recent.total++;if(ok)recent.favorable++}
+  }
+  const recentRate=recent.total?recent.favorable/recent.total:(total?favorable/total:0);
+  const rate=total?favorable/total:0;
+  const weightedRate=weightTotal?weighted/weightTotal:rate;
+  const persistence=ouReactionDepth(d,candidate,selectedDigit,selectedSide);
+  return {total,favorable,rate,weightedRate,recentRate,recentTotal:recent.total,matrixRow:matrix[candidate],...persistence};
+}
+function ouReactionDepth(d,candidate,selectedDigit,selectedSide){
+  const qualifies=x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit;
+  let occurrences=0,r1=0,r2=0,r3=0,recovery=0;
+  for(let i=0;i<d.length-3;i++){
+    if(d[i]!==candidate)continue;
+    occurrences++;
+    const a=qualifies(d[i+1]),b=qualifies(d[i+2]),c=qualifies(d[i+3]);
+    if(a)r1++;if(a&&b)r2++;if(a&&b&&c)r3++;if(!a&&b&&c)recovery++;
+  }
+  return {occurrences,r1:occurrences?r1/occurrences:0,r2:occurrences?r2/occurrences:0,r3:occurrences?r3/occurrences:0,recovery:occurrences?recovery/occurrences:0};
+}
 function ouStats(d,digit,side){
-  const windows=[20,50,100,250,500].map(size=>d.slice(-size)).filter(x=>x.length>=Math.min(20,d.length));
-  const rates=windows.map(x=>ouRate(x,digit,side));
-  const recent=rates[0]??0, medium=rates[Math.min(2,rates.length-1)]??recent, long=rates[rates.length-1]??recent;
+  const rates=ouWindowRates(d,digit,side);
+  const recent=rates.find(x=>x.size===20)?.rate??0;
+  const medium=rates.find(x=>x.size===100)?.rate??recent;
+  const long=rates.find(x=>x.size===500)?.rate??rates.at(-1)?.rate??recent;
+  const short50=rates.find(x=>x.size===50)?.rate??recent;
+  const mid250=rates.find(x=>x.size===250)?.rate??long;
   const momentum=recent-long;
-  let streak=0;for(let i=d.length-1;i>=0;i--){if(side==="OVER"?d[i]>digit:d[i]<digit)streak++;else break}
-  let favorable=0,total=0,weighted=0,weightTotal=0;
-  for(let i=0;i<d.length-1;i++){if(d[i]!==digit)continue;total++;const ok=side==="OVER"?d[i+1]>digit:d[i+1]<digit;if(ok)favorable++;const w=1+i/Math.max(1,d.length-1);weighted+=ok?w:0;weightTotal+=w}
-  return {rates,recent,medium,long,momentum,streak,transitions:total,favorable,transitionRate:total?favorable/total:0,weightedTransitionRate:weightTotal?weighted/weightTotal:0};
+  const trend=ouTrend(rates);
+  const cluster=ouClusterScore(d.slice(-100),digit,side);
+  const run=ouRuns(d.slice(-100),digit,side);
+  const trans=ouTransitionStats(d,digit,digit,side);
+  return {rates,recent,short50,medium,mid250,long,momentum,trend,cluster,streak:run.last,transitions:trans.total,favorable:trans.favorable,transitionRate:trans.rate,weightedTransitionRate:trans.weightedRate};
 }
 function overUnderEvidence(d,selectedDigit,selectedSide){
-  const n=d.length, oppositeDigit=9-selectedDigit;
+  const n=d.length;
+  const oppositeDigit=9-selectedDigit;
   const selected=ouStats(d,selectedDigit,selectedSide);
   const opposite=ouStats(d,oppositeDigit,selectedSide==="OVER"?"UNDER":"OVER");
-  const selectedRate=ouRate(d,selectedDigit,selectedSide), oppositeRate=ouRate(d,oppositeDigit,selectedSide==="OVER"?"UNDER":"OVER");
-  const probabilityConflict=oppositeRate>selectedRate+0.04;
-  const agreement=Math.max(0,1-Math.abs(selected.recent-selected.long)*2);
-  const transitionQuality=selected.transitions>=100?1:selected.transitions/100;
-  const momentumScore=Math.max(0,Math.min(1,.5+selected.momentum*3));
-  const stability=Math.max(0,Math.min(1,1-(Math.abs(selected.rates.at(-1)-selected.rates[0]||0)+Math.abs((selected.rates.at(-1)??0)-(selected.rates[Math.max(0,selected.rates.length-2)]??0)))));
-  const evidence=(selectedRate*.25)+(selected.recent*.2)+(selected.transitionRate*.2)+(momentumScore*.12)+(stability*.11)+(agreement*.12);
+  const selectedRate=ouRate(d,selectedDigit,selectedSide);
+  const oppositeRate=ouRate(d,oppositeDigit,selectedSide==="OVER"?"UNDER":"OVER");
+  const probabilityConflict=oppositeRate>selectedRate+.04;
+  const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
+  const probability=Math.max(0,Math.min(1,.5+(selectedRate-baseline)*4));
+  const momentumScore=Math.max(0,Math.min(1,.5+selected.momentum*4));
+  const trendScore=Math.max(0,Math.min(1,.5+selected.trend*18));
+  const transition=Math.max(0,Math.min(1,.5+(selected.weightedTransitionRate-baseline)*2.5));
+  const historical=Math.max(0,Math.min(1,.5+(selected.long-baseline)*3));
+  const recency=Math.max(0,Math.min(1,.5+(selected.recent-selected.long)*4));
+  const consistency=Math.max(0,Math.min(1,1-Math.abs(selected.recent-selected.long)*2-Math.abs(selected.short50-selected.mid250)));
+  const context=Math.max(0,Math.min(1,(selected.cluster*.55)+(Math.min(1,selected.streak/4)*.2)+(selected.recent>=selected.short50?.15:0)+(selected.recent>=selected.long?.1:0)));
+  const reaction=selected.transitions>=8?Math.max(0,Math.min(1,.5+(selected.transitionRate-baseline)*2.5)):0;
+  const evidence=probability*.20+momentumScore*.10+trendScore*.08+transition*.14+selected.cluster*.08+reaction*.10+recency*.10+consistency*.08+historical*.07+context*.05;
   let signal="WAIT";
   if(n<100)signal="WAIT";
   else if(probabilityConflict)signal="AVOID";
-  else if(evidence>=.70&&selectedRate>=.58&&selected.recent>=.55&&selected.transitionRate>=.55&&agreement>=.75)signal="STRONG SIGNAL";
-  else if(evidence>=.59&&selectedRate>=.53&&selected.recent>=.50)signal="SIGNAL";
-  else if(evidence<.44||selectedRate<.45)signal="AVOID";
-  return {oppositeDigit,selectedRate,oppositeRate,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,momentum:selected.momentum,transitionRate:selected.transitionRate,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak,agreement,stability,evidence,probabilityConflict,signal};
+  else if(evidence>=.72&&selectedRate>=baseline-.01&&selected.weightedTransitionRate>=Math.max(.5,baseline-.03)&&consistency>=.65&&n>=250)signal="STRONG SIGNAL";
+  else if(evidence>=.59&&selectedRate>=baseline-.04&&consistency>=.5)signal="SIGNAL";
+  else if(evidence<.43||selectedRate<baseline-.12)signal="AVOID";
+  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
 }
+function overUnderEntry(d,selectedDigit,selectedSide){
+  const candidates=[];
+  for(let candidate=0;candidate<=9;candidate++){
+    const t=ouTransitionStats(d,candidate,selectedDigit,selectedSide);
+    if(t.total<12)continue;
+    const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
+    const sample=Math.min(1,t.total/100);
+    const recentWeight=Math.min(1,t.recentTotal/40);
+    const stability=Math.max(0,1-Math.abs(t.rate-t.recentRate)-Math.abs(t.r1-t.r3)*.5);
+    const depth=t.r1*.25+t.r2*.20+t.r3*.25+t.recovery*.05;
+    const advantage=Math.max(0,Math.min(1,.5+(t.weightedRate-baseline)*3));
+    const recentAdv=Math.max(0,Math.min(1,.5+(t.recentRate-baseline)*3));
+    const consistency=Math.max(0,Math.min(1,1-Math.abs(t.r1-t.r2)-Math.abs(t.r2-t.r3)));
+    const score=100*(depth*.32+advantage*.18+recentAdv*.18+stability*.12+consistency*.08+sample*.07+recentWeight*.05);
+    const p=Math.min(1,Math.max(0,t.r3*.5+t.r2*.3+t.r1*.2));
+    const confidenceBase=Math.min(1,t.total/120);
+    candidates.push({...t,candidate,baseline,score,consistency,stability,confidenceBase,p});
+  }
+  candidates.sort((a,b)=>b.score-a.score);
+  const best=candidates[0],second=candidates[1];
+  if(!best)return null;
+  const gap=second?best.score-second.score:0;
+  const valid=best.total>=15&&best.r1>=.55&&best.r2>=.52&&best.r3>=.50&&best.recentRate>=.50&&best.stability>=.62&&best.consistency>=.55&&best.score>=61&&gap>=3;
+  if(!valid)return null;
+  const confidence=Math.max(52,Math.min(94,Math.round(52+best.confidenceBase*16+best.consistency*10+Math.min(10,gap))));
+  let reason;
+  if(best.recentRate>best.rate+.06)reason="Recent reaction is strengthening while the multi-tick follow-through remains consistent.";
+  else if(best.recentRate<best.rate-.08)reason="Historical reaction is favorable, but recent behavior is weakening.";
+  else if(best.r3>best.r1+.03)reason="The candidate shows strong delayed follow-through across the second and third ticks.";
+  else if(best.recovery>.25)reason="The candidate shows strong continuation with meaningful recovery after an initial unfavorable tick.";
+  else reason="Strong favorable transitions with stable 1–3 tick follow-through and sufficient sample size.";
+  const status=confidence>=82?"STRONG ENTRY":confidence>=68?"MODERATE ENTRY":"WEAK ENTRY";
+  return {main:String(best.candidate),confidence:confidence+"%",status,reason,evidence:best.total+" transition observations"};
+}
+
 function renderOUControls(){
   const setupLabel=$("ouSetupLabel");
   if(setupLabel)setupLabel.textContent=state.selectedSide+" "+state.selectedDigit;
