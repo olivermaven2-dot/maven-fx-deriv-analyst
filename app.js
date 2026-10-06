@@ -22,7 +22,7 @@ function renderOverUnder(root,d,c,last,n){
 }
 const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—"};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—"};
 
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
@@ -317,6 +317,9 @@ function overUnderEntry(d,selectedDigit,selectedSide){
   return {main:String(best.candidate),confidence:confidence+"%",status,reason,evidence:best.total+" transition observations"};
 }
 
+function renderParityControls(){
+  document.querySelectorAll(".parity-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.parity===state.selectedParity));
+}
 function renderOUControls(){
   const setupLabel=$("ouSetupLabel");
   if(setupLabel)setupLabel.textContent=state.selectedSide+" "+state.selectedDigit;
@@ -332,6 +335,9 @@ function renderOUControls(){
 function renderEngine(){
   const d=state.digits, n=d.length, c=counts(d), last=d.at(-1);
   const root=$("engineRoot");
+  const ou=$("overUnderControls"),parity=$("evenOddControls");
+  if(ou)ou.style.display=state.engine==="overunder"?"":"none";
+  if(parity)parity.style.display=state.engine==="evenodd"?"":"none";
   if(n<30){root.innerHTML=panel("INSUFFICIENT DATA","Collecting more validated market data before analysis.",null,["At least 30 recent digits are required","Live data stream is active when ticks are arriving"],n);return}
   if(state.engine==="overunder")renderOverUnder(root,d,c,last,n);
   if(state.engine==="evenodd")renderEvenOdd(root,d,last,n);
@@ -342,32 +348,97 @@ function panel(stateText,reason,entry,why,n){
   return `<section class="engine-panel"><div class="panel-kicker">CURRENT ANALYSIS</div><div class="state ${cls}">${esc(stateText)}</div><div class="reason">${esc(reason)}</div>${entry?entryHtml(entry):""}<div class="why"><div class="why-title">WHY THIS STATE?</div><ul>${why.map(x=>`<li class="${x[0]==="×"?"block":""}">${esc(x)}</li>`).join("")}</ul></div><details class="analysis-details"><summary>Detailed analysis</summary><div class="stats"><div class="stat"><span>Sample</span><strong>${n}</strong></div><div class="stat"><span>Evidence</span><strong>${entry?.evidence||"Building"}</strong></div><div class="stat"><span>Data quality</span><strong>${n>=500?"GOOD":n>=100?"BUILDING":"INSUFFICIENT"}</strong></div><div class="stat"><span>Last digit</span><strong>${state.digits?.at(-1)??"—"}</strong></div></div></details></section>`;
 }
 function entryHtml(e){return `<div class="entry"><div class="entry-head">ENTRY</div><div class="entry-main">${esc(e.main)}</div><div class="entry-meta">${esc(e.meta||"Qualifying setup")}</div></div>`}
-function evenOddEntry(d,selectedSide){
-  const patterns=[],target=selectedSide==="EVEN"?0:1,other=target===0?1:0,recent=d.slice(-250),key=x=>x%2===0?0:1;
-  for(let len=1;len<=3;len++){
-    let occurrences=0,favorable=0,recovered=0;
-    for(let i=0;i+len+2<recent.length;i++){
-      let matches=true;for(let j=0;j<len;j++){if(key(recent[i+j])!==target){matches=false;break}}
-      if(!matches)continue;occurrences++;
-      const n1=key(recent[i+len]),n2=key(recent[i+len+1]),n3=key(recent[i+len+2]);
-      if(n1===target&&n2===target&&n3===target)favorable++;
-      else if(n1===target&&(n2===other||n3===other))recovered++;
-    }
-    if(occurrences>=3){const persistence=favorable/occurrences,recovery=recovered/occurrences,score=persistence*.65+recovery*.2+(Math.min(occurrences,20)/20)*.15;patterns.push({len,occurrences,favorable,recovered,persistence,recovery,score});}
+function parityStats(d,selectedSide){
+  const key=x=>x%2===0?"EVEN":"ODD";
+  const target=selectedSide,other=target==="EVEN"?"ODD":"EVEN";
+  const sizes=[20,50,100,250,500];
+  const windows=sizes.map(size=>{
+    const a=d.slice(-size),hits=a.filter(x=>key(x)===target).length;
+    return {size,n:a.length,rate:a.length?hits/a.length:0};
+  }).filter(x=>x.n);
+  const recent=windows.find(x=>x.size===20)?.rate??0;
+  const short50=windows.find(x=>x.size===50)?.rate??recent;
+  const medium=windows.find(x=>x.size===100)?.rate??recent;
+  const mid250=windows.find(x=>x.size===250)?.rate??medium;
+  const long=windows.find(x=>x.size===500)?.rate??windows.at(-1)?.rate??recent;
+  const momentum=recent-long;
+  const trend=((recent-short50)+(short50-mid250)+(mid250-long))/3;
+  let transitions=0,favorable=0,recentTransitions=0,recentFavorable=0;
+  for(let i=0;i<d.length-1;i++){
+    if(key(d[i])!==target)continue;
+    transitions++;
+    if(key(d[i+1])===target)favorable++;
+    if(i>=Math.max(0,d.length-251)){recentTransitions++;if(key(d[i+1])===target)recentFavorable++}
   }
-  patterns.sort((a,b)=>b.score-a.score||b.occurrences-a.occurrences);const best=patterns[0];
-  if(!best||best.occurrences<3||best.score<.55)return null;
-  const confidence=Math.min(95,Math.round(55+best.score*30+Math.min(best.occurrences,10)));
-  return {main:selectedSide,meta:confidence+"% confidence • pattern length "+best.len+" • 3-step persistence "+Math.round(best.persistence*100)+"%",evidence:best.occurrences+" pattern reactions",reason:"The recent "+selectedSide.toLowerCase()+" pattern shows repeated continuation across the next three parity ticks."};
+  const transitionRate=transitions?favorable/transitions:.5;
+  const recentTransitionRate=recentTransitions?recentFavorable/recentTransitions:transitionRate;
+  let streak=0;for(let i=d.length-1;i>=0&&key(d[i])===target;i--)streak++;
+  const recentArr=d.slice(-100).map(key);
+  const blocks=[];
+  for(let i=0;i<recentArr.length;i+=10){const b=recentArr.slice(i,i+10);if(b.length>=5)blocks.push(b.filter(x=>x===target).length/b.length)}
+  const mean=blocks.length?blocks.reduce((a,x)=>a+x,0)/blocks.length:.5;
+  const variance=blocks.length?blocks.reduce((a,x)=>a+(x-mean)**2,0)/blocks.length:0;
+  const clustering=Math.max(0,Math.min(1,.5+mean*.25+(1-Math.sqrt(variance))*0.2+Math.min(1,streak/5)*.05));
+  const consistency=Math.max(0,Math.min(1,1-Math.abs(recent-long)*1.8-Math.abs(short50-mid250)));
+  const baseline=.5;
+  const probability=Math.max(0,Math.min(1,.5+(recent-baseline)*4));
+  const momentumScore=Math.max(0,Math.min(1,.5+momentum*4));
+  const trendScore=Math.max(0,Math.min(1,.5+trend*5));
+  const transition=Math.max(0,Math.min(1,.5+(recentTransitionRate-baseline)*2.5));
+  const historical=Math.max(0,Math.min(1,.5+(long-baseline)*3));
+  const recency=Math.max(0,Math.min(1,.5+(recent-long)*3));
+  const context=Math.max(0,Math.min(1,clustering*.65+Math.min(1,streak/5)*.2+(recent>=short50?.15:0)));
+  const evidence=probability*.20+momentumScore*.12+trendScore*.08+transition*.15+clustering*.10+recency*.10+consistency*.10+historical*.08+context*.07;
+  const conflict=Math.abs(recent-(1-recent))>.20&&recent<.5;
+  let signal="WAIT";
+  const n=d.length;
+  if(n<100)signal="WAIT";
+  else if(conflict)signal="AVOID";
+  else if(evidence>=.68&&recent>=.53&&recentTransitionRate>=.50&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
+  else if(evidence>=.54&&recent>=.50&&consistency>=.45)signal="SIGNAL";
+  else if(evidence<.38||recent<.44)signal="AVOID";
+  return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,probability,momentumScore,trendScore,transition,historical,recency,context,evidence,signal,target,other};
+}
+function parityPatternStats(d,selectedSide){
+  const key=x=>x%2===0?"E":"O",target=selectedSide==="EVEN"?"E":"O",other=target==="E"?"O":"E",patterns=[];
+  const recent=d.slice(-300).map(key);
+  for(let len=1;len<=3;len++){
+    let occurrences=0,one=0,two=0,three=0,recovery=0;
+    for(let i=0;i+len+2<recent.length;i++){
+      let match=true;for(let j=0;j<len;j++){if(recent[i+j]!==target){match=false;break}}
+      if(!match)continue;
+      occurrences++;
+      const a=recent[i+len]===target,b=recent[i+len+1]===target,c=recent[i+len+2]===target;
+      if(a)one++;if(a&&b)two++;if(a&&b&&c)three++;if(!a&&b&&c)recovery++;
+    }
+    if(occurrences>=6)patterns.push({len,occurrences,r1:one/occurrences,r2:two/occurrences,r3:three/occurrences,recovery:recovery/occurrences});
+  }
+  patterns.sort((a,b)=>(b.r3*.45+b.r2*.3+b.r1*.2+b.recovery*.05)-(a.r3*.45+a.r2*.3+a.r1*.2+a.recovery*.05)||b.occurrences-a.occurrences);
+  const best=patterns[0],second=patterns[1];
+  if(!best)return null;
+  const score=best.r1*.2+best.r2*.3+best.r3*.45+best.recovery*.05;
+  const gap=second?score-(second.r1*.2+second.r2*.3+second.r3*.45+second.recovery*.05):score*.25;
+  if(best.occurrences<8||best.r1<.50||best.r2<.50||best.r3<.48||score<.52||gap<.02)return null;
+  const confidence=Math.max(55,Math.min(94,Math.round(55+score*25+Math.min(10,gap*100))));
+  const pattern=Array(best.len).fill(target).join(" → ");
+  return {main:pattern+" → "+target,confidence:confidence+"%",reason:"Repeated "+selectedSide.toLowerCase()+" parity sequences show favorable 1–3 tick continuation with consistent recent reactions."};
 }
 function renderEvenOdd(root,d,last,n){
-  const even=d.filter(x=>x%2===0).length,odd=n-even,selected=even>=odd?"EVEN":"ODD",share=Math.max(even,odd)/n;
-  const signal=share>=.62&&n>=100,strong=share>=.68&&n>=500,st=strong?"STRONG SIGNAL":signal?"SIGNAL":"WAIT";
-  const entry=(st==="SIGNAL"||st==="STRONG SIGNAL")?evenOddEntry(d,selected):null;
-  const entryDisplay=entry||((st==="SIGNAL"||st==="STRONG SIGNAL")?{main:"NO VALID ENTRY",meta:"No parity pattern passed the continuation test",evidence:"No qualifying pattern"}:null);
-  const pattern=d.slice(-4).map(x=>x%2===0?"E":"O").join(" → ");
-  root.innerHTML=panel(st,signal?"Recent parity distribution currently leans "+selected+".":"Recent parity evidence is inconclusive.",entryDisplay,[
-    "Recent pattern: "+pattern,"Even rate: "+rate(even,n)+"% • Odd rate: "+rate(odd,n)+"%",entry?"Entry pattern "+entry.main+" passed the 3-step continuation test":st==="STRONG SIGNAL"?"Signal is strong, but no parity pattern passed entry confirmation":"× Parity evidence is not yet sufficiently aligned"],n);
+  const e=parityStats(d,state.selectedParity);
+  const entryActive=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
+  const entry=entryActive?parityPatternStats(d,state.selectedParity):null;
+  const entryDisplay=entry||{main:entryActive?"NO VALID PATTERN":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No parity pattern passed the independent multi-tick validation.":"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."};
+  const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
+  const reason=e.signal==="STRONG SIGNAL"?"Multiple parity evidence layers are aligned for "+state.selectedParity+".":e.signal==="SIGNAL"?"The selected parity has sufficient multi-factor evidence, but it is not at STRONG SIGNAL level.":e.signal==="AVOID"?"The selected parity has unfavorable or conflicting evidence.":"Evidence for the selected parity is still developing.";
+  root.innerHTML=panel(e.signal,reason,entryDisplay,[
+    "Selected parity: "+state.selectedParity,
+    "Recent parity: "+pattern,
+    "20/50/100/250/500 rates: "+e.windows.map(x=>Math.round(x.rate*100)+"%").join(" / "),
+    "Probability "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentumScore*100)+" • trend "+Math.round(e.trendScore*100)+" • transitions "+Math.round(e.transition*100),
+    "Clustering "+Math.round(e.clustering*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100)+" • historical "+Math.round(e.historical*100),
+    "Streak "+e.streak+" • evidence "+Math.round(e.evidence*100),
+    entry?"✓ Pattern entry passed independent reaction validation":entryActive?"× No parity pattern passed entry validation":"× Entry inactive until SIGNAL or STRONG SIGNAL"
+  ],n);
 }
 function renderRiseFall(root,d,last,n){
   if(d.length<3){root.innerHTML=panel("INSUFFICIENT DATA","More ticks are required to measure direction.",null,["Waiting for a larger sequence"],n);return}
@@ -377,6 +448,7 @@ function renderRiseFall(root,d,last,n){
   const pat=recent.slice(-4).map((x,i,a)=>i?x>a[i-1]?"R":"F":x).join(" → ");
   root.innerHTML=panel(st,signal?`Recent directional movement currently leans ${side}.`:"Recent directional evidence is inconclusive.",signal?{main:side,meta:"Qualifying directional continuation",evidence:Math.round(share*100)+"/100"}:null,[`Recent sequence: ${pat}`,`Rise: ${rise} • Fall: ${fall}`,total>=30?"Directional sample is sufficient":"× Directional sample is still building"],n);
 }
+document.querySelectorAll(".parity-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedParity=btn.dataset.parity;renderParityControls();renderEngine()}));
 document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);renderOUControls();renderEngine()}));
 document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;renderOUControls();renderEngine()}));
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.engine=btn.dataset.engine;renderEngine()}));
