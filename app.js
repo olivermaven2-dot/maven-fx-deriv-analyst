@@ -277,9 +277,9 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   let signal="WAIT";
   if(n<100)signal="WAIT";
   else if(probabilityConflict)signal="AVOID";
-  else if(evidence>=.72&&selectedRate>=baseline-.01&&selected.weightedTransitionRate>=Math.max(.5,baseline-.03)&&consistency>=.65&&n>=250)signal="STRONG SIGNAL";
-  else if(evidence>=.59&&selectedRate>=baseline-.04&&consistency>=.5)signal="SIGNAL";
-  else if(evidence<.43||selectedRate<baseline-.12)signal="AVOID";
+  else if(evidence>=.68&&selectedRate>=baseline-.03&&selected.weightedTransitionRate>=Math.max(.48,baseline-.05)&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
+  else if(evidence>=.54&&selectedRate>=baseline-.07&&consistency>=.45)signal="SIGNAL";
+  else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
   return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
 }
 function overUnderEntry(d,selectedDigit,selectedSide){
@@ -342,38 +342,6 @@ function panel(stateText,reason,entry,why,n){
   return `<section class="engine-panel"><div class="panel-kicker">CURRENT ANALYSIS</div><div class="state ${cls}">${esc(stateText)}</div><div class="reason">${esc(reason)}</div>${entry?entryHtml(entry):""}<div class="why"><div class="why-title">WHY THIS STATE?</div><ul>${why.map(x=>`<li class="${x[0]==="×"?"block":""}">${esc(x)}</li>`).join("")}</ul></div><details class="analysis-details"><summary>Detailed analysis</summary><div class="stats"><div class="stat"><span>Sample</span><strong>${n}</strong></div><div class="stat"><span>Evidence</span><strong>${entry?.evidence||"Building"}</strong></div><div class="stat"><span>Data quality</span><strong>${n>=500?"GOOD":n>=100?"BUILDING":"INSUFFICIENT"}</strong></div><div class="stat"><span>Last digit</span><strong>${state.digits?.at(-1)??"—"}</strong></div></div></details></section>`;
 }
 function entryHtml(e){return `<div class="entry"><div class="entry-head">ENTRY</div><div class="entry-main">${esc(e.main)}</div><div class="entry-meta">${esc(e.meta||"Qualifying setup")}</div></div>`}
-function overUnderEntry(d,selectedDigit,selectedSide){
-  const candidates=[],qualifies=x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit;
-  for(let candidate=0;candidate<=9;candidate++){
-    let occurrences=0,one=0,two=0,three=0,recover=0,recentOcc=0,recentFav=0;
-    for(let i=0;i<d.length-3;i++){
-      if(d[i]!==candidate)continue;
-      occurrences++;
-      const recent=i>=Math.max(0,d.length-250);if(recent)recentOcc++;
-      const a=qualifies(d[i+1]),b=qualifies(d[i+2]),c=qualifies(d[i+3]);
-      if(a)one++;if(a&&b)two++;if(a&&b&&c)three++;
-      if(!a&&b&&c)recover++;
-      if(recent&&a)recentFav++;
-    }
-    if(occurrences<8)continue;
-    const r1=one/occurrences,r2=two/occurrences,r3=three/occurrences,recovery=recover/occurrences;
-    const recentRate=recentOcc?recentFav/recentOcc:r1;
-    const sample=Math.min(1,occurrences/80);
-    const recency=Math.min(1,recentOcc/30);
-    const stability=Math.max(0,1-Math.abs(r1-r3));
-    const score=100*(r1*.22+r2*.18+r3*.22+recentRate*.16+recovery*.06+stability*.08+sample*.05+recency*.03);
-    candidates.push({candidate,occurrences,recentOcc,r1,r2,r3,recovery,recentRate,stability,sample,score});
-  }
-  candidates.sort((a,b)=>b.score-a.score);
-  const best=candidates[0],second=candidates[1];
-  if(!best)return null;
-  const gap=second?best.score-second.score:best.score*.25;
-  const valid=best.occurrences>=12&&best.r1>=.55&&best.r3>=.50&&best.recentRate>=.50&&best.stability>=.65&&best.score>=60&&gap>=4;
-  if(!valid)return null;
-  const confidence=Math.max(50,Math.min(95,Math.round(50+best.score*.35+Math.min(15,gap))));
-  const reason=best.recentRate>best.r1+.05?"Recent favorable reaction is strengthening with consistent multi-tick follow-through.":best.recentRate<best.r1-.08?"Historical reaction is favorable, but recent behavior is weakening.":best.recovery>.25?"Strong continuation with meaningful recovery after initial unfavorable ticks.":"Strong favorable transitions with stable 1–3 tick follow-through and sufficient sample size.";
-  return {main:String(best.candidate),meta:confidence+"% confidence • 1/2/3-tick "+Math.round(best.r1*100)+"/"+Math.round(best.r2*100)+"/"+Math.round(best.r3*100)+"% • "+best.occurrences+" samples",evidence:best.occurrences+" reactions • gap "+Math.round(gap)+" points",reason};
-}
 function evenOddEntry(d,selectedSide){
   const patterns=[],target=selectedSide==="EVEN"?0:1,other=target===0?1:0,recent=d.slice(-250),key=x=>x%2===0?0:1;
   for(let len=1;len<=3;len++){
