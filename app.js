@@ -418,7 +418,7 @@ function parityPatternStats(d,selectedSide){
   if(!best)return null;
   const score=best.r1*.2+best.r2*.3+best.r3*.45+best.recovery*.05;
   const gap=second?score-(second.r1*.2+second.r2*.3+second.r3*.45+second.recovery*.05):score*.25;
-  if(best.occurrences<8||best.r1<.50||best.r2<.50||best.r3<.48||score<.52||gap<.02)return null;
+  if(best.occurrences<6||best.r1<.45||best.r2<.45||best.r3<.43||score<.47||gap<.01)return null;
   const confidence=Math.max(55,Math.min(94,Math.round(55+score*25+Math.min(10,gap*100))));
   const pattern=Array(best.len).fill(target).join(" → ");
   return {main:pattern+" → "+target,confidence:confidence+"%",reason:"Repeated "+selectedSide.toLowerCase()+" parity sequences show favorable 1–3 tick continuation with consistent recent reactions."};
