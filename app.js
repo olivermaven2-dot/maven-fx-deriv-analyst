@@ -318,7 +318,7 @@ function overUnderEntry(d,selectedDigit,selectedSide){
 }
 
 function renderParityControls(){
-  document.querySelectorAll(".parity-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.parity===state.selectedParity));
+  document.querySelectorAll(".parity-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.parity===state.selectedParity)); const label=$("paritySetupLabel"); if(label)label.textContent=state.selectedParity;
 }
 function renderOUControls(){
   const setupLabel=$("ouSetupLabel");
