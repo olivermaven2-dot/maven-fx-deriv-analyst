@@ -47,6 +47,14 @@
   <div class="ou-row ou-sides"><button class="ou-side active over" data-side="OVER" type="button">▲ OVER</button><button class="ou-side under" data-side="UNDER" type="button">▼ UNDER</button></div>
 </section>
 
+  <section id="evenOddControls" class="ou-controls" aria-label="Even Odd setup" style="display:none">
+    <div class="ou-label"><span>SELECTED PARITY</span><span id="paritySetupLabel" class="ou-selected-name">EVEN</span></div>
+    <div class="ou-row ou-sides">
+      <button class="ou-side parity-side active over" data-parity="EVEN" type="button">● EVEN</button>
+      <button class="ou-side parity-side under" data-parity="ODD" type="button">● ODD</button>
+    </div>
+  </section>
+
   <section id="engineRoot" class="engine"></section>
 
   <section class="stream-card">
@@ -67,6 +75,6 @@
 </main>
 
 <footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261006-3"></script>
+<script src="app.js?v=20261006-4"></script>
 </body>
 </html>
