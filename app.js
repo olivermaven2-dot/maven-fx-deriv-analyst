@@ -304,7 +304,7 @@ function overUnderEntry(d,selectedDigit,selectedSide){
   const best=candidates[0],second=candidates[1];
   if(!best)return null;
   const gap=second?best.score-second.score:0;
-  const valid=best.total>=15&&best.r1>=.55&&best.r2>=.52&&best.r3>=.50&&best.recentRate>=.50&&best.stability>=.62&&best.consistency>=.55&&best.score>=61&&gap>=3;
+  const valid=best.total>=10&&best.r1>=.52&&best.r2>=.50&&best.r3>=.48&&best.recentRate>=.48&&best.stability>=.58&&best.consistency>=.50&&best.score>=56&&gap>=1.5;
   if(!valid)return null;
   const confidence=Math.max(52,Math.min(94,Math.round(52+best.confidenceBase*16+best.consistency*10+Math.min(10,gap))));
   let reason;
