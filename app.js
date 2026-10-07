@@ -503,28 +503,110 @@ function parityStats(d,selectedSide){
   return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,probability,momentumScore,trendScore,transition,historical,recency,context,evidence,signal,target,other};
 }
 function parityPatternStats(d,selectedSide){
-  const key=x=>x%2===0?"E":"O",target=selectedSide==="EVEN"?"E":"O",other=target==="E"?"O":"E",patterns=[];
+  const key=x=>x%2===0?"E":"O";
+  const target=selectedSide==="EVEN"?"E":"O";
+  const patterns=[];
   const recent=d.slice(-300).map(key);
+
+  // Find patterns that act as triggers for the current market signal.
+  // The pattern itself does not need three successful follow-up ticks.
   for(let len=1;len<=3;len++){
     let occurrences=0,one=0,two=0,three=0,recovery=0;
+
     for(let i=0;i+len+2<recent.length;i++){
-      let match=true;for(let j=0;j<len;j++){if(recent[i+j]!==target){match=false;break}}
+      let match=true;
+      for(let j=0;j<len;j++){
+        if(recent[i+j]!==target){match=false;break}
+      }
       if(!match)continue;
+
       occurrences++;
-      const a=recent[i+len]===target,b=recent[i+len+1]===target,c=recent[i+len+2]===target;
-      if(a)one++;if(a&&b)two++;if(a&&b&&c)three++;if(!a&&b&&c)recovery++;
+      const a=recent[i+len]===target;
+      const b=recent[i+len+1]===target;
+      const c=recent[i+len+2]===target;
+
+      if(a)one++;
+      if(a&&b)two++;
+      if(a&&b&&c)three++;
+      if(!a&&b&&c)recovery++;
     }
-    if(occurrences>=6)patterns.push({len,occurrences,r1:one/occurrences,r2:two/occurrences,r3:three/occurrences,recovery:recovery/occurrences});
+
+    if(occurrences>=6){
+      patterns.push({
+        len,
+        occurrences,
+        r1:one/occurrences,
+        r2:two/occurrences,
+        r3:three/occurrences,
+        recovery:recovery/occurrences
+      });
+    }
   }
-  patterns.sort((a,b)=>(b.r3*.45+b.r2*.3+b.r1*.2+b.recovery*.05)-(a.r3*.45+a.r2*.3+a.r1*.2+a.recovery*.05)||b.occurrences-a.occurrences);
+
+  if(!patterns.length)return null;
+
+  // 1-tick reaction is primary, 2-tick continuation is strong confirmation,
+  // and 3-tick continuation is extra evidence rather than a hard requirement.
+  const patternScore=p=>
+    p.r1*.45+
+    p.r2*.35+
+    p.r3*.12+
+    p.recovery*.08;
+
+  patterns.sort((a,b)=>
+    patternScore(b)-patternScore(a)||b.occurrences-a.occurrences
+  );
+
   const best=patterns[0],second=patterns[1];
-  if(!best)return null;
-  const score=best.r1*.2+best.r2*.3+best.r3*.45+best.recovery*.05;
-  const gap=second?score-(second.r1*.2+second.r2*.3+second.r3*.45+second.recovery*.05):score*.25;
-  if(best.occurrences<6||best.r1<.45||best.r2<.45||best.r3<.43||score<.47||gap<.01)return null;
-  const confidence=Math.max(55,Math.min(94,Math.round(55+score*25+Math.min(10,gap*100))));
+  const score=patternScore(best);
+  const gap=second?score-patternScore(second):score*.25;
+
+  // A pattern qualifies when it has a meaningful 1-tick reaction OR
+  // a meaningful 2-tick continuation. Three ticks are never mandatory.
+  const passesOne=best.r1>=.45;
+  const passesTwo=best.r2>=.45;
+  const directional=passesOne||passesTwo;
+
+  if(
+    best.occurrences<6||
+    !directional||
+    score<.44||
+    gap<.01
+  )return null;
+
+  let confidence=Math.round(
+    52+
+    score*28+
+    Math.min(8,gap*100)+
+    Math.min(6,best.occurrences/25)
+  );
+
+  // 3-tick confirmation raises confidence, but weak 3-tick behavior
+  // cannot invalidate a pattern that already passed 1 or 2 ticks.
+  if(best.r3>=.50)confidence+=4;
+  else if(best.r3<.38)confidence-=2;
+
+  confidence=Math.max(52,Math.min(94,confidence));
+
+  let reason;
+  if(best.r1>=.55&&best.r2>=.52){
+    reason="Pattern hit shows strong immediate and 2-tick movement toward the "+selectedSide.toLowerCase()+" signal.";
+  }else if(best.r1>=.45&&best.r2>=.45){
+    reason="Pattern hit shows favorable 1–2 tick movement toward the "+selectedSide.toLowerCase()+" signal.";
+  }else if(best.r1>=.45){
+    reason="Pattern hit shows a strong immediate move toward the "+selectedSide.toLowerCase()+" signal; longer continuation is mixed.";
+  }else{
+    reason="Pattern hit shows favorable 2-tick continuation toward the "+selectedSide.toLowerCase()+" signal.";
+  }
+
   const pattern=Array(best.len).fill(target).join(" → ");
-  return {main:pattern+" → "+target,confidence:confidence+"%",reason:"Repeated "+selectedSide.toLowerCase()+" parity sequences show favorable 1–3 tick continuation with consistent recent reactions."};
+  return {
+    main:pattern+" → "+target,
+    confidence:confidence+"%",
+    reason,
+    evidence:best.occurrences+" pattern observations • "+
+      (best.r3>=.50?"3-tick confirmation supported.":"3-tick confirmation not required.")
+  };
 }
 function renderEvenOdd(root,d,last,n){
   const e=parityStats(d,state.selectedParity);
