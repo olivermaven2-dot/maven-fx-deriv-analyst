@@ -284,48 +284,140 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
 }
 function overUnderEntry(d,selectedDigit,selectedSide){
   const candidates=[];
+  const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
+  const qualifies=x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit;
+
   for(let candidate=0;candidate<=9;candidate++){
     const t=ouTransitionStats(d,candidate,selectedDigit,selectedSide);
-    if(t.total<12)continue;
-    const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
-    const sample=Math.min(1,t.total/100);
-    const recentWeight=Math.min(1,t.recentTotal/40);
-    const stability=Math.max(0,1-Math.abs(t.rate-t.recentRate)-Math.abs(t.r1-t.r3)*.5);
-    const depth=t.r1*.25+t.r2*.20+t.r3*.25+t.recovery*.05;
-    const advantage=Math.max(0,Math.min(1,.5+(t.weightedRate-baseline)*3));
-    const recentAdv=Math.max(0,Math.min(1,.5+(t.recentRate-baseline)*3));
-    const consistency=Math.max(0,Math.min(1,1-Math.abs(t.r1-t.r2)-Math.abs(t.r2-t.r3)));
-    const score=100*(depth*.32+advantage*.18+recentAdv*.18+stability*.12+consistency*.08+sample*.07+recentWeight*.05);
-    const p=Math.min(1,Math.max(0,t.r3*.5+t.r2*.3+t.r1*.2));
+    if(t.total<10)continue;
+
+    // The entry digit is a TRIGGER: when it appears, the following digits
+    // must show a measurable tendency toward the selected Over/Under zone.
+    const sample=Math.min(1,t.total/80);
+    const recentWeight=Math.min(1,t.recentTotal/35);
+
+    // 1-tick reaction is the strongest immediate signal. 2-tick confirms
+    // continuation. 3-tick is additional confirmation, NOT a hard gate.
+    const continuation=t.r1*.45+t.r2*.35+t.r3*.20;
+    const immediateAdvantage=Math.max(0,Math.min(1,.5+(t.r1-baseline)*3.5));
+    const twoTickAdvantage=Math.max(0,Math.min(1,.5+(t.r2-baseline)*3));
+    const threeTickAdvantage=Math.max(0,Math.min(1,.5+(t.r3-baseline)*2.5));
+    const directionalAdvantage=Math.max(0,Math.min(1,.5+(t.weightedRate-baseline)*3));
+    const recentAdvantage=Math.max(0,Math.min(1,.5+(t.recentRate-baseline)*3));
+
+    const stability=Math.max(0,Math.min(1,
+      1-Math.abs(t.rate-t.recentRate)-Math.abs(t.r1-t.r2)*.35-Math.abs(t.r2-t.r3)*.25
+    ));
+    const consistency=Math.max(0,Math.min(1,
+      1-Math.abs(t.r1-t.r2)-Math.abs(t.r2-t.r3)
+    ));
+
+    // Primary emphasis is trigger -> directional reaction. 1/2/3 tick
+    // continuation contributes progressively, with no automatic 3-tick veto.
+    const score=100*(
+      directionalAdvantage*.24+
+      recentAdvantage*.18+
+      continuation*.28+
+      immediateAdvantage*.10+
+      twoTickAdvantage*.07+
+      threeTickAdvantage*.03+
+      stability*.05+
+      consistency*.03+
+      sample*.01+
+      recentWeight*.01
+    );
+
     const confidenceBase=Math.min(1,t.total/120);
-    candidates.push({...t,candidate,baseline,score,consistency,stability,confidenceBase,p});
+    candidates.push({
+      ...t,
+      candidate,
+      baseline,
+      score,
+      continuation,
+      immediateAdvantage,
+      twoTickAdvantage,
+      threeTickAdvantage,
+      directionalAdvantage,
+      recentAdvantage,
+      consistency,
+      stability,
+      confidenceBase,
+      p:Math.min(1,Math.max(0,t.r1*.5+t.r2*.3+t.r3*.2))
+    });
   }
+
   candidates.sort((a,b)=>b.score-a.score);
   const best=candidates[0],second=candidates[1];
   if(!best)return null;
+
   const gap=second?best.score-second.score:0;
   const setupDepth=Math.min(selectedDigit,9-selectedDigit);
   const middleBias=Math.max(0,Math.min(1,(setupDepth-1)/3));
+
+  // Middle setups remain slightly more permissive, while the trigger
+  // direction itself must still be supported by actual follow-through.
   const minTotal=Math.round(10-2*middleBias);
-  const r1Min=.52-.04*middleBias;
-  const r2Min=.50-.04*middleBias;
-  const r3Min=.48-.05*middleBias;
-  const recentMin=.48+.02*middleBias;
-  const stabilityMin=.58-.02*middleBias;
-  const consistencyMin=.50-.03*middleBias;
-  const scoreMin=56-3*middleBias;
-  const gapMin=1.5-.3*middleBias;
-  const valid=best.total>=minTotal&&best.r1>=r1Min&&best.r2>=r2Min&&best.r3>=r3Min&&best.recentRate>=recentMin&&best.stability>=stabilityMin&&best.consistency>=consistencyMin&&best.score>=scoreMin&&gap>=gapMin;
+  const recentMin=.47+.02*middleBias;
+  const scoreMin=53-3*middleBias;
+  const gapMin=.8;
+
+  // A candidate can qualify through strong 1-tick reaction OR strong
+  // 2-tick continuation. 3-tick continuation only improves the result.
+  const passesOneTick=best.r1>=.54;
+  const passesTwoTick=best.r2>=.52;
+  const hasDirectionalReaction=best.recentRate>=recentMin&&
+    (best.weightedRate>=baseline-.03||best.r1>=.56||best.r2>=.54);
+  const hasContinuation=passesOneTick||passesTwoTick;
+  const valid=best.total>=minTotal&&
+    hasDirectionalReaction&&
+    hasContinuation&&
+    best.stability>=.54&&
+    best.consistency>=.42&&
+    best.score>=scoreMin&&
+    gap>=gapMin;
+
   if(!valid)return null;
-  const confidence=Math.max(52,Math.min(94,Math.round(52+best.confidenceBase*16+best.consistency*10+Math.min(10,gap))));
+
+  let confidence=Math.round(
+    50+
+    best.confidenceBase*14+
+    best.continuation*18+
+    best.stability*6+
+    best.consistency*5+
+    Math.min(7,gap)
+  );
+
+  // 3-tick confirmation increases confidence but is never required.
+  if(best.r3>=.50)confidence+=4;
+  else if(best.r3<.40)confidence-=3;
+
+  confidence=Math.max(52,Math.min(94,confidence));
+
   let reason;
-  if(best.recentRate>best.rate+.06)reason="Recent reaction is strengthening while the multi-tick follow-through remains consistent.";
-  else if(best.recentRate<best.rate-.08)reason="Historical reaction is favorable, but recent behavior is weakening.";
-  else if(best.r3>best.r1+.03)reason="The candidate shows strong delayed follow-through across the second and third ticks.";
-  else if(best.recovery>.25)reason="The candidate shows strong continuation with meaningful recovery after an initial unfavorable tick.";
-  else reason="Strong favorable transitions with stable 1–3 tick follow-through and sufficient sample size.";
+  if(best.r1>=.56&&best.r2>=.54&&best.r3>=.50){
+    reason="Strong trigger reaction with consistent 1–3 tick movement toward the selected setup.";
+  }else if(best.r1>=.54&&best.r2>=.52){
+    reason="The trigger shows strong immediate reaction and 2-tick continuation toward the selected setup.";
+  }else if(best.r1>=.54){
+    reason="The trigger shows a strong immediate move toward the selected setup; longer continuation is less consistent.";
+  }else if(best.r2>=.52){
+    reason="The trigger shows favorable 2-tick continuation toward the selected setup despite weaker immediate reaction.";
+  }else{
+    reason="The trigger has aligned directional reaction and supporting recent transition evidence.";
+  }
+
   const status=confidence>=82?"STRONG ENTRY":confidence>=68?"MODERATE ENTRY":"WEAK ENTRY";
-  return {main:String(best.candidate),confidence:confidence+"%",status,reason,evidence:best.total+" transition observations"};
+  const continuationNote=best.r3>=.50
+    ?"3-tick confirmation supported."
+    :"3-tick confirmation is not required and is only reducing confidence.";
+
+  return {
+    main:String(best.candidate),
+    confidence:confidence+"%",
+    status,
+    reason,
+    evidence:best.total+" trigger observations • "+continuationNote
+  };
 }
 
 function renderParityControls(){
