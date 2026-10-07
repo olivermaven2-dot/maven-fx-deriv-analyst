@@ -647,8 +647,8 @@ function selectParityEntry(d,selectedSide){
 function renderEvenOdd(root,d,last,n){
   const e=parityStats(d,state.selectedParity);
   const entryActive=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
-  const entry=entryActive?parityPatternStats(d,state.selectedParity):null;
-  const entryDisplay=entry||{main:entryActive?"NO VALID PATTERN":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No parity pattern passed the independent multi-tick validation.":"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."};
+  const entry=entryActive?selectParityEntry(d,state.selectedParity):null;
+  const entryDisplay=entry||{main:entryActive?"NO VALID ENTRY":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"Neither pattern nor reaction entry passed the independent validation.":"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."};
   const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
   const reason=e.signal==="STRONG SIGNAL"?"Multiple parity evidence layers are aligned for "+state.selectedParity+".":e.signal==="SIGNAL"?"The selected parity has sufficient multi-factor evidence, but it is not at STRONG SIGNAL level.":e.signal==="AVOID"?"The selected parity has unfavorable or conflicting evidence.":"Evidence for the selected parity is still developing.";
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
@@ -658,7 +658,7 @@ function renderEvenOdd(root,d,last,n){
     "Probability "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentumScore*100)+" • trend "+Math.round(e.trendScore*100)+" • transitions "+Math.round(e.transition*100),
     "Clustering "+Math.round(e.clustering*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100)+" • historical "+Math.round(e.historical*100),
     "Streak "+e.streak+" • evidence "+Math.round(e.evidence*100),
-    entry?"✓ Pattern entry passed independent reaction validation":entryActive?"× No parity pattern passed entry validation":"× Entry inactive until SIGNAL or STRONG SIGNAL"
+    entry?"✓ "+entry.type+" entry passed independent reaction validation":entryActive?"× No pattern or reaction entry passed validation":"× Entry inactive until SIGNAL or STRONG SIGNAL"
   ],n);
 }
 function renderRiseFall(root,d,last,n){
