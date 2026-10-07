@@ -508,106 +508,142 @@ function parityPatternStats(d,selectedSide){
   const patterns=[];
   const recent=d.slice(-300).map(key);
 
-  // Find patterns that act as triggers for the current market signal.
-  // The pattern itself does not need three successful follow-up ticks.
   for(let len=1;len<=3;len++){
     let occurrences=0,one=0,two=0,three=0,recovery=0;
-
     for(let i=0;i+len+2<recent.length;i++){
       let match=true;
-      for(let j=0;j<len;j++){
-        if(recent[i+j]!==target){match=false;break}
-      }
+      for(let j=0;j<len;j++){if(recent[i+j]!==target){match=false;break}}
       if(!match)continue;
-
       occurrences++;
       const a=recent[i+len]===target;
       const b=recent[i+len+1]===target;
       const c=recent[i+len+2]===target;
-
       if(a)one++;
       if(a&&b)two++;
       if(a&&b&&c)three++;
       if(!a&&b&&c)recovery++;
     }
-
-    if(occurrences>=6){
-      patterns.push({
-        len,
-        occurrences,
-        r1:one/occurrences,
-        r2:two/occurrences,
-        r3:three/occurrences,
-        recovery:recovery/occurrences
-      });
-    }
+    if(occurrences>=6)patterns.push({len,occurrences,r1:one/occurrences,r2:two/occurrences,r3:three/occurrences,recovery:recovery/occurrences});
   }
-
   if(!patterns.length)return null;
 
-  // 1-tick reaction is primary, 2-tick continuation is strong confirmation,
-  // and 3-tick continuation is extra evidence rather than a hard requirement.
-  const patternScore=p=>
-    p.r1*.45+
-    p.r2*.35+
-    p.r3*.12+
-    p.recovery*.08;
-
-  patterns.sort((a,b)=>
-    patternScore(b)-patternScore(a)||b.occurrences-a.occurrences
-  );
-
+  const patternScore=p=>p.r1*.45+p.r2*.35+p.r3*.12+p.recovery*.08;
+  patterns.sort((a,b)=>patternScore(b)-patternScore(a)||b.occurrences-a.occurrences);
   const best=patterns[0],second=patterns[1];
   const score=patternScore(best);
   const gap=second?score-patternScore(second):score*.25;
+  const passesOne=best.r1>=.45,passesTwo=best.r2>=.45;
 
-  // A pattern qualifies when it has a meaningful 1-tick reaction OR
-  // a meaningful 2-tick continuation. Three ticks are never mandatory.
-  const passesOne=best.r1>=.45;
-  const passesTwo=best.r2>=.45;
-  const directional=passesOne||passesTwo;
+  if(best.occurrences<6||!(passesOne||passesTwo)||score<.44||gap<.01)return null;
 
-  if(
-    best.occurrences<6||
-    !directional||
-    score<.44||
-    gap<.01
-  )return null;
-
-  let confidence=Math.round(
-    52+
-    score*28+
-    Math.min(8,gap*100)+
-    Math.min(6,best.occurrences/25)
-  );
-
-  // 3-tick confirmation raises confidence, but weak 3-tick behavior
-  // cannot invalidate a pattern that already passed 1 or 2 ticks.
+  let confidence=Math.round(52+score*28+Math.min(8,gap*100)+Math.min(6,best.occurrences/25));
   if(best.r3>=.50)confidence+=4;
   else if(best.r3<.38)confidence-=2;
-
   confidence=Math.max(52,Math.min(94,confidence));
 
   let reason;
-  if(best.r1>=.55&&best.r2>=.52){
-    reason="Pattern hit shows strong immediate and 2-tick movement toward the "+selectedSide.toLowerCase()+" signal.";
-  }else if(best.r1>=.45&&best.r2>=.45){
-    reason="Pattern hit shows favorable 1–2 tick movement toward the "+selectedSide.toLowerCase()+" signal.";
-  }else if(best.r1>=.45){
-    reason="Pattern hit shows a strong immediate move toward the "+selectedSide.toLowerCase()+" signal; longer continuation is mixed.";
-  }else{
-    reason="Pattern hit shows favorable 2-tick continuation toward the "+selectedSide.toLowerCase()+" signal.";
-  }
+  if(best.r1>=.55&&best.r2>=.52)reason="Pattern hit shows strong immediate and 2-tick movement toward the "+selectedSide.toLowerCase()+" signal.";
+  else if(best.r1>=.45&&best.r2>=.45)reason="Pattern hit shows favorable 1–2 tick movement toward the "+selectedSide.toLowerCase()+" signal.";
+  else if(best.r1>=.45)reason="Pattern hit shows a strong immediate move toward the "+selectedSide.toLowerCase()+" signal; longer continuation is mixed.";
+  else reason="Pattern hit shows favorable 2-tick continuation toward the "+selectedSide.toLowerCase()+" signal.";
 
   const pattern=Array(best.len).fill(target).join(" → ");
   return {
+    type:"PATTERN",
     main:pattern+" → "+target,
     confidence:confidence+"%",
+    score,
     reason,
-    evidence:best.occurrences+" pattern observations • "+
-      (best.r3>=.50?"3-tick confirmation supported.":"3-tick confirmation not required.")
+    evidence:best.occurrences+" pattern observations • "+(best.r3>=.50?"3-tick confirmation supported.":"3-tick confirmation not required.")
   };
 }
+
+function parityReactionEntry(d,selectedSide){
+  const key=x=>x%2===0?"E":"O";
+  const target=selectedSide==="EVEN"?"E":"O";
+  const targetLabel=selectedSide;
+  const recent=d.slice(-400).map(key);
+  const candidates=[];
+
+  for(const trigger of ["E","O"]){
+    let total=0,r1=0,r2=0,r3=0,recentTotal=0,recentR1=0;
+    for(let i=0;i<recent.length-3;i++){
+      if(recent[i]!==trigger)continue;
+      total++;
+      const a=recent[i+1]===target;
+      const b=recent[i+2]===target;
+      const c=recent[i+3]===target;
+      if(a)r1++;
+      if(a&&b)r2++;
+      if(a&&b&&c)r3++;
+      if(i>=Math.max(0,recent.length-120)){
+        recentTotal++;
+        if(a)recentR1++;
+      }
+    }
+    if(total<10)continue;
+
+    const rate1=r1/total,rate2=r2/total,rate3=r3/total;
+    const recentRate=recentTotal?recentR1/recentTotal:rate1;
+    const continuation=rate1*.50+rate2*.30+rate3*.10+recentRate*.10;
+    const stability=Math.max(0,Math.min(1,1-Math.abs(rate1-rate2)*.8-Math.abs(rate2-rate3)*.5));
+    const sample=Math.min(1,total/80);
+    const recentWeight=Math.min(1,recentTotal/30);
+    const directional=Math.max(0,Math.min(1,.5+(recentRate-.5)*3.5));
+    const score=100*(continuation*.55+directional*.20+stability*.10+sample*.10+recentWeight*.05);
+    candidates.push({trigger,total,rate1,rate2,rate3,recentRate,continuation,stability,sample,recentWeight,score});
+  }
+
+  candidates.sort((a,b)=>b.score-a.score);
+  const best=candidates[0],second=candidates[1];
+  if(!best)return null;
+
+  const gap=second?best.score-second.score:best.score*.15;
+  const passesOne=best.rate1>=.54;
+  const passesTwo=best.rate2>=.52;
+  const directional=passesOne||passesTwo;
+  const valid=best.total>=10&&directional&&best.recentRate>=.50&&best.stability>=.45&&best.score>=56&&gap>=.8;
+  if(!valid)return null;
+
+  let confidence=Math.round(50+best.continuation*20+best.recentRate*14+best.stability*5+best.sample*5+Math.min(6,gap));
+  if(best.rate3>=.50)confidence+=4;
+  else if(best.rate3<.38)confidence-=2;
+  confidence=Math.max(52,Math.min(94,confidence));
+
+  let reason;
+  if(best.rate1>=.56&&best.rate2>=.53)reason="When "+(best.trigger==="E"?"EVEN":"ODD")+" appears, the next parity repeatedly favors "+targetLabel+" with supporting 2-tick continuation.";
+  else if(best.rate1>=.54)reason="The "+(best.trigger==="E"?"EVEN":"ODD")+" trigger has a strong immediate reaction toward "+targetLabel+" in historical data.";
+  else reason="The "+(best.trigger==="E"?"EVEN":"ODD")+" trigger shows favorable 2-tick continuation toward "+targetLabel+".";
+
+  return {
+    type:"REACTION",
+    trigger:best.trigger,
+    main:"ENTER ON "+(best.trigger==="E"?"EVEN":"ODD")+" → "+targetLabel,
+    confidence:confidence+"%",
+    score:best.score,
+    reason,
+    evidence:best.total+" trigger observations • "+(best.rate3>=.50?"3-tick support improves confidence.":"1/2-tick evidence is sufficient; 3-tick is not required.")
+  };
+}
+
+function selectParityEntry(d,selectedSide){
+  const pattern=parityPatternStats(d,selectedSide);
+  const reaction=parityReactionEntry(d,selectedSide);
+  if(!pattern&&!reaction)return null;
+  if(!pattern)return reaction;
+  if(!reaction)return pattern;
+
+  const winner=reaction.score>=pattern.score?reaction:pattern;
+  const agreement=pattern.type!==reaction.type &&
+    (reaction.trigger==="E"?"EVEN":"ODD")===selectedSide;
+
+  if(agreement){
+    winner={...winner,confidence:Math.min(94,parseInt(winner.confidence,10)+3)+"%",
+      reason:winner.reason+" Pattern and reaction evidence also agree with the selected signal."};
+  }
+  return winner;
+}
+
 function renderEvenOdd(root,d,last,n){
   const e=parityStats(d,state.selectedParity);
   const entryActive=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
