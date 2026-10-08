@@ -724,13 +724,225 @@ function renderEvenOdd(root,d,last,n){
     entry?"✓ STRONG ENTRY: "+entry.type+" trigger passed independent validation":entryActive?"× No strong pattern or reaction trigger passed validation":"× Entry inactive until SIGNAL or STRONG SIGNAL"
   ],n);
 }
+function riseFallAnalysis(d){
+  if(d.length<25)return null;
+
+  const windows=[20,50,100,250,500];
+  const stats=[];
+  for(const size of windows){
+    const a=d.slice(-Math.min(size,d.length));
+    let rise=0,fall=0,flat=0,upMove=0,downMove=0;
+    for(let i=1;i<a.length;i++){
+      const delta=a[i]-a[i-1];
+      if(delta>0){rise++;upMove+=delta}
+      else if(delta<0){fall++;downMove+=-delta}
+      else flat++;
+    }
+    const directional=rise+fall;
+    const rate=directional?rise/directional:.5;
+    const moveTotal=upMove+downMove;
+    const moveRate=moveTotal?upMove/moveTotal:.5;
+    stats.push({size,available:a.length,rise,fall,flat,rate,moveRate,upMove,downMove,directional});
+  }
+
+  const usable=stats.filter(x=>x.directional>=10);
+  if(!usable.length)return null;
+
+  // Combine direction frequency with actual price movement. Recent windows
+  // matter more, while the 500-tick window provides long-context stability.
+  const weights=[.34,.26,.19,.13,.08];
+  let directionScore=.5,moveScore=.5,totalWeight=0;
+  for(let i=0;i<stats.length;i++){
+    const s=stats[i],w=weights[i];
+    if(s.directional<10)continue;
+    directionScore+=w*(s.rate-.5);
+    moveScore+=w*(s.moveRate-.5);
+    totalWeight+=w;
+  }
+  directionScore=.5+(directionScore-.5)/Math.max(.01,totalWeight);
+  moveScore=.5+(moveScore-.5)/Math.max(.01,totalWeight);
+
+  const recent=d.slice(-60);
+  let r=0,f=0,upMagnitude=0,downMagnitude=0;
+  const dirs=[];
+  for(let i=1;i<recent.length;i++){
+    const delta=recent[i]-recent[i-1];
+    if(delta>0){r++;upMagnitude+=delta;dirs.push("R")}
+    else if(delta<0){f++;downMagnitude+=-delta;dirs.push("F")}
+  }
+  const directional=r+f;
+  const recentRate=directional?r/directional:.5;
+  const recentMove=(upMagnitude+downMagnitude)?upMagnitude/(upMagnitude+downMagnitude):.5;
+
+  // Trend persistence: how often the current direction continues instead of
+  // immediately reversing.
+  let continuation=0,reversals=0,transitions=0;
+  for(let i=1;i<dirs.length;i++){
+    if(dirs[i]===dirs[i-1])continuation++;
+    else reversals++;
+    transitions++;
+  }
+  const persistence=transitions?continuation/transitions:.5;
+
+  let streak=0;
+  const lastDir=dirs.at(-1)||null;
+  if(lastDir){
+    for(let i=dirs.length-1;i>=0&&dirs[i]===lastDir;i--)streak++;
+  }
+
+  // Momentum uses both direction and average move size, normalized against the
+  // recent movement distribution so a large price jump matters.
+  const moves=[];
+  for(let i=1;i<recent.length;i++)moves.push(Math.abs(recent[i]-recent[i-1]));
+  const avgMove=moves.length?moves.reduce((a,b)=>a+b,0)/moves.length:0;
+  const lastMove=recent.length>1?Math.abs(recent.at(-1)-recent.at(-2)):0;
+  const impulse=avgMove?Math.min(1,lastMove/(avgMove*2.5)):.5;
+  const momentum=(
+    recentRate*.45+
+    recentMove*.35+
+    (lastDir==="R"?0.5+0.5*impulse:lastDir==="F"?0.5-0.5*impulse:.5)*.20
+  );
+
+  const trendRate=.55*directionScore+.45*moveScore;
+  const trendSide=trendRate>=.5?"RISE":"FALL";
+  const trendStrength=Math.abs(trendRate-.5)*2;
+  const persistenceSide=lastDir==="R"?"RISE":lastDir==="FALL"?"FALL":trendSide;
+
+  // Independent reversal pressure: if the latest streak is long but the
+  // surrounding transitions are mostly reversals, reduce confidence.
+  const reversalPressure=transitions?reversals/transitions:.5;
+  const streakRisk=Math.min(1,Math.max(0,(streak-3)/5));
+  const aligned=persistenceSide===trendSide;
+  const evidence=Math.max(0,Math.min(1,
+    trendStrength*.34+
+    Math.abs(recentRate-.5)*2*.22+
+    Math.abs(recentMove-.5)*2*.16+
+    Math.abs(momentum-.5)*2*.12+
+    persistence*.10
+  ));
+
+  const selected=trendSide;
+  const selectedRate=selected==="RISE"?recentRate:1-recentRate;
+  const selectedMove=selected==="RISE"?recentMove:1-recentMove;
+  const selectedMomentum=selected==="RISE"?momentum:1-momentum;
+
+  let signal="WAIT";
+  if(evidence>=.64&&selectedRate>=.59&&selectedMove>=.56&&aligned&&usable.length>=3)signal="STRONG SIGNAL";
+  else if(evidence>=.50&&selectedRate>=.55&&selectedMove>=.53&&usable.length>=2)signal="SIGNAL";
+  else if(evidence<.25||selectedRate<.47||selectedMove<.47)signal="AVOID";
+
+  // A reversal-heavy regime prevents a false strong signal.
+  if(signal==="STRONG SIGNAL"&&reversalPressure>.68&&streakRisk>.45)signal="SIGNAL";
+
+  return {
+    signal,selected,stats,recentRate,recentMove,persistence,streak,lastDir,
+    momentum,trendRate,trendStrength,evidence,reversalPressure,selectedRate,
+    selectedMove,selectedMomentum,aligned,usableCount:usable.length
+  };
+}
+
+function riseFallEntry(d,analysis){
+  if(!analysis||!(analysis.signal==="SIGNAL"||analysis.signal==="STRONG SIGNAL"))return null;
+  const target=analysis.selected;
+  const key=(a,b)=>b>a?"R":b<a?"F":"X";
+  const recent=d.slice(-500);
+  const dirs=[];
+  for(let i=1;i<recent.length;i++)dirs.push(key(recent[i-1],recent[i]));
+
+  const candidates=[];
+  for(const len of [1,2,3]){
+    const seen=new Map();
+    for(let i=0;i+len+2<dirs.length;i++){
+      const pattern=dirs.slice(i,i+len).join(" → ");
+      let p=seen.get(pattern);
+      if(!p){p={pattern,len,total:0,r1:0,r2:0,r3:0,recentTotal:0,recentR1:0};seen.set(pattern,p)}
+      p.total++;
+      if(dirs[i+len]===(target==="RISE"?"R":"F"))p.r1++;
+      if(dirs[i+len]===(target==="RISE"?"R":"F")&&dirs[i+len+1]===(target==="RISE"?"R":"F"))p.r2++;
+      if(dirs[i+len]===(target==="RISE"?"R":"F")&&dirs[i+len+1]===(target==="RISE"?"R":"F")&&dirs[i+len+2]===(target==="RISE"?"R":"F"))p.r3++;
+      if(i>=Math.max(0,dirs.length-160)){
+        p.recentTotal++;
+        if(dirs[i+len]===(target==="RISE"?"R":"F"))p.recentR1++;
+      }
+    }
+    for(const p of seen.values()){
+      if(p.total<8)continue;
+      p.r1/=p.total;p.r2/=p.total;p.r3/=p.total;
+      p.recentRate=p.recentTotal?p.recentR1/p.recentTotal:p.r1;
+      const edge1=p.r1-.5,edge2=p.r2-.5,edge3=p.r3-.5,recentEdge=p.recentRate-.5;
+      p.score=100*(Math.max(0,edge1)*.35+Math.max(0,edge2)*.25+Math.max(0,edge3)*.10+Math.max(0,recentEdge)*.20+Math.min(1,p.total/50)*.10)*2;
+      candidates.push(p);
+    }
+  }
+  candidates.sort((a,b)=>b.score-a.score||b.total-a.total);
+  const best=candidates[0],second=candidates[1];
+  if(!best)return null;
+  const strong=(best.r1>=.55||best.r2>=.55)&&best.recentRate>=.52&&best.total>=10&&best.score>=55&&(!second||best.score-second.score>=1);
+  if(!strong)return null;
+
+  let confidence=Math.round(70+(best.r1-.5)*55+(best.r2-.5)*45+(best.r3-.5)*20+(best.recentRate-.5)*30+Math.min(6,best.total/25));
+  if(best.r3>=.50)confidence+=4;
+  else if(best.r3<.38)confidence-=2;
+  confidence=Math.max(72,Math.min(94,confidence));
+
+  return {
+    type:"PATTERN",status:"STRONG ENTRY",
+    main:best.pattern+" → "+target,
+    confidence:confidence+"%",
+    reason:best.r1>=.55&&best.r2>=.55
+      ?"Strong price-direction trigger with favorable immediate and 2-tick continuation toward "+target+"."
+      :best.r1>=.55
+      ?"Strong immediate trigger reaction toward "+target+"; longer continuation is mixed."
+      :"Strong 2-tick trigger continuation toward "+target+" despite a weaker first move.",
+    evidence:best.total+" trigger observations • "+(best.r3>=.50?"3-tick confirmation supported.":"3-tick confirmation not required.")
+  };
+}
+
 function renderRiseFall(root,d,last,n){
-  if(d.length<3){root.innerHTML=panel("INSUFFICIENT DATA","More ticks are required to measure direction.",null,["Waiting for a larger sequence"],n);return}
-  const recent=d.slice(-100);let rise=0,fall=0;
-  for(let i=1;i<recent.length;i++){if(recent[i]>recent[i-1])rise++;else if(recent[i]<recent[i-1])fall++}
-  const total=rise+fall, side=rise>=fall?"RISE":"FALL",share=total?Math.max(rise,fall)/total:0,signal=share>=.62&&total>=30,strong=share>=.68&&total>=80,st=strong?"STRONG SIGNAL":signal?"SIGNAL":"WAIT";
-  const pat=recent.slice(-4).map((x,i,a)=>i?x>a[i-1]?"R":"F":x).join(" → ");
-  root.innerHTML=panel(st,signal?`Recent directional movement currently leans ${side}.`:"Recent directional evidence is inconclusive.",signal?{main:side,meta:"Qualifying directional continuation",evidence:Math.round(share*100)+"/100"}:null,[`Recent sequence: ${pat}`,`Rise: ${rise} • Fall: ${fall}`,total>=30?"Directional sample is sufficient":"× Directional sample is still building"],n);
+  const a=riseFallAnalysis(d);
+  if(!a){
+    root.innerHTML=panel("INSUFFICIENT DATA","More live price ticks are required for reliable Rise/Fall analysis.",null,["Need at least 25 price ticks","Analysis uses actual price movement, not last-digit parity"],n);
+    return;
+  }
+
+  const entry=riseFallEntry(d,a);
+  const entryDisplay=entry||{
+    main:a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"?"NO STRONG ENTRY":"NO ACTIVE ENTRY",
+    confidence:"—",
+    reason:a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"
+      ?"No price-direction trigger has strong enough follow-through evidence yet."
+      :"Entry activates only when Rise/Fall reaches SIGNAL or STRONG SIGNAL."
+  };
+
+  const latest=a.stats.map(x=>x.directional>=10
+    ?Math.round((x.rate*100))+"% R"
+    :"—").join(" / ");
+
+  const side=a.selected;
+  const reason=a.signal==="STRONG SIGNAL"
+    ?"Multi-window price direction, movement magnitude, momentum and persistence are aligned for "+side+"."
+    :a.signal==="SIGNAL"
+    ?"Price direction currently favors "+side+", but evidence is below the strongest alignment level."
+    :a.signal==="AVOID"
+    ?"Price movement is conflicting or unfavorable for a reliable directional setup."
+    :"Rise/Fall evidence is still developing.";
+
+  const recentPattern=d.slice(-8).reduce((acc,x,i,a)=>{
+    if(i===0)return acc;
+    const p=a[i-1];
+    return acc.concat(x>p?"R":x<p?"F":"X");
+  },[]).join(" → ");
+
+  root.innerHTML=panel(a.signal,reason,entryDisplay,[
+    "Selected direction: "+side,
+    "Recent price direction: "+recentPattern,
+    "20/50/100/250/500 direction rates: "+latest,
+    "Recent 60: "+Math.round(a.recentRate*100)+"% RISE • "+Math.round((1-a.recentRate)*100)+"% FALL",
+    "Movement-weighted: "+Math.round(a.recentMove*100)+"% RISE • trend score "+Math.round(a.trendRate*100)+"%",
+    "Momentum "+Math.round(a.momentum*100)+" • persistence "+Math.round(a.persistence*100)+" • streak "+a.streak,
+    "Reversal pressure "+Math.round(a.reversalPressure*100)+" • evidence "+Math.round(a.evidence*100)+"%",
+    entry?"✓ STRONG ENTRY: price-direction trigger passed validation":a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"?"× No strong price-direction trigger yet":"× Entry inactive until SIGNAL or STRONG SIGNAL"
+  ],n);
 }
 document.querySelectorAll(".parity-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedParity=btn.dataset.parity;renderParityControls();renderEngine()}));
 document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);renderOUControls();renderEngine()}));
