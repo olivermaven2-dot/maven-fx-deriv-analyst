@@ -505,56 +505,94 @@ function parityStats(d,selectedSide){
 function parityPatternStats(d,selectedSide){
   const key=x=>x%2===0?"E":"O";
   const target=selectedSide==="EVEN"?"E":"O";
-  const patterns=[];
+  const targetLabel=selectedSide;
   const recent=d.slice(-300).map(key);
+  const patterns=[];
 
+  // Any 1–3 parity sequence can be a trigger. The trigger is useful only
+  // when the parity immediately after it tends to move toward the Final Signal.
   for(let len=1;len<=3;len++){
-    let occurrences=0,one=0,two=0,three=0,recovery=0;
+    const seen=new Map();
     for(let i=0;i+len+2<recent.length;i++){
-      let match=true;
-      for(let j=0;j<len;j++){if(recent[i+j]!==target){match=false;break}}
-      if(!match)continue;
-      occurrences++;
+      const sequence=recent.slice(i,i+len);
+      const pattern=sequence.join(" → ");
+      let p=seen.get(pattern);
+      if(!p){p={pattern,len,occurrences:0,r1:0,r2:0,r3:0,recovery:0,recentTotal:0,recentR1:0};seen.set(pattern,p)}
+      p.occurrences++;
       const a=recent[i+len]===target;
       const b=recent[i+len+1]===target;
       const c=recent[i+len+2]===target;
-      if(a)one++;
-      if(a&&b)two++;
-      if(a&&b&&c)three++;
-      if(!a&&b&&c)recovery++;
+      if(a)p.r1++;
+      if(a&&b)p.r2++;
+      if(a&&b&&c)p.r3++;
+      if(!a&&b&&c)p.recovery++;
+      if(i>=Math.max(0,recent.length-120)){
+        p.recentTotal++;
+        if(a)p.recentR1++;
+      }
     }
-    if(occurrences>=6)patterns.push({len,occurrences,r1:one/occurrences,r2:two/occurrences,r3:three/occurrences,recovery:recovery/occurrences});
+    for(const p of seen.values()){
+      if(p.occurrences>=5){
+        p.r1/=p.occurrences;
+        p.r2/=p.occurrences;
+        p.r3/=p.occurrences;
+        p.recovery/=p.occurrences;
+        p.recentRate=p.recentTotal?p.recentR1/p.recentTotal:p.r1;
+        patterns.push(p);
+      }
+    }
   }
+
   if(!patterns.length)return null;
 
-  const patternScore=p=>p.r1*.45+p.r2*.35+p.r3*.12+p.recovery*.08;
+  // Same follow-through model as Reaction Entry:
+  // 1 tick is primary, 2 ticks confirm, 3 ticks adds strength but never blocks.
+  const patternScore=p=>
+    p.r1*.45+
+    p.r2*.30+
+    p.r3*.12+
+    p.recovery*.05+
+    p.recentRate*.08;
+
   patterns.sort((a,b)=>patternScore(b)-patternScore(a)||b.occurrences-a.occurrences);
-  const best=patterns[0],second=patterns[1];
+  const best=patterns[0];
   const score=patternScore(best);
-  const gap=second?score-patternScore(second):score*.25;
-  const passesOne=best.r1>=.45,passesTwo=best.r2>=.45;
+  const passesOne=best.r1>=.52;
+  const passesTwo=best.r2>=.51;
 
-  if(best.occurrences<6||!(passesOne||passesTwo)||score<.44||gap<.01)return null;
+  if(best.occurrences<5||!(passesOne||passesTwo)||best.recentRate<.49||score<.50)return null;
 
-  let confidence=Math.round(52+score*28+Math.min(8,gap*100)+Math.min(6,best.occurrences/25));
+  let confidence=Math.round(
+    50+
+    best.r1*16+
+    best.r2*12+
+    best.r3*7+
+    best.recentRate*10+
+    Math.min(8,best.occurrences/20)
+  );
   if(best.r3>=.50)confidence+=4;
   else if(best.r3<.38)confidence-=2;
-  confidence=Math.max(52,Math.min(94,confidence));
+  confidence=Math.max(52,Math.min(92,confidence));
 
   let reason;
-  if(best.r1>=.55&&best.r2>=.52)reason="Pattern hit shows strong immediate and 2-tick movement toward the "+selectedSide.toLowerCase()+" signal.";
-  else if(best.r1>=.45&&best.r2>=.45)reason="Pattern hit shows favorable 1–2 tick movement toward the "+selectedSide.toLowerCase()+" signal.";
-  else if(best.r1>=.45)reason="Pattern hit shows a strong immediate move toward the "+selectedSide.toLowerCase()+" signal; longer continuation is mixed.";
-  else reason="Pattern hit shows favorable 2-tick continuation toward the "+selectedSide.toLowerCase()+" signal.";
+  if(best.r1>=.56&&best.r2>=.53){
+    reason="Pattern hit shows strong immediate and 2-tick movement toward the "+targetLabel+" signal.";
+  }else if(best.r1>=.52&&best.r2>=.51){
+    reason="Pattern hit shows favorable 1–2 tick movement toward the "+targetLabel+" signal.";
+  }else if(best.r1>=.52){
+    reason="Pattern hit shows a favorable immediate move toward the "+targetLabel+" signal; longer continuation is mixed.";
+  }else{
+    reason="Pattern hit shows favorable 2-tick continuation toward the "+targetLabel+" signal.";
+  }
 
-  const pattern=Array(best.len).fill(target).join(" → ");
   return {
     type:"PATTERN",
-    main:pattern+" → "+target,
+    main:best.pattern+" → "+targetLabel,
     confidence:confidence+"%",
     score,
     reason,
-    evidence:best.occurrences+" pattern observations • "+(best.r3>=.50?"3-tick confirmation supported.":"3-tick confirmation not required.")
+    evidence:best.occurrences+" pattern observations • "+
+      (best.r3>=.50?"3-tick confirmation supported.":"3-tick confirmation not required.")
   };
 }
 
@@ -581,48 +619,75 @@ function parityReactionEntry(d,selectedSide){
         if(a)recentR1++;
       }
     }
-    if(total<10)continue;
+    if(total<6)continue;
 
     const rate1=r1/total,rate2=r2/total,rate3=r3/total;
     const recentRate=recentTotal?recentR1/recentTotal:rate1;
-    const continuation=rate1*.50+rate2*.30+rate3*.10+recentRate*.10;
-    const stability=Math.max(0,Math.min(1,1-Math.abs(rate1-rate2)*.8-Math.abs(rate2-rate3)*.5));
-    const sample=Math.min(1,total/80);
-    const recentWeight=Math.min(1,recentTotal/30);
-    const directional=Math.max(0,Math.min(1,.5+(recentRate-.5)*3.5));
-    const score=100*(continuation*.55+directional*.20+stability*.10+sample*.10+recentWeight*.05);
+
+    // Identical 1/2/3-tick model to Pattern Entry.
+    const continuation=rate1*.45+rate2*.30+rate3*.12+recentRate*.13;
+    const stability=Math.max(0,Math.min(1,
+      1-Math.abs(rate1-rate2)*.7-Math.abs(rate2-rate3)*.35
+    ));
+    const sample=Math.min(1,total/50);
+    const recentWeight=Math.min(1,recentTotal/25);
+    const directional=Math.max(0,Math.min(1,.5+(recentRate-.5)*3));
+    const score=100*(
+      continuation*.55+
+      directional*.20+
+      stability*.10+
+      sample*.10+
+      recentWeight*.05
+    );
     candidates.push({trigger,total,rate1,rate2,rate3,recentRate,continuation,stability,sample,recentWeight,score});
   }
 
   candidates.sort((a,b)=>b.score-a.score);
-  const best=candidates[0],second=candidates[1];
+  const best=candidates[0];
   if(!best)return null;
 
-  const gap=second?best.score-second.score:best.score*.15;
-  const passesOne=best.rate1>=.54;
-  const passesTwo=best.rate2>=.52;
+  // Same rule as Pattern Entry: 1 OR 2 ticks can qualify.
+  // 3 ticks only strengthens/weakens confidence.
+  const passesOne=best.rate1>=.52;
+  const passesTwo=best.rate2>=.51;
   const directional=passesOne||passesTwo;
-  const valid=best.total>=10&&directional&&best.recentRate>=.50&&best.stability>=.45&&best.score>=56&&gap>=.8;
+  const valid=best.total>=6&&directional&&best.recentRate>=.49&&best.stability>=.35&&best.score>=52;
   if(!valid)return null;
 
-  let confidence=Math.round(50+best.continuation*20+best.recentRate*14+best.stability*5+best.sample*5+Math.min(6,gap));
+  let confidence=Math.round(
+    50+
+    best.rate1*16+
+    best.rate2*12+
+    best.rate3*7+
+    best.recentRate*10+
+    best.stability*5+
+    best.sample*5
+  );
   if(best.rate3>=.50)confidence+=4;
   else if(best.rate3<.38)confidence-=2;
-  confidence=Math.max(52,Math.min(94,confidence));
+  confidence=Math.max(52,Math.min(92,confidence));
 
   let reason;
-  if(best.rate1>=.56&&best.rate2>=.53)reason="When "+(best.trigger==="E"?"EVEN":"ODD")+" appears, the next parity repeatedly favors "+targetLabel+" with supporting 2-tick continuation.";
-  else if(best.rate1>=.54)reason="The "+(best.trigger==="E"?"EVEN":"ODD")+" trigger has a strong immediate reaction toward "+targetLabel+" in historical data.";
-  else reason="The "+(best.trigger==="E"?"EVEN":"ODD")+" trigger shows favorable 2-tick continuation toward "+targetLabel+".";
+  const triggerLabel=best.trigger==="E"?"EVEN":"ODD";
+  if(best.rate1>=.56&&best.rate2>=.53){
+    reason="When "+triggerLabel+" appears, the next parity strongly favors "+targetLabel+" with 2-tick continuation.";
+  }else if(best.rate1>=.52&&best.rate2>=.51){
+    reason="The "+triggerLabel+" trigger shows favorable 1–2 tick movement toward "+targetLabel+".";
+  }else if(best.rate1>=.52){
+    reason="The "+triggerLabel+" trigger shows a favorable immediate move toward "+targetLabel+"; longer continuation is mixed.";
+  }else{
+    reason="The "+triggerLabel+" trigger shows favorable 2-tick continuation toward "+targetLabel+".";
+  }
 
   return {
     type:"REACTION",
     trigger:best.trigger,
-    main:"ENTER ON "+(best.trigger==="E"?"EVEN":"ODD")+" → "+targetLabel,
+    main:"ENTER ON "+triggerLabel+" → "+targetLabel,
     confidence:confidence+"%",
     score:best.score,
     reason,
-    evidence:best.total+" trigger observations • "+(best.rate3>=.50?"3-tick support improves confidence.":"1/2-tick evidence is sufficient; 3-tick is not required.")
+    evidence:best.total+" trigger observations • "+
+      (best.r3>=.50?"3-tick confirmation supported.":"3-tick confirmation not required.")
   };
 }
 
