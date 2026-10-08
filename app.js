@@ -136,6 +136,15 @@ function loadHistory(prices,times,pipSize=null){
   state.ticks=arr.slice(-MAX_TICKS);state.digits=arr.map(x=>digitFromQuote(x.quote,state.pipSize)).filter(Number.isInteger).slice(-MAX_TICKS);
   $("diagHistory").textContent=String(arr.length);updateQuality();renderStream();renderEngine();
 }
+let streamRenderPending=false,engineRenderPending=false;
+function scheduleStreamRender(){
+  if(streamRenderPending)return;streamRenderPending=true;
+  setTimeout(()=>{streamRenderPending=false;renderStream()},100);
+}
+function scheduleEngineRender(){
+  if(engineRenderPending)return;engineRenderPending=true;
+  setTimeout(()=>{engineRenderPending=false;renderEngine()},250);
+}
 function receiveTick(t){
   if(!t||t.symbol!==state.symbol)return;
   const quote=t.quote;if(!Number.isFinite(Number(quote)))return;
@@ -144,9 +153,11 @@ function receiveTick(t){
   state.ticks.push({quote:Number(quote),epoch:t.epoch||Math.floor(Date.now()/1000)});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
   state.lastTickAt=Date.now();
-  $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
+  // Keep the critical extraction display on the live tick path; defer heavier redraws.
+  $("lastPrice").textContent=String(quote);$("lastDigit").textContent=String(digit);
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
-  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream();renderEngine();
+  $("diagTicks").textContent=state.ticks.length;updateQuality();
+  scheduleStreamRender();scheduleEngineRender();
 }
 function updateQuality(){
   const n=state.digits.length,pill=$("qualityPill");
