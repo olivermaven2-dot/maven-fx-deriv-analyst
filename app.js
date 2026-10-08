@@ -22,7 +22,7 @@ function renderOverUnder(root,d,c,last,n){
 }
 const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",tickSeq:0,account:null,accountToken:null,ouBot:{enabled:false,running:false,mode:"NORMAL",status:"OFF",cycleRun:0,pending:false,entryDigit:null,market:"",selectedDigit:null,selectedSide:null,initialStake:1,stake:1,martingale:2,takeProfit:5,stopLoss:3,winCount:0,lossCount:0,netPnl:0,lastResult:"—",recoveryMarket:"",recoveryDigit:"",recoverySide:"UNDER",recoveryStake:"",recoveryDigits:[]}};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—"};
 
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
@@ -101,7 +101,6 @@ function request(obj){if(state.socket?.readyState===WebSocket.OPEN)state.socket.
 function handleMessage(d){
   if(d.error){state.lastError=`${d.error.code||"API"}: ${d.error.message||"Deriv data error"}`;if($("diagError"))$("diagError").textContent=state.lastError;console.warn("Deriv API error:",d.error);setStatus("error",d.error.message||"Deriv data error");return}
   if(d.msg_type==="ping"){$("diagSocket").textContent="OPEN • PING OK";return}
-  if(d.msg_type==="authorize"){if(d.authorize){state.account={loginid:d.authorize.loginid||"Connected",currency:d.authorize.currency||"",balance:d.authorize.balance};$( "apiStatus").textContent="Account connected • "+(d.authorize.loginid||"authorized")+" • "+(d.authorize.currency||"")+" "+(d.authorize.balance??"");}else{$( "apiStatus").textContent="Account authorization failed.";}}
   if(d.msg_type==="active_symbols")loadMarkets(d.active_symbols||[]);
   if(d.msg_type==="history")loadHistory(d.history?.prices||[],d.history?.times||[],d.history?.pip_size??d.pip_size??state.pipSize);
   if(d.msg_type==="tick")receiveTick(d.tick);
@@ -145,9 +144,7 @@ function receiveTick(t){
   state.ticks.push({quote:Number(quote),epoch:t.epoch||Math.floor(Date.now()/1000)});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
   state.lastTickAt=Date.now();
-  state.tickSeq++;
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
-  botOnTick(digit);
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
   $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream();renderEngine();
 }
@@ -438,227 +435,14 @@ function renderOUControls(){
   });
   document.querySelectorAll(".ou-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.side===state.selectedSide));
 }
-
-function ouBotEntryFromEngine(){
-  const e=overUnderEvidence(state.digits,state.selectedDigit,state.selectedSide);
-  if(!(e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL")||e.probabilityConflict)return null;
-  return overUnderEntry(state.digits,state.selectedDigit,state.selectedSide);
-}
-function botNum(id,fallback=0){
-  const v=Number($(id)?.value);
-  return Number.isFinite(v)?v:fallback;
-}
-function botConfigFromInputs(){
-  state.ouBot.initialStake=Math.max(0,botNum("botStake",1));
-  state.ouBot.martingale=Math.max(1,botNum("botMartingale",2));
-  state.ouBot.takeProfit=Math.max(0,botNum("botTakeProfit",5));
-  state.ouBot.stopLoss=Math.max(0,botNum("botStopLoss",3));
-  state.ouBot.recoveryMarket=$( "recoveryMarket")?.value.trim()||"";
-  state.ouBot.recoveryDigit=$( "recoveryDigit")?.value.trim();
-  state.ouBot.recoverySide=$( "recoverySide")?.value||"UNDER";
-  state.ouBot.recoveryStake=$( "recoveryStake")?.value.trim()||"";
-}
-function botEntrySnapshot(){
-  const e=ouBotEntryFromEngine();
-  if(!e||!Number.isInteger(Number(e.main)))return null;
-  return {entryDigit:Number(e.main),market:state.symbol,selectedDigit:state.selectedDigit,selectedSide:state.selectedSide};
-}
-function botDirectionWin(digit,side,barrier){
-  return side==="OVER"?digit>barrier:digit<barrier;
-}
-function botResetStake(){
-  state.ouBot.stake=state.ouBot.initialStake;
-}
-function botStop(status){
-  state.ouBot.running=false;
-  state.ouBot.pending=false;
-  state.ouBot.status=status;
-  state.ouBot.cycleRun=0;
-  renderBot();
-}
-function botStartNormal(){
-  botConfigFromInputs();
-  if(state.engine!=="overunder"){alert("Switch to OVER/UNDER before running the bot.");return}
-  const snap=botEntrySnapshot();
-  if(!snap){alert("No valid Entry Digit is available. The Over/Under Entry Engine must show a valid entry first.");return}
-  if(state.ouBot.initialStake<=0){alert("Enter a stake greater than 0.");return}
-  state.ouBot.enabled=true;
-  state.ouBot.running=false;
-  state.ouBot.pending=false;
-  state.ouBot.mode="NORMAL";
-  state.ouBot.status="WAITING FOR ENTRY";
-  state.ouBot.cycleRun=0;
-  state.ouBot.entryDigit=snap.entryDigit;
-  state.ouBot.market=snap.market;
-  state.ouBot.selectedDigit=snap.selectedDigit;
-  state.ouBot.selectedSide=snap.selectedSide;
-  state.ouBot.stake=state.ouBot.initialStake;
-  renderBot();
-}
-function botStartRecovery(){
-  botConfigFromInputs();
-  if(!state.ouBot.enabled){alert("Run the normal bot first, then enable Recovery Mode.");return}
-  const digit=Number(state.ouBot.recoveryDigit);
-  if(!Number.isInteger(digit)||digit<0||digit>9){alert("Enter a recovery digit from 0 to 9.");return}
-  if(!state.ouBot.recoveryMarket){alert("Enter the recovery market.");return}
-  state.ouBot.mode="RECOVERY";
-  state.ouBot.running=false;
-  state.ouBot.pending=false;
-  state.ouBot.status="WAITING FOR RECOVERY";
-  state.ouBot.entryDigit=digit;
-  state.ouBot.market=state.ouBot.recoveryMarket;
-  state.ouBot.selectedSide=state.ouBot.recoverySide;
-  state.ouBot.selectedDigit=state.selectedDigit;
-  state.ouBot.stake=state.ouBot.recoveryStake!==""?Math.max(0,Number(state.ouBot.recoveryStake)):state.ouBot.initialStake;
-  renderBot();
-}
-function botStopAll(){
-  state.ouBot.enabled=false;
-  state.ouBot.running=false;
-  state.ouBot.pending=false;
-  state.ouBot.status="OFF";
-  state.ouBot.mode="NORMAL";
-  renderBot();
-}
-function botRunRecovery(){
-  if(!state.ouBot.enabled){alert("Start the bot first.");return}
-  if(!state.ouBot.recoveryMarket||!Number.isInteger(Number(state.ouBot.recoveryDigit))){alert("Enter the recovery market and digit first.");return}
-  state.ouBot.mode="RECOVERY";
-  state.ouBot.running=false;
-  state.ouBot.pending=false;
-  state.ouBot.status="WAITING FOR RECOVERY";
-  state.ouBot.entryDigit=Number(state.ouBot.recoveryDigit);
-  state.ouBot.market=state.ouBot.recoveryMarket;
-  state.ouBot.selectedSide=state.ouBot.recoverySide;
-  state.ouBot.stake=state.ouBot.recoveryStake!==""?Math.max(0,Number(state.ouBot.recoveryStake)):state.ouBot.initialStake;
-  renderBot();
-}
-function botBackToNormal(){
-  if(!state.ouBot.enabled)return;
-  const snap=botEntrySnapshot();
-  if(!snap){botStop("NO VALID ENTRY");return}
-  state.ouBot.mode="NORMAL";state.ouBot.running=false;state.ouBot.pending=false;state.ouBot.status="WAITING FOR ENTRY";
-  state.ouBot.entryDigit=snap.entryDigit;state.ouBot.market=snap.market;state.ouBot.selectedDigit=snap.selectedDigit;state.ouBot.selectedSide=snap.selectedSide;
-  renderBot();
-}
-function botOnTick(digit){
-  const b=state.ouBot;
-  if(!b.enabled||!digit)return;
-  if(b.mode==="NORMAL"){
-    const snap=botEntrySnapshot();
-    if(!snap){if(b.running)botStop("ENTRY INVALIDATED");return}
-    if(b.market!==state.symbol||b.selectedDigit!==state.selectedDigit||b.selectedSide!==state.selectedSide||b.entryDigit!==snap.entryDigit){
-      if(b.running)botStop("SETUP CHANGED");
-      else {b.entryDigit=snap.entryDigit;b.market=state.symbol;b.selectedDigit=state.selectedDigit;b.selectedSide=state.selectedSide;b.status="WAITING FOR ENTRY"}
-      renderBot();
-      return;
-    }
-  }
-  if(!b.running){
-    if(digit===Number(b.entryDigit)){
-      b.running=true;b.pending=true;b.cycleRun=1;b.status=b.mode==="RECOVERY"?"RECOVERY RUN 1":"RUN 1";renderBot();
-    }
-    return;
-  }
-  if(!b.pending)return;
-  const barrier=Number(b.selectedDigit);
-  const side=b.selectedSide;
-  const win=botDirectionWin(digit,side,barrier);
-  const stake=Math.max(0,Number(b.stake)||0);
-  const pnl=win?stake:-stake;
-  b.netPnl+=pnl;
-  if(win){b.winCount++;b.lastResult="WIN";b.stake=b.initialStake}
-  else {b.lossCount++;b.lastResult="LOSS";b.stake=Math.max(0,stake*b.martingale)}
-  if(b.netPnl>=b.takeProfit){botStop("TAKE PROFIT");return}
-  if(b.netPnl<=-b.stopLoss){botStop("STOP LOSS");return}
-  if(b.cycleRun<2){
-    b.cycleRun++;
-    b.pending=true;
-    b.status=b.mode==="RECOVERY"?"RECOVERY RUN 2":"RUN 2";
-  }else{
-    b.running=false;b.pending=false;b.cycleRun=0;
-    b.status=b.mode==="RECOVERY"?"RECOVERY CYCLE COMPLETE — WAITING":"2-RUN CYCLE COMPLETE — WAITING";
-    if(b.mode==="NORMAL")b.stake=b.lastResult==="WIN"?b.initialStake:b.stake;
-  }
-  renderBot();
-}
-function renderBot(){
-  const root=$( "ouBotRoot");if(!root)return;
-  const b=state.ouBot;
-  const entry=ouBotEntryFromEngine();
-  const normalEntry=entry?.main??"—";
-  const enabled=b.enabled;
-  root.innerHTML=`
-  <section class="bot-card">
-    <div class="bot-head"><div><div class="panel-kicker">OVER/UNDER PAPER BOT</div><h2>BOT CONTROL</h2></div><span class="bot-status ${b.status.includes("TAKE")?"good":b.status.includes("STOP")?"bad":enabled?"on":""}">${esc(b.status)}</span></div>
-    <div class="bot-grid">
-      <label>STAKE<input id="botStake" type="number" min="0" step="0.01" value="${esc(b.initialStake)}"></label>
-      <label>MARTINGALE<input id="botMartingale" type="number" min="1" step="0.1" value="${esc(b.martingale)}"></label>
-      <label>TAKE PROFIT<input id="botTakeProfit" type="number" min="0" step="0.01" value="${esc(b.takeProfit)}"></label>
-      <label>STOP LOSS<input id="botStopLoss" type="number" min="0" step="0.01" value="${esc(b.stopLoss)}"></label>
-    </div>
-    <div class="bot-info">
-      <div><span>MARKET</span><strong>${esc(b.market||state.symbol)}</strong></div>
-      <div><span>ANALYSIS</span><strong>${esc((b.selectedSide||state.selectedSide)+" "+(b.selectedDigit??state.selectedDigit))}</strong></div>
-      <div><span>ENTRY DIGIT</span><strong>${esc(b.entryDigit??normalEntry)}</strong></div>
-      <div><span>RUN</span><strong>${b.cycleRun?b.cycleRun+"/2":"—"}</strong></div>
-      <div><span>STAKE</span><strong>${Number(b.stake||0).toFixed(2)}</strong></div>
-      <div><span>NET P/L</span><strong>${Number(b.netPnl||0).toFixed(2)}</strong></div>
-      <div><span>WIN / LOSS</span><strong>${b.winCount} / ${b.lossCount}</strong></div>
-      <div><span>LAST RESULT</span><strong>${esc(b.lastResult)}</strong></div>
-    </div>
-    <div class="bot-actions">
-      <button id="botRunBtn" type="button">${enabled?"RUN NORMAL BOT":"RUN BOT"}</button>
-      <button id="botStopBtn" class="secondary" type="button">STOP BOT</button>
-    </div>
-    <div class="recovery-box">
-      <div class="recovery-head"><div><b>RECOVERY MODE</b><span>User-controlled recovery instructions</span></div><label class="switch"><input id="recoveryEnabled" type="checkbox" ${b.mode==="RECOVERY"||$( "recoveryEnabled")?.checked?"checked":""}><span></span></label></div>
-      <div class="bot-grid recovery-fields">
-        <label>RECOVERY MARKET<input id="recoveryMarket" type="text" value="${esc(b.recoveryMarket)}" placeholder="e.g. R_100"></label>
-        <label>RECOVERY DIGIT<input id="recoveryDigit" type="number" min="0" max="9" step="1" value="${esc(b.recoveryDigit)}" placeholder="0–9"></label>
-        <label>RECOVERY DIRECTION<select id="recoverySide"><option value="UNDER" ${b.recoverySide==="UNDER"?"selected":""}>UNDER</option><option value="OVER" ${b.recoverySide==="OVER"?"selected":""}>OVER</option></select></label>
-        <label>RECOVERY STAKE<input id="recoveryStake" type="number" min="0" step="0.01" value="${esc(b.recoveryStake)}" placeholder="Normal stake"></label>
-      </div>
-      <div class="recovery-note">Recovery never starts automatically. You enter the market/digit/direction, switch Recovery Mode on, then press <b>RUN RECOVERY</b>.</div>
-      <div class="bot-actions"><button id="botRecoveryBtn" type="button">RUN RECOVERY</button><button id="botNormalBtn" class="secondary" type="button">RETURN TO NORMAL</button></div>
-    </div>
-    <div class="bot-note">Simulation only: each run is resolved from the next live tick. A win adds the current stake and a loss subtracts it; equality is treated as a loss. No real-money contract is placed.</div>
-  </section>`;
-  const bind=(id,fn)=>{const el=$(id);if(el)el.addEventListener("click",fn)};
-  bind("botRunBtn",()=>botStartNormal());
-  bind("botStopBtn",()=>botStopAll());
-  bind("botRecoveryBtn",()=>{botConfigFromInputs();botRunRecovery()});
-  bind("botNormalBtn",()=>botBackToNormal());
-  const rec=$( "recoveryEnabled");
-  if(rec)rec.addEventListener("change",()=>{botConfigFromInputs();if(!rec.checked&&b.mode==="RECOVERY"){botBackToNormal()}});
-  ["botStake","botMartingale","botTakeProfit","botStopLoss","recoveryMarket","recoveryDigit","recoveryStake"].forEach(id=>{const el=$(id);if(el)el.addEventListener("change",botConfigFromInputs)});
-  const rs=$( "recoverySide");if(rs)rs.addEventListener("change",botConfigFromInputs);
-}
-
-
-function ouBotEntryFromEngine(){const e=overUnderEvidence(state.digits,state.selectedDigit,state.selectedSide);if(!(e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL")||e.probabilityConflict)return null;return overUnderEntry(state.digits,state.selectedDigit,state.selectedSide)}
-function botConfigFromInputs(){const b=state.ouBot;b.initialStake=Math.max(0,Number($( "botStake")?.value)||1);b.martingale=Math.max(1,Number($( "botMartingale")?.value)||2);b.takeProfit=Math.max(0,Number($( "botTakeProfit")?.value)||5);b.stopLoss=Math.max(0,Number($( "botStopLoss")?.value)||3);b.recoveryMarket=$( "recoveryMarket")?.value.trim()||"";b.recoveryDigit=$( "recoveryDigit")?.value.trim()||"";b.recoverySide=$( "recoverySide")?.value||"UNDER";b.recoveryStake=$( "recoveryStake")?.value.trim()||""}
-function botStartNormal(){botConfigFromInputs();if(state.engine!=="overunder"){alert("Switch to OVER/UNDER before running the bot.");return}const e=ouBotEntryFromEngine();if(!e||!Number.isInteger(Number(e.main))){alert("No valid Entry Digit is available.");return}state.ouBot.enabled=true;state.ouBot.mode="NORMAL";state.ouBot.running=false;state.ouBot.pending=false;state.ouBot.status="WAITING FOR ENTRY";state.ouBot.entryDigit=Number(e.main);state.ouBot.market=state.symbol;state.ouBot.selectedDigit=state.selectedDigit;state.ouBot.selectedSide=state.selectedSide;state.ouBot.stake=state.ouBot.initialStake;renderBot()}
-function botStopAll(){state.ouBot.enabled=false;state.ouBot.running=false;state.ouBot.pending=false;state.ouBot.status="OFF";state.ouBot.mode="NORMAL";renderBot()}
-function botRunRecovery(){botConfigFromInputs();const b=state.ouBot,d=Number(b.recoveryDigit);if(!b.enabled){alert("Start the bot first.");return}if(!b.recoveryMarket||!Number.isInteger(d)||d<0||d>9){alert("Enter the recovery market and a digit from 0 to 9.");return}b.mode="RECOVERY";b.running=false;b.pending=false;b.status="WAITING FOR RECOVERY";b.entryDigit=d;b.market=b.recoveryMarket;b.selectedSide=b.recoverySide;b.stake=b.recoveryStake!==""?Math.max(0,Number(b.recoveryStake)):b.initialStake;renderBot()}
-function botBackToNormal(){const b=state.ouBot;if(!b.enabled)return;const e=ouBotEntryFromEngine();if(!e){botStopAll();return}b.mode="NORMAL";b.running=false;b.pending=false;b.status="WAITING FOR ENTRY";b.entryDigit=Number(e.main);b.market=state.symbol;b.selectedDigit=state.selectedDigit;b.selectedSide=state.selectedSide;b.stake=b.initialStake;renderBot()}
-function botOnTick(digit){const b=state.ouBot;if(!b.enabled)return;if(b.mode==="NORMAL"){const e=ouBotEntryFromEngine();if(!e){if(b.running){b.running=false;b.pending=false;b.status="ENTRY INVALIDATED";renderBot()}return}if(b.market!==state.symbol||b.selectedDigit!==state.selectedDigit||b.selectedSide!==state.selectedSide||b.entryDigit!==Number(e.main)){if(b.running){b.running=false;b.pending=false;b.status="SETUP CHANGED"}b.entryDigit=Number(e.main);b.market=state.symbol;b.selectedDigit=state.selectedDigit;b.selectedSide=state.selectedSide;if(!b.running)b.status="WAITING FOR ENTRY";renderBot();return}}
-if(!b.running){if(digit===Number(b.entryDigit)){b.running=true;b.pending=true;b.cycleRun=1;b.status=b.mode==="RECOVERY"?"RECOVERY RUN 1":"RUN 1";renderBot()}return}
-if(!b.pending)return;
-const win=b.selectedSide==="OVER"?digit>b.selectedDigit:digit<b.selectedDigit;
-const stake=Math.max(0,Number(b.stake)||0);b.netPnl+=win?stake:-stake;b.lastResult=win?"WIN":"LOSS";if(win){b.winCount++;b.stake=b.initialStake}else{b.lossCount++;b.stake=stake*b.martingale}
-if(b.netPnl>=b.takeProfit){b.running=false;b.pending=false;b.status="TAKE PROFIT";renderBot();return}
-if(b.netPnl<=-b.stopLoss){b.running=false;b.pending=false;b.status="STOP LOSS";renderBot();return}
-if(b.cycleRun<2){b.cycleRun++;b.status=b.mode==="RECOVERY"?"RECOVERY RUN 2":"RUN 2"}else{b.running=false;b.pending=false;b.cycleRun=0;b.status=b.mode==="RECOVERY"?"RECOVERY CYCLE COMPLETE — WAITING":"2-RUN CYCLE COMPLETE — WAITING";}renderBot()}
-function renderBot(){const root=$( "ouBotRoot");if(!root)return;const b=state.ouBot;root.innerHTML=`<section class="bot-card"><div class="bot-head"><div><div class="panel-kicker">OVER/UNDER PAPER BOT</div><h2>BOT CONTROL</h2></div><span class="bot-status">${esc(b.status)}</span></div><div class="bot-grid"><label>STAKE<input id="botStake" type="number" min="0" step=".01" value="${b.initialStake}"></label><label>MARTINGALE<input id="botMartingale" type="number" min="1" step=".1" value="${b.martingale}"></label><label>TAKE PROFIT<input id="botTakeProfit" type="number" min="0" step=".01" value="${b.takeProfit}"></label><label>STOP LOSS<input id="botStopLoss" type="number" min="0" step=".01" value="${b.stopLoss}"></label></div><div class="bot-info"><div><span>MARKET</span><strong>${esc(b.market||state.symbol)}</strong></div><div><span>ANALYSIS</span><strong>${esc((b.selectedSide||state.selectedSide)+" "+(b.selectedDigit??state.selectedDigit))}</strong></div><div><span>ENTRY DIGIT</span><strong>${b.entryDigit??"—"}</strong></div><div><span>RUN</span><strong>${b.cycleRun?b.cycleRun+"/2":"—"}</strong></div><div><span>STAKE</span><strong>${Number(b.stake||0).toFixed(2)}</strong></div><div><span>NET P/L</span><strong>${Number(b.netPnl||0).toFixed(2)}</strong></div><div><span>WIN / LOSS</span><strong>${b.winCount+" / "+b.lossCount}</strong></div><div><span>LAST RESULT</span><strong>${esc(b.lastResult)}</strong></div></div><div class="bot-actions"><button id="botRunBtn" type="button">RUN BOT</button><button id="botStopBtn" class="secondary" type="button">STOP BOT</button></div><div class="recovery-box"><div class="recovery-head"><div><b>RECOVERY MODE</b><span>Manual recovery instructions — never starts automatically</span></div><label class="switch"><input id="recoveryEnabled" type="checkbox" ${b.mode==="RECOVERY"?"checked":""}><span></span></label></div><div class="bot-grid recovery-fields"><label>RECOVERY MARKET<input id="recoveryMarket" type="text" value="${esc(b.recoveryMarket)}" placeholder="e.g. R_100"></label><label>RECOVERY DIGIT<input id="recoveryDigit" type="number" min="0" max="9" step="1" value="${esc(b.recoveryDigit)}" placeholder="0–9"></label><label>RECOVERY DIRECTION<select id="recoverySide"><option value="UNDER" ${b.recoverySide==="UNDER"?"selected":""}>UNDER</option><option value="OVER" ${b.recoverySide==="OVER"?"selected":""}>OVER</option></select></label><label>RECOVERY STAKE<input id="recoveryStake" type="number" min="0" step=".01" value="${esc(b.recoveryStake)}" placeholder="Normal stake"></label></div><div class="recovery-note">Enter the recovery market, digit and direction, switch recovery on, then press RUN RECOVERY.</div><div class="bot-actions"><button id="botRecoveryBtn" type="button">RUN RECOVERY</button><button id="botNormalBtn" class="secondary" type="button">RETURN TO NORMAL</button></div></div><div class="bot-note">PAPER/SIMULATION ONLY. A run is resolved from the next live tick. Win = +stake, loss = −stake; equality counts as loss. No real-money contract is placed.</div></section>`;const bind=(id,fn)=>$(id)?.addEventListener("click",fn);bind("botRunBtn",botStartNormal);bind("botStopBtn",botStopAll);bind("botRecoveryBtn",()=>{botConfigFromInputs();if($( "recoveryEnabled")?.checked)botRunRecovery();else alert("Switch Recovery Mode ON first.")});bind("botNormalBtn",botBackToNormal);$( "recoveryEnabled")?.addEventListener("change",e=>{if(!e.target.checked&&b.mode==="RECOVERY")botBackToNormal()});["botStake","botMartingale","botTakeProfit","botStopLoss","recoveryMarket","recoveryDigit","recoveryStake"].forEach(id=>$(id)?.addEventListener("change",botConfigFromInputs));$( "recoverySide")?.addEventListener("change",botConfigFromInputs)}
-\nfunction renderEngine(){
+function renderEngine(){
   const d=state.digits, n=d.length, c=counts(d), last=d.at(-1);
   const root=$("engineRoot");
   const ou=$("overUnderControls"),parity=$("evenOddControls");
   if(ou)ou.style.display=state.engine==="overunder"?"":"none";
   if(parity)parity.style.display=state.engine==="evenodd"?"":"none";
   if(n<30){root.innerHTML=panel("INSUFFICIENT DATA","Collecting more validated market data before analysis.",null,["At least 30 recent digits are required","Live data stream is active when ticks are arriving"],n);return}
-  if(state.engine==="overunder"){renderOverUnder(root,d,c,last,n); const bot=$( "ouBotRoot"); if(bot)renderBot();}
+  if(state.engine==="overunder")renderOverUnder(root,d,c,last,n);
   if(state.engine==="evenodd")renderEvenOdd(root,d,last,n);
   if(state.engine==="risefall")renderRiseFall(root,d,last,n);
 }
@@ -948,8 +732,6 @@ document.querySelectorAll(".parity-side").forEach(btn=>btn.addEventListener("cli
 document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);renderOUControls();renderEngine()}));
 document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;renderOUControls();renderEngine()}));
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.engine=btn.dataset.engine;renderEngine()}));
-const apiConnectBtn=$( "apiConnectBtn");
-if(apiConnectBtn)apiConnectBtn.addEventListener("click",()=>{const token=$( "apiToken")?.value.trim();if(!token){$( "apiStatus").textContent="Enter a token to connect.";return}state.accountToken=token;request({authorize:token,req_id:nextReq()});$( "apiStatus").textContent="Authorizing account…";});
 marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true)}});
 let touchX=0,touchY=0;
 document.querySelector(".engine-nav").addEventListener("touchstart",e=>{touchX=e.changedTouches[0].clientX;touchY=e.changedTouches[0].clientY},{passive:true});
