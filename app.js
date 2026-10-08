@@ -502,216 +502,116 @@ function parityStats(d,selectedSide){
   else if(evidence<.38||recent<.44)signal="AVOID";
   return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,probability,momentumScore,trendScore,transition,historical,recency,context,evidence,signal,target,other};
 }
-function parityPatternStats(d,selectedSide){
+function parityEntryCandidates(d,selectedSide){
   const key=x=>x%2===0?"E":"O";
   const target=selectedSide==="EVEN"?"E":"O";
-  const targetLabel=selectedSide;
-  const recent=d.slice(-400).map(key);
-  const patterns=[];
+  const recent=d.slice(-500).map(key);
+  const baseline=recent.length?recent.filter(x=>x===target).length/recent.length:.5;
+  const candidates=[];
 
-  // A pattern is an ENTRY TRIGGER only when a hit is followed by the
-  // selected Final Signal parity more often than the neutral 50% baseline.
   for(let len=1;len<=3;len++){
     const seen=new Map();
     for(let i=0;i+len+2<recent.length;i++){
-      const sequence=recent.slice(i,i+len);
-      const pattern=sequence.join(" → ");
+      const pattern=recent.slice(i,i+len).join(" → ");
       let p=seen.get(pattern);
-      if(!p){p={pattern,len,occurrences:0,r1:0,r2:0,r3:0,recovery:0,recentTotal:0,recentR1:0};seen.set(pattern,p)}
-      p.occurrences++;
+      if(!p){p={pattern,len,total:0,r1:0,r2:0,r3:0,recentTotal:0,recentR1:0};seen.set(pattern,p)}
+      p.total++;
       const a=recent[i+len]===target;
       const b=recent[i+len+1]===target;
       const cc=recent[i+len+2]===target;
       if(a)p.r1++;
       if(a&&b)p.r2++;
       if(a&&b&&cc)p.r3++;
-      if(!a&&b&&cc)p.recovery++;
-      if(i>=Math.max(0,recent.length-160)){
-        p.recentTotal++;
-        if(a)p.recentR1++;
-      }
+      if(i>=recent.length-160){p.recentTotal++;if(a)p.recentR1++}
     }
     for(const p of seen.values()){
-      if(p.occurrences>=8){
-        p.r1/=p.occurrences;p.r2/=p.occurrences;p.r3/=p.occurrences;p.recovery/=p.occurrences;
-        p.recentRate=p.recentTotal?p.recentR1/p.recentTotal:p.r1;
-        patterns.push(p);
-      }
+      if(p.total<8)continue;
+      p.r1/=p.total;p.r2/=p.total;p.r3/=p.total;
+      p.recentRate=p.recentTotal?p.recentR1/p.recentTotal:p.r1;
+      const lift1=p.r1-baseline,lift2=p.r2-baseline*baseline,lift3=p.r3-Math.pow(baseline,3);
+      const recentLift=p.recentRate-baseline;
+      p.score=100*(Math.max(0,lift1)*.38+Math.max(0,lift2)*.28+Math.max(0,lift3)*.10+Math.max(0,recentLift)*.16+Math.min(1,p.total/60)*.08);
+      p.strong=(p.total>=10&&(lift1>=.06||lift2>=.08)&&recentLift>=.02&&p.score>=6);
+      candidates.push(p);
     }
   }
-  if(!patterns.length)return null;
+  return {target,baseline,candidates};
+}
 
-  const score=p=>{
-    const edge1=Math.max(-.5,Math.min(.5,p.r1-.5));
-    const edge2=Math.max(-.5,Math.min(.5,p.r2-.5));
-    const edge3=Math.max(-.5,Math.min(.5,p.r3-.5));
-    const recentEdge=Math.max(-.5,Math.min(.5,p.recentRate-.5));
-    const persistence=p.r1*.45+p.r2*.30+p.r3*.10+p.recentRate*.15;
-    return 100*(.45*(edge1+.5)+.25*(edge2+.5)+.10*(edge3+.5)+.20*(recentEdge+.5))*.70
-      +100*persistence*.30;
-  };
-  patterns.sort((a,b)=>score(b)-score(a)||b.occurrences-a.occurrences);
-  const best=patterns[0],second=patterns[1];
-  const s=score(best),gap=second?s-score(second):5;
+function parityPatternStats(d,selectedSide){
+  const x=parityEntryCandidates(d,selectedSide);
+  const valid=x.candidates.filter(p=>p.strong);
+  valid.sort((a,b)=>b.score-a.score||b.total-a.total);
+  const best=valid[0],second=valid[1];
+  if(!best)return null;
+  if(second&&best.score-second.score<.8)return null;
 
-  const edge1=best.r1-.5,edge2=best.r2-.5,edge3=best.r3-.5,recentEdge=best.recentRate-.5;
-  const passesOne=edge1>=.05;
-  const passesTwo=edge2>=.05;
-  const meaningfulDirection=passesOne||passesTwo;
-  const strongEvidence=
-    best.occurrences>=10&&
-    meaningfulDirection&&
-    recentEdge>=.02&&
-    s>=58&&
-    gap>=1.0;
-
-  if(!strongEvidence)return null;
-
-  let confidence=Math.round(
-    66+Math.max(0,edge1)*55+Math.max(0,edge2)*45+Math.max(0,edge3)*20+
-    Math.max(0,recentEdge)*30+Math.min(8,best.occurrences/20)+Math.min(6,gap)
-  );
-  if(best.r3>=.50)confidence+=4;
-  else if(best.r3<.38)confidence-=2;
-  confidence=Math.max(72,Math.min(94,confidence));
-
+  let confidence=Math.round(74+Math.min(10,best.score)+Math.min(6,best.total/20));
+  if(best.r3>=Math.pow(x.baseline,3)+.05)confidence+=4;
+  confidence=Math.max(74,Math.min(94,confidence));
   let reason;
-  if(best.r1>=.56&&best.r2>=.55&&best.r3>=.50){
-    reason="Strong trigger pattern: when hit, it shows consistent 1–3 tick movement toward "+targetLabel+".";
-  }else if(best.r1>=.55&&best.r2>=.55){
-    reason="Strong trigger pattern: hits are followed by favorable 1–2 tick movement toward "+targetLabel+".";
-  }else if(best.r1>=.55){
-    reason="Strong immediate trigger reaction toward "+targetLabel+"; longer continuation is less consistent.";
-  }else{
-    reason="Strong 2-tick trigger continuation toward "+targetLabel+" despite a weaker first tick.";
-  }
+  if(best.r1>=x.baseline+.10&&best.r2>=x.baseline*x.baseline+.08)
+    reason="Strong pattern trigger: after this pattern is hit, "+selectedSide+" follows with a clear 1–2 tick lift over its current baseline.";
+  else if(best.r1>=x.baseline+.06)
+    reason="Strong pattern trigger: its next parity favors "+selectedSide+" materially above the current market baseline.";
+  else
+    reason="Strong pattern trigger: its 2-tick continuation lifts the probability of "+selectedSide+" above baseline.";
 
-  return {
-    type:"PATTERN",
-    status:"STRONG ENTRY",
-    main:best.pattern+" → "+targetLabel,
-    confidence:confidence+"%",
-    score:s,
-    reason,
-    evidence:best.occurrences+" pattern observations • "+
-      (best.r3>=.50?"3-tick confirmation supported.":"3-tick confirmation not required.")
-  };
+  return {type:"PATTERN",status:"STRONG ENTRY",main:best.pattern+" → "+selectedSide,confidence:confidence+"%",score:best.score,reason,evidence:best.total+" pattern observations • baseline "+Math.round(x.baseline*100)+"% • "+(best.r3>=Math.pow(x.baseline,3)+.05?"3-tick confirmation supported.":"3-tick confirmation not required.")};
 }
 
 function parityReactionEntry(d,selectedSide){
   const key=x=>x%2===0?"E":"O";
   const target=selectedSide==="EVEN"?"E":"O";
-  const targetLabel=selectedSide;
   const recent=d.slice(-500).map(key);
+  const baseline=recent.length?recent.filter(x=>x===target).length/recent.length:.5;
   const candidates=[];
-
   for(const trigger of ["E","O"]){
     let total=0,r1=0,r2=0,r3=0,recentTotal=0,recentR1=0;
-    for(let i=0;i<recent.length-3;i++){
+    for(let i=0;i+3<recent.length;i++){
       if(recent[i]!==trigger)continue;
       total++;
       const a=recent[i+1]===target,b=recent[i+2]===target,cc=recent[i+3]===target;
       if(a)r1++;if(a&&b)r2++;if(a&&b&&cc)r3++;
-      if(i>=Math.max(0,recent.length-160)){recentTotal++;if(a)recentR1++;}
+      if(i>=recent.length-160){recentTotal++;if(a)recentR1++}
     }
-    if(total<8)continue;
-
-    const rate1=r1/total,rate2=r2/total,rate3=r3/total;
-    const recentRate=recentTotal?recentR1/recentTotal:rate1;
-    const edge1=rate1-.5,edge2=rate2-.5,edge3=rate3-.5,recentEdge=recentRate-.5;
-    const score=100*(
-      Math.max(0,edge1)*.34+
-      Math.max(0,edge2)*.26+
-      Math.max(0,edge3)*.10+
-      Math.max(0,recentEdge)*.20+
-      Math.min(1,total/50)*.10
-    )*2+50;
-    const stability=Math.max(0,1-Math.abs(rate1-rate2)*.7-Math.abs(rate2-rate3)*.35);
-    candidates.push({trigger,total,rate1,rate2,rate3,recentRate,edge1,edge2,edge3,recentEdge,score,stability});
+    if(total<10)continue;
+    const rate1=r1/total,rate2=r2/total,rate3=r3/total,recentRate=recentTotal?recentR1/recentTotal:rate1;
+    const lift1=rate1-baseline,lift2=rate2-baseline*baseline,lift3=rate3-Math.pow(baseline,3),recentLift=recentRate-baseline;
+    const stability=Math.max(0,1-Math.abs(rate1-rate2)*.6-Math.abs(rate2-rate3)*.25);
+    const score=100*(Math.max(0,lift1)*.40+Math.max(0,lift2)*.28+Math.max(0,lift3)*.10+Math.max(0,recentLift)*.14+stability*.08);
+    candidates.push({trigger,total,rate1,rate2,rate3,recentRate,lift1,lift2,lift3,recentLift,stability,score});
   }
-
   candidates.sort((a,b)=>b.score-a.score||b.total-a.total);
   const best=candidates[0],second=candidates[1];
   if(!best)return null;
-
-  // Strong Entry: 1- or 2-tick directional evidence may qualify.
-  // 3-tick confirmation adds strength but never acts as a hard gate.
-  const passesOne=best.edge1>=.05;
-  const passesTwo=best.edge2>=.05;
-  const strongEvidence=
-    best.total>=10&&
-    (passesOne||passesTwo)&&
-    best.recentEdge>=.02&&
-    best.stability>=.45&&
-    best.score>=58&&
-    (!second||best.score-second.score>=1.0);
-
-  if(!strongEvidence)return null;
-
-  let confidence=Math.round(
-    68+Math.max(0,best.edge1)*55+Math.max(0,best.edge2)*45+
-    Math.max(0,best.edge3)*20+Math.max(0,best.recentEdge)*30+
-    best.stability*6+Math.min(6,best.total/25)
-  );
-  if(best.rate3>=.50)confidence+=4;
-  else if(best.rate3<.38)confidence-=2;
-  confidence=Math.max(72,Math.min(94,confidence));
-
+  const strong=best.total>=10&&(best.lift1>=.06||best.lift2>=.08)&&best.recentLift>=.02&&best.stability>=.45&&best.score>=6&&(!second||best.score-second.score>=.8);
+  if(!strong)return null;
+  let confidence=Math.round(74+Math.min(10,best.score)+Math.min(6,best.total/20)+best.stability*4);
+  if(best.lift3>=.05)confidence+=4;
+  confidence=Math.max(74,Math.min(94,confidence));
   const triggerLabel=best.trigger==="E"?"EVEN":"ODD";
-  let reason;
-  if(best.rate1>=.56&&best.rate2>=.55&&best.rate3>=.50){
-    reason="Strong "+triggerLabel+" trigger: when hit, the next parity consistently moves toward "+targetLabel+" across 1–3 ticks.";
-  }else if(best.rate1>=.55&&best.rate2>=.55){
-    reason="Strong "+triggerLabel+" trigger: hits favor "+targetLabel+" on both the immediate and 2-tick reaction.";
-  }else if(best.rate1>=.55){
-    reason="Strong "+triggerLabel+" trigger: the next parity strongly favors "+targetLabel+"; longer continuation is mixed.";
-  }else{
-    reason="Strong "+triggerLabel+" trigger: the 2-tick reaction favors "+targetLabel+" even though the first tick is less consistent.";
-  }
-
-  return {
-    type:"REACTION",
-    status:"STRONG ENTRY",
-    trigger:best.trigger,
-    main:"ENTER ON "+triggerLabel+" → "+targetLabel,
-    confidence:confidence+"%",
-    score:best.score,
-    reason,
-    evidence:best.total+" trigger observations • "+
-      (best.r3>=.50?"3-tick confirmation supported.":"3-tick confirmation not required.")
-  };
+  const reason=best.rate1>=baseline+.10&&best.rate2>=baseline*baseline+.08
+    ?"Strong "+triggerLabel+" trigger: its hit materially increases the chance of "+selectedSide+" over 1–2 ticks."
+    :best.rate1>=baseline+.06
+    ?"Strong "+triggerLabel+" trigger: the next parity favors "+selectedSide+" above the current baseline."
+    :"Strong "+triggerLabel+" trigger: 2-tick continuation lifts "+selectedSide+" above baseline.";
+  return {type:"REACTION",status:"STRONG ENTRY",trigger:best.trigger,main:"ENTER ON "+triggerLabel+" → "+selectedSide,confidence:confidence+"%",score:best.score,reason,evidence:best.total+" trigger observations • baseline "+Math.round(baseline*100)+"% • "+(best.lift3>=.05?"3-tick confirmation supported.":"3-tick confirmation not required.")};
 }
 
 function selectParityEntry(d,selectedSide){
-  const pattern=parityPatternStats(d,selectedSide);
-  const reaction=parityReactionEntry(d,selectedSide);
+  const pattern=parityPatternStats(d,selectedSide),reaction=parityReactionEntry(d,selectedSide);
   if(!pattern&&!reaction)return null;
   if(!pattern)return reaction;
   if(!reaction)return pattern;
-
-  const winner=reaction.score>=pattern.score?reaction:pattern;
-  const agreement=pattern.type!==reaction.type &&
-    (reaction.trigger==="E"?"EVEN":"ODD")===selectedSide;
-  if(agreement){
-    return {...winner,
-      confidence:Math.min(94,parseInt(winner.confidence,10)+3)+"%",
-      reason:winner.reason+" Pattern and reaction evidence also agree with the selected signal."
-    };
-  }
-  return winner;
+  return reaction.score>=pattern.score?reaction:pattern;
 }
 
 function renderEvenOdd(root,d,last,n){
   const e=parityStats(d,state.selectedParity);
   const entryActive=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const entry=entryActive?selectParityEntry(d,state.selectedParity):null;
-  const entryDisplay=entry||{
-    main:entryActive?"NO STRONG ENTRY":"NO ACTIVE ENTRY",
-    confidence:"—",
-    reason:entryActive
-      ?"No trigger has strong enough evidence of moving toward the selected Final Signal parity."
-      :"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."
-  };
+  const entryDisplay=entry||{main:entryActive?"NO STRONG ENTRY":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No trigger has enough conditional lift toward the selected Final Signal.":"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."};
   const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
   const reason=e.signal==="STRONG SIGNAL"?"Multiple parity evidence layers are aligned for "+state.selectedParity+".":e.signal==="SIGNAL"?"The selected parity has sufficient multi-factor evidence, but it is not at STRONG SIGNAL level.":e.signal==="AVOID"?"The selected parity has unfavorable or conflicting evidence.":"Evidence for the selected parity is still developing.";
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
@@ -719,126 +619,10 @@ function renderEvenOdd(root,d,last,n){
     "Recent parity: "+pattern,
     "20/50/100/250/500 rates: "+e.windows.map(x=>Math.round(x.rate*100)+"%").join(" / "),
     "Probability "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentumScore*100)+" • trend "+Math.round(e.trendScore*100)+" • transitions "+Math.round(e.transition*100),
-    "Clustering "+Math.round(e.clustering*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100)+" • historical "+Math.round(e.historical*100),
+    "Clustering "+Math.round(e.clustering*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
     "Streak "+e.streak+" • evidence "+Math.round(e.evidence*100),
-    entry?"✓ STRONG ENTRY: "+entry.type+" trigger passed independent validation":entryActive?"× No strong pattern or reaction trigger passed validation":"× Entry inactive until SIGNAL or STRONG SIGNAL"
+    entry?"✓ STRONG ENTRY: trigger has measurable lift toward the Final Signal":"× No strong trigger passed conditional validation"
   ],n);
-}
-function riseFallAnalysis(d){
-  if(d.length<25)return null;
-
-  const windows=[20,50,100,250,500];
-  const stats=[];
-  for(const size of windows){
-    const a=d.slice(-Math.min(size,d.length));
-    let rise=0,fall=0,flat=0,upMove=0,downMove=0;
-    for(let i=1;i<a.length;i++){
-      const delta=a[i]-a[i-1];
-      if(delta>0){rise++;upMove+=delta}
-      else if(delta<0){fall++;downMove+=-delta}
-      else flat++;
-    }
-    const directional=rise+fall;
-    const rate=directional?rise/directional:.5;
-    const moveTotal=upMove+downMove;
-    const moveRate=moveTotal?upMove/moveTotal:.5;
-    stats.push({size,available:a.length,rise,fall,flat,rate,moveRate,upMove,downMove,directional});
-  }
-
-  const usable=stats.filter(x=>x.directional>=10);
-  if(!usable.length)return null;
-
-  // Combine direction frequency with actual price movement. Recent windows
-  // matter more, while the 500-tick window provides long-context stability.
-  const weights=[.34,.26,.19,.13,.08];
-  let directionScore=.5,moveScore=.5,totalWeight=0;
-  for(let i=0;i<stats.length;i++){
-    const s=stats[i],w=weights[i];
-    if(s.directional<10)continue;
-    directionScore+=w*(s.rate-.5);
-    moveScore+=w*(s.moveRate-.5);
-    totalWeight+=w;
-  }
-  directionScore=.5+(directionScore-.5)/Math.max(.01,totalWeight);
-  moveScore=.5+(moveScore-.5)/Math.max(.01,totalWeight);
-
-  const recent=d.slice(-60);
-  let r=0,f=0,upMagnitude=0,downMagnitude=0;
-  const dirs=[];
-  for(let i=1;i<recent.length;i++){
-    const delta=recent[i]-recent[i-1];
-    if(delta>0){r++;upMagnitude+=delta;dirs.push("R")}
-    else if(delta<0){f++;downMagnitude+=-delta;dirs.push("F")}
-  }
-  const directional=r+f;
-  const recentRate=directional?r/directional:.5;
-  const recentMove=(upMagnitude+downMagnitude)?upMagnitude/(upMagnitude+downMagnitude):.5;
-
-  // Trend persistence: how often the current direction continues instead of
-  // immediately reversing.
-  let continuation=0,reversals=0,transitions=0;
-  for(let i=1;i<dirs.length;i++){
-    if(dirs[i]===dirs[i-1])continuation++;
-    else reversals++;
-    transitions++;
-  }
-  const persistence=transitions?continuation/transitions:.5;
-
-  let streak=0;
-  const lastDir=dirs.at(-1)||null;
-  if(lastDir){
-    for(let i=dirs.length-1;i>=0&&dirs[i]===lastDir;i--)streak++;
-  }
-
-  // Momentum uses both direction and average move size, normalized against the
-  // recent movement distribution so a large price jump matters.
-  const moves=[];
-  for(let i=1;i<recent.length;i++)moves.push(Math.abs(recent[i]-recent[i-1]));
-  const avgMove=moves.length?moves.reduce((a,b)=>a+b,0)/moves.length:0;
-  const lastMove=recent.length>1?Math.abs(recent.at(-1)-recent.at(-2)):0;
-  const impulse=avgMove?Math.min(1,lastMove/(avgMove*2.5)):.5;
-  const momentum=(
-    recentRate*.45+
-    recentMove*.35+
-    (lastDir==="R"?0.5+0.5*impulse:lastDir==="F"?0.5-0.5*impulse:.5)*.20
-  );
-
-  const trendRate=.55*directionScore+.45*moveScore;
-  const trendSide=trendRate>=.5?"RISE":"FALL";
-  const trendStrength=Math.abs(trendRate-.5)*2;
-  const persistenceSide=lastDir==="R"?"RISE":lastDir==="FALL"?"FALL":trendSide;
-
-  // Independent reversal pressure: if the latest streak is long but the
-  // surrounding transitions are mostly reversals, reduce confidence.
-  const reversalPressure=transitions?reversals/transitions:.5;
-  const streakRisk=Math.min(1,Math.max(0,(streak-3)/5));
-  const aligned=persistenceSide===trendSide;
-  const evidence=Math.max(0,Math.min(1,
-    trendStrength*.34+
-    Math.abs(recentRate-.5)*2*.22+
-    Math.abs(recentMove-.5)*2*.16+
-    Math.abs(momentum-.5)*2*.12+
-    persistence*.10
-  ));
-
-  const selected=trendSide;
-  const selectedRate=selected==="RISE"?recentRate:1-recentRate;
-  const selectedMove=selected==="RISE"?recentMove:1-recentMove;
-  const selectedMomentum=selected==="RISE"?momentum:1-momentum;
-
-  let signal="WAIT";
-  if(evidence>=.64&&selectedRate>=.59&&selectedMove>=.56&&aligned&&usable.length>=3)signal="STRONG SIGNAL";
-  else if(evidence>=.50&&selectedRate>=.55&&selectedMove>=.53&&usable.length>=2)signal="SIGNAL";
-  else if(evidence<.25||selectedRate<.47||selectedMove<.47)signal="AVOID";
-
-  // A reversal-heavy regime prevents a false strong signal.
-  if(signal==="STRONG SIGNAL"&&reversalPressure>.68&&streakRisk>.45)signal="SIGNAL";
-
-  return {
-    signal,selected,stats,recentRate,recentMove,persistence,streak,lastDir,
-    momentum,trendRate,trendStrength,evidence,reversalPressure,selectedRate,
-    selectedMove,selectedMomentum,aligned,usableCount:usable.length
-  };
 }
 
 function riseFallEntry(d,analysis){
