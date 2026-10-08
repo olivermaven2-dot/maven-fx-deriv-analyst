@@ -146,7 +146,7 @@ function receiveTick(t){
   state.lastTickAt=Date.now();
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
-  $("diagTicks").textContent=state.ticks.length;updateQuality();scheduleStreamRender();scheduleEngineRender();
+  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream();renderEngine();
 }
 function updateQuality(){
   const n=state.digits.length,pill=$("qualityPill");
@@ -158,15 +158,6 @@ function updateQuality(){
 function renderStream(){
   const d=state.digits.slice(-STREAM_SIZE);$("streamInfo").textContent=d.length+" digits";
   $("digitStream").innerHTML=d.map((x,i)=>`<span class="digit ${i===d.length-1?"latest":""}">${x}</span>`).join("");
-}
-let streamRenderTimer=null, engineRenderTimer=null;
-function scheduleStreamRender(){
-  if(streamRenderTimer!==null)return;
-  streamRenderTimer=setTimeout(()=>{streamRenderTimer=null;renderStream()},120);
-}
-function scheduleEngineRender(){
-  if(engineRenderTimer!==null)return;
-  engineRenderTimer=setTimeout(()=>{engineRenderTimer=null;renderEngine()},300);
 }
 function counts(d){return d.reduce((a,x)=>(a[x]=(a[x]||0)+1,a),{})}
 function rate(a,b){return b?Math.round(a/b*100):0}
