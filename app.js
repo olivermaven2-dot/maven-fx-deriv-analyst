@@ -144,7 +144,7 @@ function receiveTick(t){
   const digit=digitFromQuote(quote,state.pipSize);if(!Number.isInteger(digit))return;
   state.ticks.push({quote:Number(quote),epoch:t.epoch||Math.floor(Date.now()/1000)});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
-  state.lastTickAt=Date.now();state.tickSeq++;botOnTick(digit);
+  state.lastTickAt=Date.now();
   state.tickSeq++;
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   botOnTick(digit);
