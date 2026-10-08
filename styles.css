@@ -27,4 +27,3 @@ footer{text-align:center;color:#68768d;font-size:10px;padding:10px 16px 28px}
 .ou-side.active.under{color:#ffadb4;border-color:#ef6b78;background:#451b24;box-shadow:0 0 0 2px rgba(239,107,120,.14)}
 .ou-label{display:flex;align-items:center;justify-content:space-between}
 .ou-selected-name{color:var(--text);font-size:12px;font-weight:900;letter-spacing:.04em}
-
