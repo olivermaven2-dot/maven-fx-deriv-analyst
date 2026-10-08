@@ -139,11 +139,11 @@ function loadHistory(prices,times,pipSize=null){
 let streamRenderPending=false,engineRenderPending=false;
 function scheduleStreamRender(){
   if(streamRenderPending)return;streamRenderPending=true;
-  setTimeout(()=>{streamRenderPending=false;renderStream()},100);
+  setTimeout(()=>{streamRenderPending=false;renderStream()},200);
 }
 function scheduleEngineRender(){
   if(engineRenderPending)return;engineRenderPending=true;
-  setTimeout(()=>{engineRenderPending=false;renderEngine()},250);
+  setTimeout(()=>{engineRenderPending=false;renderEngine()},1000);
 }
 function receiveTick(t){
   if(!t||t.symbol!==state.symbol)return;
