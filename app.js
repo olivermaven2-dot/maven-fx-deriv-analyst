@@ -274,14 +274,19 @@ function ouTransitionStats(d,candidate,selectedDigit,selectedSide){
 }
 function ouReactionDepth(d,candidate,selectedDigit,selectedSide){
   const qualifies=x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit;
-  let occurrences=0,r1=0,r2=0,r3=0,recovery=0;
-  for(let i=0;i<d.length-3;i++){
+  let occurrences=0,n1=0,n2=0,n3=0,r1=0,r2=0,r3=0,recovery=0;
+  // Score each horizon only when that many future ticks exist. A missing 3-tick
+  // follow-through must never erase valid 1- or 2-tick evidence.
+  for(let i=0;i<d.length;i++){
     if(d[i]!==candidate)continue;
     occurrences++;
-    const a=qualifies(d[i+1]),b=qualifies(d[i+2]),c=qualifies(d[i+3]);
-    if(a)r1++;if(a&&b)r2++;if(a&&b&&c)r3++;if(!a&&b&&c)recovery++;
+    if(i+1<d.length){n1++;const a=qualifies(d[i+1]);if(a)r1++;
+      if(i+2<d.length){n2++;const b=qualifies(d[i+2]);if(a&&b)r2++;
+        if(i+3<d.length){n3++;const c=qualifies(d[i+3]);if(a&&b&&c)r3++;if(!a&&b&&c)recovery++;}
+      }
+    }
   }
-  return {occurrences,r1:occurrences?r1/occurrences:0,r2:occurrences?r2/occurrences:0,r3:occurrences?r3/occurrences:0,recovery:occurrences?recovery/occurrences:0};
+  return {occurrences,n1,n2,n3,r1:n1?r1/n1:0,r2:n2?r2/n2:0,r3:n3?r3/n3:0,recovery:n3?recovery/n3:0};
 }
 function ouStats(d,digit,side){
   const rates=ouWindowRates(d,digit,side);
