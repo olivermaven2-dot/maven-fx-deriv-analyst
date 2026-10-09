@@ -285,141 +285,55 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
 function overUnderEntry(d,selectedDigit,selectedSide){
   const candidates=[];
   const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
-  const qualifies=x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit;
-
   for(let candidate=0;candidate<=9;candidate++){
     const t=ouTransitionStats(d,candidate,selectedDigit,selectedSide);
     if(t.total<10)continue;
-
-    // The entry digit is a TRIGGER: when it appears, the following digits
-    // must show a measurable tendency toward the selected Over/Under zone.
-    const sample=Math.min(1,t.total/80);
-    const recentWeight=Math.min(1,t.recentTotal/35);
-
-    // 1-tick reaction is the strongest immediate signal. 2-tick confirms
-    // continuation. 3-tick is additional confirmation, NOT a hard gate.
+    const sample=Math.min(1,t.total/80),recentWeight=Math.min(1,t.recentTotal/35);
     const continuation=t.r1*.45+t.r2*.35+t.r3*.20;
     const immediateAdvantage=Math.max(0,Math.min(1,.5+(t.r1-baseline)*3.5));
     const twoTickAdvantage=Math.max(0,Math.min(1,.5+(t.r2-baseline)*3));
     const threeTickAdvantage=Math.max(0,Math.min(1,.5+(t.r3-baseline)*2.5));
     const directionalAdvantage=Math.max(0,Math.min(1,.5+(t.weightedRate-baseline)*3));
     const recentAdvantage=Math.max(0,Math.min(1,.5+(t.recentRate-baseline)*3));
-
-    const stability=Math.max(0,Math.min(1,
-      1-Math.abs(t.rate-t.recentRate)-Math.abs(t.r1-t.r2)*.35-Math.abs(t.r2-t.r3)*.25
-    ));
-    const consistency=Math.max(0,Math.min(1,
-      1-Math.abs(t.r1-t.r2)-Math.abs(t.r2-t.r3)
-    ));
-
-    // Primary emphasis is trigger -> directional reaction. 1/2/3 tick
-    // continuation contributes progressively, with no automatic 3-tick veto.
-    const score=100*(
-      directionalAdvantage*.24+
-      recentAdvantage*.18+
-      continuation*.28+
-      immediateAdvantage*.10+
-      twoTickAdvantage*.07+
-      threeTickAdvantage*.03+
-      stability*.05+
-      consistency*.03+
-      sample*.01+
-      recentWeight*.01
-    );
-
-    const confidenceBase=Math.min(1,t.total/120);
-    candidates.push({
-      ...t,
-      candidate,
-      baseline,
-      score,
-      continuation,
-      immediateAdvantage,
-      twoTickAdvantage,
-      threeTickAdvantage,
-      directionalAdvantage,
-      recentAdvantage,
-      consistency,
-      stability,
-      confidenceBase,
-      p:Math.min(1,Math.max(0,t.r1*.5+t.r2*.3+t.r3*.2))
-    });
+    const stability=Math.max(0,Math.min(1,1-Math.abs(t.rate-t.recentRate)-Math.abs(t.r1-t.r2)*.35-Math.abs(t.r2-t.r3)*.25));
+    const consistency=Math.max(0,Math.min(1,1-Math.abs(t.r1-t.r2)-Math.abs(t.r2-t.r3)));
+    const score=100*(directionalAdvantage*.24+recentAdvantage*.18+continuation*.28+immediateAdvantage*.10+twoTickAdvantage*.07+threeTickAdvantage*.03+stability*.05+consistency*.03+sample*.01+recentWeight*.01);
+    candidates.push({...t,candidate,baseline,score,continuation,stability,consistency,confidenceBase:Math.min(1,t.total/120)});
   }
-
   candidates.sort((a,b)=>b.score-a.score);
-  const best=candidates[0],second=candidates[1];
-  if(!best)return null;
-
-  const gap=second?best.score-second.score:0;
+  if(!candidates.length)return null;
   const setupDepth=Math.min(selectedDigit,9-selectedDigit);
   const middleBias=Math.max(0,Math.min(1,(setupDepth-1)/3));
-
-  // Middle setups remain slightly more permissive, while the trigger
-  // direction itself must still be supported by actual follow-through.
-  const minTotal=Math.round(10-2*middleBias);
-  const recentMin=.47+.02*middleBias;
-  const scoreMin=53-3*middleBias;
-  const gapMin=.8;
-
-  // A candidate can qualify through strong 1-tick reaction OR strong
-  // 2-tick continuation. 3-tick continuation only improves the result.
-  const passesOneTick=best.r1>=.54;
-  const passesTwoTick=best.r2>=.52;
-  const hasDirectionalReaction=best.recentRate>=recentMin&&
-    (best.weightedRate>=baseline-.03||best.r1>=.56||best.r2>=.54);
-  const hasContinuation=passesOneTick||passesTwoTick;
-  const valid=best.total>=minTotal&&
-    hasDirectionalReaction&&
-    hasContinuation&&
-    best.stability>=.54&&
-    best.consistency>=.42&&
-    best.score>=scoreMin&&
-    gap>=gapMin;
-
-  if(!valid)return null;
-
-  let confidence=Math.round(
-    50+
-    best.confidenceBase*14+
-    best.continuation*18+
-    best.stability*6+
-    best.consistency*5+
-    Math.min(7,gap)
-  );
-
-  // 3-tick confirmation increases confidence but is never required.
-  if(best.r3>=.50)confidence+=4;
-  else if(best.r3<.40)confidence-=3;
-
-  confidence=Math.max(52,Math.min(94,confidence));
-
-  let reason;
-  if(best.r1>=.56&&best.r2>=.54&&best.r3>=.50){
-    reason="Strong trigger reaction with consistent 1–3 tick movement toward the selected setup.";
-  }else if(best.r1>=.54&&best.r2>=.52){
-    reason="The trigger shows strong immediate reaction and 2-tick continuation toward the selected setup.";
-  }else if(best.r1>=.54){
-    reason="The trigger shows a strong immediate move toward the selected setup; longer continuation is less consistent.";
-  }else if(best.r2>=.52){
-    reason="The trigger shows favorable 2-tick continuation toward the selected setup despite weaker immediate reaction.";
-  }else{
-    reason="The trigger has aligned directional reaction and supporting recent transition evidence.";
-  }
-
-  const status=confidence>=82?"STRONG ENTRY":confidence>=68?"MODERATE ENTRY":"WEAK ENTRY";
-  const continuationNote=best.r3>=.50
-    ?"3-tick confirmation supported."
-    :"3-tick confirmation is not required and is only reducing confidence.";
-
+  const minTotal=Math.round(10-2*middleBias),recentMin=.47+.02*middleBias,scoreMin=53-3*middleBias;
+  // Each displayed digit must pass independently; never fill slot two with a weak candidate.
+  const qualified=candidates.filter(c=>{
+    const passesOneTick=c.r1>=.54,passesTwoTick=c.r2>=.52;
+    const hasDirectionalReaction=c.recentRate>=recentMin&&(c.weightedRate>=baseline-.03||c.r1>=.56||c.r2>=.54);
+    return c.total>=minTotal&&hasDirectionalReaction&&(passesOneTick||passesTwoTick)&&c.stability>=.54&&c.consistency>=.42&&c.score>=scoreMin;
+  }).slice(0,2);
+  if(!qualified.length)return null;
+  const entries=qualified.map(c=>{
+    let confidence=Math.round(50+c.confidenceBase*14+c.continuation*18+c.stability*6+c.consistency*5);
+    if(c.r3>=.50)confidence+=4; else if(c.r3<.40)confidence-=3;
+    confidence=Math.max(52,Math.min(94,confidence));
+    const status=confidence>=82?"STRONG ENTRY":confidence>=68?"MODERATE ENTRY":"WEAK ENTRY";
+    let reason;
+    if(c.r1>=.56&&c.r2>=.54&&c.r3>=.50)reason="Strong trigger reaction with consistent 1–3 tick movement toward the selected setup.";
+    else if(c.r1>=.54&&c.r2>=.52)reason="Strong immediate reaction and 2-tick continuation toward the selected setup.";
+    else if(c.r1>=.54)reason="Strong immediate reaction; longer continuation is less consistent.";
+    else reason="Favorable 2-tick continuation despite weaker immediate reaction.";
+    return {digit:c.candidate,confidence:confidence+"%",status,reason,evidence:c.total+" trigger observations"};
+  });
   return {
-    main:String(best.candidate),
-    confidence:confidence+"%",
-    status,
-    reason,
-    evidence:best.total+" trigger observations • "+continuationNote
+    main:entries.map(e=>e.digit).join("  •  "),
+    meta:entries.length===2?"Digit "+entries[0].digit+": "+entries[0].confidence+" ("+entries[0].status+") • Digit "+entries[1].digit+": "+entries[1].confidence+" ("+entries[1].status+")":"Digit "+entries[0].digit+": "+entries[0].confidence+" ("+entries[0].status+") • Second digit: no candidate passed validation",
+    confidence:entries.map(e=>e.confidence).join(" / "),
+    status:entries.length===2?"2 VALID CANDIDATES":"1 VALID CANDIDATE",
+    reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),
+    evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),
+    entries
   };
 }
-
 function renderParityControls(){
   document.querySelectorAll(".parity-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.parity===state.selectedParity)); const label=$("paritySetupLabel"); if(label)label.textContent=state.selectedParity;
 }
@@ -451,7 +365,7 @@ function panel(stateText,reason,entry,why,n){
   const cls=stateText==="STRONG SIGNAL"?"strong":stateText==="SIGNAL"?"signal":stateText==="NO SIGNAL"||stateText==="NO ENTRY"?"none":"wait";
   return `<section class="engine-panel"><div class="panel-kicker">CURRENT ANALYSIS</div><div class="state ${cls}">${esc(stateText)}</div><div class="reason">${esc(reason)}</div>${entry?entryHtml(entry):""}<div class="why"><div class="why-title">WHY THIS STATE?</div><ul>${why.map(x=>`<li class="${x[0]==="×"?"block":""}">${esc(x)}</li>`).join("")}</ul></div><details class="analysis-details"><summary>Detailed analysis</summary><div class="stats"><div class="stat"><span>Sample</span><strong>${n}</strong></div><div class="stat"><span>Evidence</span><strong>${entry?.evidence||"Building"}</strong></div><div class="stat"><span>Data quality</span><strong>${n>=500?"GOOD":n>=100?"BUILDING":"INSUFFICIENT"}</strong></div><div class="stat"><span>Last digit</span><strong>${state.digits?.at(-1)??"—"}</strong></div></div></details></section>`;
 }
-function entryHtml(e){return `<div class="entry"><div class="entry-head">ENTRY</div><div class="entry-main">${esc(e.main)}</div><div class="entry-meta">${esc(e.meta||"Qualifying setup")}</div></div>`}
+function entryHtml(e){const digits=Array.isArray(e.entries)?'<div class="entry-candidates" style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+e.entries.map(x=>'<div class="entry-candidate" style="display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid var(--border,#444);border-radius:10px;min-width:100px"><strong>ENTRY DIGIT '+esc(x.digit)+'</strong><span style="font-size:1.35em;font-weight:700">'+esc(x.confidence)+'</span><small>'+esc(x.status)+'</small></div>').join("")+'</div>':'<div class="entry-main">'+esc(e.main)+'</div>';return '<div class="entry"><div class="entry-head">ENTRY DIGITS</div>'+digits+'<div class="entry-meta">'+esc(e.meta||e.reason||"Qualifying setup")+'</div></div>'}
 function parityStats(d,selectedSide){
   const key=x=>x%2===0?"EVEN":"ODD";
   const target=selectedSide,other=target==="EVEN"?"ODD":"EVEN";
