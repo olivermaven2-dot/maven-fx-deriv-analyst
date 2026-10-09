@@ -302,19 +302,17 @@ function overUnderEntry(d,selectedDigit,selectedSide){
   }
   candidates.sort((a,b)=>b.score-a.score);
   if(!candidates.length)return null;
-  const setupDepth=Math.min(selectedDigit,9-selectedDigit);
-  const middleBias=Math.max(0,Math.min(1,(setupDepth-1)/3));
+  const setupDepth=Math.min(selectedDigit,9-selectedDigit),middleBias=Math.max(0,Math.min(1,(setupDepth-1)/3));
   const minTotal=Math.round(10-2*middleBias),recentMin=.47+.02*middleBias,scoreMin=53-3*middleBias;
-  // Each displayed digit must pass independently; never fill slot two with a weak candidate.
   const qualified=candidates.filter(c=>{
-    const passesOneTick=c.r1>=.54,passesTwoTick=c.r2>=.52;
+    const hasContinuation=c.r1>=.54||c.r2>=.52;
     const hasDirectionalReaction=c.recentRate>=recentMin&&(c.weightedRate>=baseline-.03||c.r1>=.56||c.r2>=.54);
-    return c.total>=minTotal&&hasDirectionalReaction&&(passesOneTick||passesTwoTick)&&c.stability>=.54&&c.consistency>=.42&&c.score>=scoreMin;
+    return c.total>=minTotal&&hasDirectionalReaction&&hasContinuation&&c.stability>=.54&&c.consistency>=.42&&c.score>=scoreMin;
   }).slice(0,2);
   if(!qualified.length)return null;
   const entries=qualified.map(c=>{
     let confidence=Math.round(50+c.confidenceBase*14+c.continuation*18+c.stability*6+c.consistency*5);
-    if(c.r3>=.50)confidence+=4; else if(c.r3<.40)confidence-=3;
+    if(c.r3>=.50)confidence+=4;else if(c.r3<.40)confidence-=3;
     confidence=Math.max(52,Math.min(94,confidence));
     const status=confidence>=82?"STRONG ENTRY":confidence>=68?"MODERATE ENTRY":"WEAK ENTRY";
     let reason;
@@ -324,15 +322,7 @@ function overUnderEntry(d,selectedDigit,selectedSide){
     else reason="Favorable 2-tick continuation despite weaker immediate reaction.";
     return {digit:c.candidate,confidence:confidence+"%",status,reason,evidence:c.total+" trigger observations"};
   });
-  return {
-    main:entries.map(e=>e.digit).join("  •  "),
-    meta:entries.length===2?"Digit "+entries[0].digit+": "+entries[0].confidence+" ("+entries[0].status+") • Digit "+entries[1].digit+": "+entries[1].confidence+" ("+entries[1].status+")":"Digit "+entries[0].digit+": "+entries[0].confidence+" ("+entries[0].status+") • Second digit: no candidate passed validation",
-    confidence:entries.map(e=>e.confidence).join(" / "),
-    status:entries.length===2?"2 VALID CANDIDATES":"1 VALID CANDIDATE",
-    reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),
-    evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),
-    entries
-  };
+  return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.length===2?"Digit "+entries[0].digit+": "+entries[0].confidence+" ("+entries[0].status+") • Digit "+entries[1].digit+": "+entries[1].confidence+" ("+entries[1].status+")":"Digit "+entries[0].digit+": "+entries[0].confidence+" ("+entries[0].status+") • Second digit: no candidate passed validation",confidence:entries.map(e=>e.confidence).join(" / "),status:entries.length===2?"2 VALID CANDIDATES":"1 VALID CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
 }
 function renderParityControls(){
   document.querySelectorAll(".parity-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.parity===state.selectedParity)); const label=$("paritySetupLabel"); if(label)label.textContent=state.selectedParity;
@@ -365,7 +355,7 @@ function panel(stateText,reason,entry,why,n){
   const cls=stateText==="STRONG SIGNAL"?"strong":stateText==="SIGNAL"?"signal":stateText==="NO SIGNAL"||stateText==="NO ENTRY"?"none":"wait";
   return `<section class="engine-panel"><div class="panel-kicker">CURRENT ANALYSIS</div><div class="state ${cls}">${esc(stateText)}</div><div class="reason">${esc(reason)}</div>${entry?entryHtml(entry):""}<div class="why"><div class="why-title">WHY THIS STATE?</div><ul>${why.map(x=>`<li class="${x[0]==="×"?"block":""}">${esc(x)}</li>`).join("")}</ul></div><details class="analysis-details"><summary>Detailed analysis</summary><div class="stats"><div class="stat"><span>Sample</span><strong>${n}</strong></div><div class="stat"><span>Evidence</span><strong>${entry?.evidence||"Building"}</strong></div><div class="stat"><span>Data quality</span><strong>${n>=500?"GOOD":n>=100?"BUILDING":"INSUFFICIENT"}</strong></div><div class="stat"><span>Last digit</span><strong>${state.digits?.at(-1)??"—"}</strong></div></div></details></section>`;
 }
-function entryHtml(e){const digits=Array.isArray(e.entries)?'<div class="entry-candidates" style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">'+e.entries.map(x=>'<div class="entry-candidate" style="display:flex;flex-direction:column;gap:4px;padding:12px;border:1px solid var(--border,#444);border-radius:10px;min-width:100px"><strong>ENTRY DIGIT '+esc(x.digit)+'</strong><span style="font-size:1.35em;font-weight:700">'+esc(x.confidence)+'</span><small>'+esc(x.status)+'</small></div>').join("")+'</div>':'<div class="entry-main">'+esc(e.main)+'</div>';return '<div class="entry"><div class="entry-head">ENTRY DIGITS</div>'+digits+'<div class="entry-meta">'+esc(e.meta||e.reason||"Qualifying setup")+'</div></div>'}
+function entryHtml(e){const cards=Array.isArray(e.entries)?'<div class="entry-candidates">'+e.entries.map(x=>'<div class="entry-candidate"><strong>ENTRY DIGIT '+esc(x.digit)+'</strong><span>'+esc(x.confidence)+'</span><small>'+esc(x.status)+'</small></div>').join("")+'</div>':'<div class="entry-main">'+esc(e.main)+'</div>';return '<div class="entry"><div class="entry-head">ENTRY DIGITS</div>'+cards+'<div class="entry-meta">'+esc(e.meta||e.reason||"Qualifying setup")+'</div></div>'}
 function parityStats(d,selectedSide){
   const key=x=>x%2===0?"EVEN":"ODD";
   const target=selectedSide,other=target==="EVEN"?"ODD":"EVEN";
