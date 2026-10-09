@@ -55,6 +55,14 @@
     </div>
   </section>
 
+  <section id="riseFallControls" class="ou-controls" aria-label="Rise Fall direction" style="display:none">
+    <div class="ou-label"><span>SELECT DIRECTION TO ANALYSE</span><span id="riseFallSetupLabel" class="ou-selected-name">RISE</span></div>
+    <div class="ou-row ou-sides">
+      <button class="ou-side rise-fall-side active over" data-direction="RISE" type="button">▲ RISE</button>
+      <button class="ou-side rise-fall-side under" data-direction="FALL" type="button">▼ FALL</button>
+    </div>
+  </section>
+
   <section id="engineRoot" class="engine"></section>
 
   <section class="stream-card">
@@ -75,6 +83,6 @@
 </main>
 
 <footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261009-restore-original"></script>
+<script src="app.js?v=20261009-risefall-selector-entry"></script>
 </body>
 </html>
