@@ -3,6 +3,7 @@ function renderOverUnder(root,d,c,last,n){
   const setup=state.selectedSide+" "+state.selectedDigit;
   const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const entry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
+  state.ouEntrySnapshot={key:ouValidationKey(),active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[]};
   let reason;
   if(e.probabilityConflict)reason="Probability Comparison is blocking the selected setup because the complementary setup has stronger live probability evidence.";
   else if(e.signal==="AVOID")reason="The selected setup does not have enough aligned A-Setup evidence.";
@@ -17,12 +18,13 @@ function renderOverUnder(root,d,c,last,n){
     "A-Setup alignment: probability "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentum*100)+" • trend "+Math.round(e.trend*100)+" • transitions "+Math.round(e.transition*100),
     "Reaction "+Math.round(e.reaction*100)+" • clustering "+Math.round(e.cluster*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
     "Historical "+Math.round(e.historical*100)+" • current context "+Math.round(e.context*100)+" • evidence "+Math.round(e.evidence*100),
-    e.probabilityConflict?"× Complementary probability conflict — selected setup blocked":entry?"✓ Entry candidate "+entry.main+" passed independent reaction validation":activeSignal?"× No candidate passed all entry validation requirements":"× Entry remains inactive until the Final Signal becomes SIGNAL or STRONG SIGNAL"
+    e.probabilityConflict?"× Complementary probability conflict — selected setup blocked":entry?"✓ Entry candidates "+entry.main+" passed historical reaction filters":"× Entry candidates remain inactive or did not pass validation",
+    ouValidationSummary()
   ],n);
 }
 const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—"};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouEntrySnapshot:null};
 
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
@@ -136,17 +138,57 @@ function loadHistory(prices,times,pipSize=null){
   state.ticks=arr.slice(-MAX_TICKS);state.digits=arr.map(x=>digitFromQuote(x.quote,state.pipSize)).filter(Number.isInteger).slice(-MAX_TICKS);
   $("diagHistory").textContent=String(arr.length);updateQuality();renderStream();renderEngine();
 }
+function ouValidationKey(){
+  return state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide;
+}
+function resetOUValidationIfNeeded(){
+  const key=ouValidationKey();
+  if(state.ouValidation.key!==key){
+    state.ouValidation={key,pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"};
+  }
+}
+function processOUValidationTick(digit){
+  resetOUValidationIfNeeded();
+  const v=state.ouValidation;
+  for(let i=v.pending.length-1;i>=0;i--){
+    const p=v.pending[i];
+    p.steps++;
+    p.hits.push(state.selectedSide==="OVER"?digit>state.selectedDigit:digit<state.selectedDigit);
+    for(const horizon of [1,2,3]){
+      if(p.steps===horizon){
+        v.completed[horizon].n++;
+        if(p.hits.slice(0,horizon).every(Boolean))v.completed[horizon].hits++;
+      }
+    }
+    if(p.steps>=3)v.pending.splice(i,1);
+  }
+}
+function recordOUValidationTrigger(digit){
+  resetOUValidationIfNeeded();
+  const snap=state.ouEntrySnapshot;
+  if(!snap||!snap.active||snap.key!==ouValidationKey()||!snap.digits.includes(digit))return;
+  const signature=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|"+digit+"|"+state.ticks.length;
+  state.ouValidation.pending.push({digit,steps:0,hits:[],signature});
+  state.ouValidation.lastTrigger="Digit "+digit+" triggered at tick "+state.ticks.length;
+}
+function ouValidationSummary(){
+  resetOUValidationIfNeeded();
+  const c=state.ouValidation.completed;
+  const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"collecting (0)";
+  return "Live entry validation — next 1 tick: "+fmt(c[1])+" • next 2 consecutive ticks: "+fmt(c[2])+" • next 3 consecutive ticks: "+fmt(c[3]);
+}
 function receiveTick(t){
   if(!t||t.symbol!==state.symbol)return;
   const quote=t.quote;if(!Number.isFinite(Number(quote)))return;
   if(t.pip_size!=null)state.pipSize=t.pip_size;
   const digit=digitFromQuote(quote,state.pipSize);if(!Number.isInteger(digit))return;
+  processOUValidationTick(digit);
   state.ticks.push({quote:Number(quote),epoch:t.epoch||Math.floor(Date.now()/1000)});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
   state.lastTickAt=Date.now();
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
-  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream();renderEngine();
+  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream();renderEngine();recordOUValidationTrigger(digit);
 }
 function updateQuality(){
   const n=state.digits.length,pill=$("qualityPill");
@@ -287,8 +329,8 @@ function overUnderEntry(d,selectedDigit,selectedSide){
   const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
   for(let candidate=0;candidate<=9;candidate++){
     const t=ouTransitionStats(d,candidate,selectedDigit,selectedSide);
-    if(t.total<10)continue;
-    const sample=Math.min(1,t.total/80),recentWeight=Math.min(1,t.recentTotal/35);
+    if(t.total<20||t.recentTotal<5)continue;
+    const sample=Math.min(1,t.total/100),recentWeight=Math.min(1,t.recentTotal/40);
     const continuation=t.r1*.45+t.r2*.35+t.r3*.20;
     const immediateAdvantage=Math.max(0,Math.min(1,.5+(t.r1-baseline)*3.5));
     const twoTickAdvantage=Math.max(0,Math.min(1,.5+(t.r2-baseline)*3));
@@ -297,32 +339,30 @@ function overUnderEntry(d,selectedDigit,selectedSide){
     const recentAdvantage=Math.max(0,Math.min(1,.5+(t.recentRate-baseline)*3));
     const stability=Math.max(0,Math.min(1,1-Math.abs(t.rate-t.recentRate)-Math.abs(t.r1-t.r2)*.35-Math.abs(t.r2-t.r3)*.25));
     const consistency=Math.max(0,Math.min(1,1-Math.abs(t.r1-t.r2)-Math.abs(t.r2-t.r3)));
-    const score=100*(directionalAdvantage*.24+recentAdvantage*.18+continuation*.28+immediateAdvantage*.10+twoTickAdvantage*.07+threeTickAdvantage*.03+stability*.05+consistency*.03+sample*.01+recentWeight*.01);
-    candidates.push({...t,candidate,baseline,score,continuation,stability,consistency,confidenceBase:Math.min(1,t.total/120)});
+    const score=Math.round(100*(directionalAdvantage*.24+recentAdvantage*.18+continuation*.28+immediateAdvantage*.10+twoTickAdvantage*.07+threeTickAdvantage*.03+stability*.05+consistency*.03+sample*.01+recentWeight*.01));
+    candidates.push({...t,candidate,baseline,score,continuation,stability,consistency});
   }
   candidates.sort((a,b)=>b.score-a.score);
   if(!candidates.length)return null;
   const setupDepth=Math.min(selectedDigit,9-selectedDigit),middleBias=Math.max(0,Math.min(1,(setupDepth-1)/3));
-  const minTotal=Math.round(10-2*middleBias),recentMin=.47+.02*middleBias,scoreMin=53-3*middleBias;
+  const minTotal=Math.round(20-4*middleBias),recentMin=.49+.02*middleBias,scoreMin=55-3*middleBias;
   const qualified=candidates.filter(c=>{
     const hasContinuation=c.r1>=.54||c.r2>=.52;
-    const hasDirectionalReaction=c.recentRate>=recentMin&&(c.weightedRate>=baseline-.03||c.r1>=.56||c.r2>=.54);
-    return c.total>=minTotal&&hasDirectionalReaction&&hasContinuation&&c.stability>=.54&&c.consistency>=.42&&c.score>=scoreMin;
+    const hasDirectionalReaction=c.recentRate>=recentMin&&(c.weightedRate>=baseline-.02||c.r1>=.56||c.r2>=.54);
+    return c.total>=minTotal&&c.recentTotal>=5&&hasDirectionalReaction&&hasContinuation&&c.stability>=.56&&c.consistency>=.45&&c.score>=scoreMin;
   }).slice(0,2);
   if(!qualified.length)return null;
   const entries=qualified.map(c=>{
-    let confidence=Math.round(50+c.confidenceBase*14+c.continuation*18+c.stability*6+c.consistency*5);
-    if(c.r3>=.50)confidence+=4;else if(c.r3<.40)confidence-=3;
-    confidence=Math.max(52,Math.min(94,confidence));
-    const status=confidence>=82?"STRONG ENTRY":confidence>=68?"MODERATE ENTRY":"WEAK ENTRY";
+    let score=c.score;
+    const status=score>=78?"STRONG CANDIDATE":score>=66?"MODERATE CANDIDATE":"EARLY CANDIDATE";
     let reason;
-    if(c.r1>=.56&&c.r2>=.54&&c.r3>=.50)reason="Strong trigger reaction with consistent 1–3 tick movement toward the selected setup.";
-    else if(c.r1>=.54&&c.r2>=.52)reason="Strong immediate reaction and 2-tick continuation toward the selected setup.";
-    else if(c.r1>=.54)reason="Strong immediate reaction; longer continuation is less consistent.";
-    else reason="Favorable 2-tick continuation despite weaker immediate reaction.";
-    return {digit:c.candidate,confidence:confidence+"%",status,reason,evidence:c.total+" trigger observations"};
+    if(c.r1>=.56&&c.r2>=.54&&c.r3>=.50)reason="Historical triggers show follow-through across 1–3 ticks toward the selected setup.";
+    else if(c.r1>=.54&&c.r2>=.52)reason="Historical triggers show immediate reaction and 2-tick continuation toward the selected setup.";
+    else if(c.r1>=.54)reason="Historical triggers show immediate reaction; longer continuation is less consistent.";
+    else reason="Historical triggers show favorable 2-tick continuation despite weaker immediate reaction.";
+    return {digit:c.candidate,score,status,reason,evidence:c.total+" historical triggers; "+c.recentTotal+" recent triggers"};
   });
-  return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.length===2?"Digit "+entries[0].digit+": "+entries[0].confidence+" ("+entries[0].status+") • Digit "+entries[1].digit+": "+entries[1].confidence+" ("+entries[1].status+")":"Digit "+entries[0].digit+": "+entries[0].confidence+" ("+entries[0].status+") • Second digit: no candidate passed validation",confidence:entries.map(e=>e.confidence).join(" / "),status:entries.length===2?"2 VALID CANDIDATES":"1 VALID CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
+  return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.length===2?"Digit "+entries[0].digit+": score "+entries[0].score+"/100 • Digit "+entries[1].digit+": score "+entries[1].score+"/100":"Digit "+entries[0].digit+": score "+entries[0].score+"/100 • Second digit: no candidate passed validation. Scores rank candidates; they are not win probabilities.",status:entries.length===2?"2 VALID CANDIDATES":"1 VALID CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
 }
 function renderParityControls(){
   document.querySelectorAll(".parity-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.parity===state.selectedParity)); const label=$("paritySetupLabel"); if(label)label.textContent=state.selectedParity;
@@ -355,7 +395,7 @@ function panel(stateText,reason,entry,why,n){
   const cls=stateText==="STRONG SIGNAL"?"strong":stateText==="SIGNAL"?"signal":stateText==="NO SIGNAL"||stateText==="NO ENTRY"?"none":"wait";
   return `<section class="engine-panel"><div class="panel-kicker">CURRENT ANALYSIS</div><div class="state ${cls}">${esc(stateText)}</div><div class="reason">${esc(reason)}</div>${entry?entryHtml(entry):""}<div class="why"><div class="why-title">WHY THIS STATE?</div><ul>${why.map(x=>`<li class="${x[0]==="×"?"block":""}">${esc(x)}</li>`).join("")}</ul></div><details class="analysis-details"><summary>Detailed analysis</summary><div class="stats"><div class="stat"><span>Sample</span><strong>${n}</strong></div><div class="stat"><span>Evidence</span><strong>${entry?.evidence||"Building"}</strong></div><div class="stat"><span>Data quality</span><strong>${n>=500?"GOOD":n>=100?"BUILDING":"INSUFFICIENT"}</strong></div><div class="stat"><span>Last digit</span><strong>${state.digits?.at(-1)??"—"}</strong></div></div></details></section>`;
 }
-function entryHtml(e){const cards=Array.isArray(e.entries)?'<div class="entry-candidates">'+e.entries.map(x=>'<div class="entry-candidate"><strong>ENTRY DIGIT '+esc(x.digit)+'</strong><span>'+esc(x.confidence)+'</span><small>'+esc(x.status)+'</small></div>').join("")+'</div>':'<div class="entry-main">'+esc(e.main)+'</div>';return '<div class="entry"><div class="entry-head">ENTRY DIGITS</div>'+cards+'<div class="entry-meta">'+esc(e.meta||e.reason||"Qualifying setup")+'</div></div>'}
+function entryHtml(e){const cards=Array.isArray(e.entries)?'<div class="entry-candidates">'+e.entries.map(x=>'<div class="entry-candidate"><strong>ENTRY DIGIT '+esc(x.digit)+'</strong><span>SCORE '+esc(x.score)+'/100</span><small>'+esc(x.status)+'</small></div>').join("")+'</div>':'<div class="entry-main">'+esc(e.main)+'</div>';return '<div class="entry"><div class="entry-head">ENTRY DIGITS • RANKING SCORE, NOT WIN PROBABILITY</div>'+cards+'<div class="entry-meta">'+esc(e.meta||e.reason||"Qualifying setup")+'</div></div>'}
 function parityStats(d,selectedSide){
   const key=x=>x%2===0?"EVEN":"ODD";
   const target=selectedSide,other=target==="EVEN"?"ODD":"EVEN";
