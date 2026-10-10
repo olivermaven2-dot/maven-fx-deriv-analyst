@@ -24,7 +24,7 @@ function renderOverUnder(root,d,c,last,n){
 }
 const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouEntrySnapshot:null};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null};
 
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
@@ -147,13 +147,27 @@ function resetOUValidationIfNeeded(){
     state.ouValidation={key,pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"};
   }
 }
+function ouValidationRecordKey(market,digit,side,candidate){
+  return market+"|"+digit+"|"+side+"|"+candidate;
+}
 function processOUValidationTick(digit){
   resetOUValidationIfNeeded();
   const v=state.ouValidation;
   for(let i=v.pending.length-1;i>=0;i--){
     const p=v.pending[i];
     p.steps++;
-    p.hits.push(state.selectedSide==="OVER"?digit>state.selectedDigit:digit<state.selectedDigit);
+    p.hits.push(p.side==="OVER"?digit>p.selectedDigit:digit<p.selectedDigit);
+    const key=ouValidationRecordKey(p.market,p.selectedDigit,p.side,p.candidate);
+    const rec=state.ouValidationBook[key];
+    if(rec){
+      for(const horizon of [1,2,3]){
+        if(p.steps===horizon){
+          rec[horizon].n++;
+          if(p.hits.slice(0,horizon).every(Boolean))rec[horizon].hits++;
+        }
+      }
+      rec.lastUpdated=Date.now();
+    }
     for(const horizon of [1,2,3]){
       if(p.steps===horizon){
         v.completed[horizon].n++;
@@ -168,14 +182,33 @@ function recordOUValidationTrigger(digit){
   const snap=state.ouEntrySnapshot;
   if(!snap||!snap.active||snap.key!==ouValidationKey()||!snap.digits.includes(digit))return;
   const signature=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|"+digit+"|"+state.ticks.length;
-  state.ouValidation.pending.push({digit,steps:0,hits:[],signature});
-  state.ouValidation.lastTrigger="Digit "+digit+" triggered at tick "+state.ticks.length;
+  const key=ouValidationRecordKey(state.symbol,state.selectedDigit,state.selectedSide,digit);
+  if(!state.ouValidationBook[key]){
+    state.ouValidationBook[key]={market:state.symbol,selectedDigit:state.selectedDigit,side:state.selectedSide,candidate:digit,1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0},triggers:0,lastUpdated:Date.now()};
+  }
+  state.ouValidationBook[key].triggers++;
+  state.ouValidation.pending.push({digit,candidate:digit,selectedDigit:state.selectedDigit,side:state.selectedSide,market:state.symbol,steps:0,hits:[],signature});
+  state.ouValidation.lastTrigger="Entry digit "+digit+" triggered at tick "+state.ticks.length;
 }
 function ouValidationSummary(){
   resetOUValidationIfNeeded();
   const c=state.ouValidation.completed;
   const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"collecting (0)";
   return "Live entry validation — next 1 tick: "+fmt(c[1])+" • next 2 consecutive ticks: "+fmt(c[2])+" • next 3 consecutive ticks: "+fmt(c[3]);
+}
+function renderOUValidationPanel(){
+  const card=$("ouValidationCard"),out=$("ouValidationResults");
+  if(!card||!out)return;
+  card.style.display=state.engine==="overunder"?"":"none";
+  const prefix=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|";
+  const rows=Object.values(state.ouValidationBook).filter(r=>ouValidationRecordKey(r.market,r.selectedDigit,r.side,r.candidate).startsWith(prefix)).sort((a,b)=>b.triggers-a.triggers).slice(0,5);
+  const payout=Math.max(1,Math.min(500,Number(state.ouPayoutPercent)||95));
+  const breakeven=100/(1+payout/100);
+  const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"—";
+  const roi=x=>x.n?(((x.hits*payout-(x.n-x.hits)*100)/x.n)>=0?"+":"")+(((x.hits*payout-(x.n-x.hits)*100)/x.n).toFixed(1))+"%":"—";
+  out.innerHTML='<div class="ou-validation-note">Session-only tracking • only live entry-digit triggers count • no trades are placed. Assumed win profit is editable and is a what-if estimate, not Deriv live payout.</div>'+
+    '<div class="ou-validation-breakeven">Assumed profit per win: <strong>'+payout.toFixed(1)+'%</strong> of stake • break-even hit rate: <strong>'+breakeven.toFixed(1)+'%</strong></div>'+
+    (rows.length?'<div class="ou-validation-table"><div class="ou-validation-row ou-validation-head"><span>ENTRY</span><span>TRIGGERS</span><span>1 TICK</span><span>2 IN A ROW</span><span>3 IN A ROW</span><span>EST. ROI*</span></div>'+rows.map(r=>{const selected=[1,2,3].reduce((best,h)=>r[h].n>best.n?r[h]:best,r[1]);return '<div class="ou-validation-row"><strong>'+r.candidate+'</strong><span>'+r.triggers+'</span><span>'+fmt(r[1])+'</span><span>'+fmt(r[2])+'</span><span>'+fmt(r[3])+'</span><span>'+roi(selected)+'</span></div>'}).join("")+'</div><div class="ou-validation-note">*ROI uses the best-sampled horizon for that digit, assumes the entered profit rate and a 100% stake loss on misses. Change payout assumption to match a real quoted contract before interpreting it.</div>':'<div class="ou-validation-empty">No qualifying entry-digit triggers recorded for '+esc(state.symbol)+' • '+state.selectedSide+' '+state.selectedDigit+' yet. Keep the live stream running; the table fills as entry digits trigger and their next ticks complete.</div>');
 }
 function receiveTick(t){
   if(!t||t.symbol!==state.symbol)return;
@@ -448,6 +481,7 @@ function renderEngine(){
   const root=$("engineRoot");
   const ou=$("overUnderControls"),parity=$("evenOddControls");
   if(ou)ou.style.display=state.engine==="overunder"?"":"none";
+  renderOUValidationPanel();
   if(parity)parity.style.display=state.engine==="evenodd"?"":"none";
   const rf=$("riseFallControls");if(rf)rf.style.display=state.engine==="risefall"?"":"none";
   if(n<30){root.innerHTML=panel("INSUFFICIENT DATA","Collecting more validated market data before analysis.",null,["At least 30 recent digits are required","Live data stream is active when ticks are arriving"],n);return}
@@ -803,6 +837,7 @@ document.querySelectorAll(".rise-fall-side").forEach(btn=>btn.addEventListener("
 document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);renderOUControls();renderEngine()}));
 document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;renderOUControls();renderEngine()}));
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.engine=btn.dataset.engine;renderEngine()}));
+const payoutInput=$("ouPayoutPercent");if(payoutInput)payoutInput.addEventListener("input",()=>{state.ouPayoutPercent=Math.max(1,Math.min(500,Number(payoutInput.value)||95));renderOUValidationPanel()});
 marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true)}});
 let touchX=0,touchY=0;
 document.querySelector(".engine-nav").addEventListener("touchstart",e=>{touchX=e.changedTouches[0].clientX;touchY=e.changedTouches[0].clientY},{passive:true});
