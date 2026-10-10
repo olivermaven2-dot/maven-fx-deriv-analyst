@@ -27,3 +27,19 @@ footer{text-align:center;color:#68768d;font-size:10px;padding:10px 16px 28px}
 .ou-side.active.under{color:#ffadb4;border-color:#ef6b78;background:#451b24;box-shadow:0 0 0 2px rgba(239,107,120,.14)}
 .ou-label{display:flex;align-items:center;justify-content:space-between}
 .ou-selected-name{color:var(--text);font-size:12px;font-weight:900;letter-spacing:.04em}
+
+
+/* Lightweight live Over/Under entry validation ledger */
+.ou-validation-card{margin-top:12px;padding:14px;background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.ou-validation-title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11px;font-weight:900;letter-spacing:.09em;margin-bottom:12px}
+.ou-validation-session{font-size:9px;color:#55e0a5;border:1px solid #285b4b;background:#10261f;border-radius:99px;padding:4px 7px;white-space:nowrap}
+.ou-payout-label{display:block;font-size:11px;color:var(--muted);margin-bottom:6px}
+.ou-payout-input{width:100%;max-width:180px;padding:10px;border-radius:8px;border:1px solid var(--line);background:#0d1524;color:var(--text);font-size:14px;margin-bottom:10px}
+.ou-validation-note{font-size:10px;line-height:1.5;color:var(--muted);margin:7px 0}
+.ou-validation-breakeven{font-size:11px;padding:9px;border:1px solid var(--line);border-radius:8px;margin:8px 0;line-height:1.5}
+.ou-validation-table{width:100%;overflow-x:auto}
+.ou-validation-row{display:grid;grid-template-columns:48px 58px 70px 82px 82px 66px;gap:6px;align-items:center;min-width:440px;padding:9px 4px;border-bottom:1px solid var(--line);font-size:10px;text-align:center}
+.ou-validation-row>*:first-child{text-align:left}
+.ou-validation-head{font-size:8px;color:var(--muted);font-weight:900;letter-spacing:.04em}
+.ou-validation-empty{font-size:11px;color:var(--muted);line-height:1.6;padding:10px 2px}
+@media(max-width:420px){.ou-validation-card{padding:11px}.ou-validation-row{gap:4px}}
