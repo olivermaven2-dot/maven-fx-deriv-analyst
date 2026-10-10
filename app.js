@@ -613,10 +613,18 @@ function selectParityEntry(d,selectedSide){
   const pattern=parityPatternStats(d,selectedSide),reaction=parityReactionEntry(d,selectedSide);
   if(!pattern&&!reaction)return null;
   const candidate=!pattern?reaction:!reaction?pattern:(reaction.score>=pattern.score?reaction:pattern);
-  // Require actual live 3-tick parity follow-through before exposing an entry.
-  const recent=d.slice(-3);
-  if(recent.length<3||!recent.every(x=>(x%2===0?"EVEN":"ODD")===selectedSide))return null;
-  return {...candidate,reason:candidate.reason+" Live confirmation: the latest three digits match "+selectedSide+".",evidence:candidate.evidence+" • latest 3-tick follow-through confirmed."};
+  // Live follow-through is a confidence booster, not a rigid 3-tick gate.
+  // Statistical trigger quality remains mandatory; weaker evidence cannot use this relaxation.
+  const key=x=>(x%2===0?"EVEN":"ODD");
+  const recent=d.slice(-3).map(key), one=recent.length>=1&&recent.at(-1)===selectedSide;
+  const two=recent.length>=2&&recent.slice(-2).every(x=>x===selectedSide);
+  const three=recent.length>=3&&recent.every(x=>x===selectedSide);
+  const score=Number(candidate.score)||0;
+  const confidence=parseInt(candidate.confidence,10)||0;
+  const strongHistorical=score>=6&&confidence>=78;
+  if(!strongHistorical||(!one)||(!two&&score<8)||(!three&&score<7))return null;
+  const confirmation=three?"3-tick live follow-through confirmed":two?"2-tick live follow-through confirmed":"1-tick live follow-through confirmed; 2–3 ticks remain confidence boosters";
+  return {...candidate,reason:candidate.reason+" "+confirmation+" for "+selectedSide+".",evidence:candidate.evidence+" • "+confirmation+"."};
 }
 
 function renderEvenOdd(root,d,last,n){
@@ -720,16 +728,21 @@ function riseFallEntry(prices,analysis){
   if(!best)return null;
   const strong=(best.r1>=.55||best.r2>=.55)&&best.recentRate>=.52&&best.total>=10&&best.score>=55&&(!second||best.score-second.score>=1);
   if(!strong)return null;
-  // Historical trigger statistics are not enough: require actual live 3-move continuation.
+  // Live follow-through strengthens the decision, but 3 moves are not mandatory
+  // when historical trigger quality and 1–2 move reaction evidence are already strong.
   const liveFollowThrough=dirs.slice(-3);
-  if(liveFollowThrough.length<3||!liveFollowThrough.every(x=>x===targetDir))return null;
+  const live1=liveFollowThrough.length>=1&&liveFollowThrough.at(-1)===targetDir;
+  const live2=liveFollowThrough.length>=2&&liveFollowThrough.slice(-2).every(x=>x===targetDir);
+  const live3=liveFollowThrough.length>=3&&liveFollowThrough.every(x=>x===targetDir);
+  const historyStrong=best.total>=15&&best.score>=55&&best.recentRate>=.53&&(best.r1>=.54||best.r2>=.53);
+  if(!historyStrong||!live1||(!live2&&best.score<65)||(!live3&&best.score<60))return null;
   let confidence=Math.round(70+(best.r1-.5)*45+(best.r2-.5)*35+(best.r3-.5)*15+(best.recentRate-.5)*25+Math.min(6,best.total/25));
   confidence=Math.max(60,Math.min(88,confidence));
   return {
     type:"PATTERN",status:"CONFIRMED ENTRY",main:best.pattern+" → "+target,
     confidence:confidence+"%",
-    reason:"Historical trigger reaction is favorable and the latest three actual price moves confirm "+target+".",
-    evidence:best.total+" trigger observations • latest 3 price-move follow-through confirmed."
+    reason:"Historical trigger quality passed independent sample, reaction and recent-stability checks; "+(live3?"3-tick":live2?"2-tick":"1-tick")+" live follow-through supports "+target+".",
+    evidence:best.total+" trigger observations • r1 "+Math.round(best.r1*100)+"% • r2 "+Math.round(best.r2*100)+"% • recent "+Math.round(best.recentRate*100)+"% • "+(live3?"3-tick":live2?"2-tick":"1-tick")+" live confirmation."
   };
 }
 
