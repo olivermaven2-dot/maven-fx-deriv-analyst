@@ -155,6 +155,7 @@ function processOUValidationTick(digit){
   const v=state.ouValidation;
   for(let i=v.pending.length-1;i>=0;i--){
     const p=v.pending[i];
+    if(p.market!==state.symbol){v.pending.splice(i,1);continue;}
     p.steps++;
     p.hits.push(p.side==="OVER"?digit>p.selectedDigit:digit<p.selectedDigit);
     const key=ouValidationRecordKey(p.market,p.selectedDigit,p.side,p.candidate);
