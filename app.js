@@ -617,16 +617,16 @@ function selectParityEntry(d,selectedSide){
   // Statistical trigger quality remains mandatory; weaker evidence cannot use this relaxation.
   const key=x=>(x%2===0?"E":"O");
   const recent=d.slice(-500).map(key);
-  const pattern=candidate.type==="PATTERN"?String(candidate.main).split(" → ").slice(0,-1):[candidate.trigger];
+  const triggerPattern=candidate.type==="PATTERN"?String(candidate.main).split(" → ").slice(0,-1):[candidate.trigger];
   const score=Number(candidate.score)||0;
   const confidence=parseInt(candidate.confidence,10)||0;
   const strongHistorical=score>=6&&confidence>=78;
   let depth=0;
   for(const k of [3,2,1]){
-    if(recent.length<pattern.length+k)continue;
-    const start=recent.length-pattern.length-k;
-    const matched=pattern.every((v,i)=>recent[start+i]===v);
-    const follow=recent.slice(start+pattern.length);
+    if(recent.length<triggerPattern.length+k)continue;
+    const start=recent.length-triggerPattern.length-k;
+    const matched=triggerPattern.every((v,i)=>recent[start+i]===v);
+    const follow=recent.slice(start+triggerPattern.length);
     if(matched&&follow.length===k&&follow.every(v=>v===selectedSide)){depth=k;break;}
   }
   if(!strongHistorical||!depth||(depth<2&&score<8)||(depth<3&&score<7))return null;
