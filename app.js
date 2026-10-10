@@ -664,7 +664,7 @@ function selectParityEntry(d,selectedSide){
     const start=recent.length-triggerPattern.length-k;
     const matched=triggerPattern.every((v,i)=>recent[start+i]===v);
     const follow=recent.slice(start+triggerPattern.length);
-    if(matched&&follow.length===k&&follow.every(v=>v===selectedSide)){depth=k;break;}
+    if(matched&&follow.length===k&&follow.every(v=>v===(selectedSide==="EVEN"?"E":"O"))){depth=k;break;}
   }
   if(!strongHistorical||!depth||(depth<2&&score<8)||(depth<3&&score<7))return null;
   const confirmation=depth===3?"3-tick live follow-through confirmed":depth===2?"2-tick live follow-through confirmed":"1-tick live follow-through confirmed; 2–3 ticks remain confidence boosters";
