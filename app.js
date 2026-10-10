@@ -615,16 +615,23 @@ function selectParityEntry(d,selectedSide){
   const candidate=!pattern?reaction:!reaction?pattern:(reaction.score>=pattern.score?reaction:pattern);
   // Live follow-through is a confidence booster, not a rigid 3-tick gate.
   // Statistical trigger quality remains mandatory; weaker evidence cannot use this relaxation.
-  const key=x=>(x%2===0?"EVEN":"ODD");
-  const recent=d.slice(-3).map(key), one=recent.length>=1&&recent.at(-1)===selectedSide;
-  const two=recent.length>=2&&recent.slice(-2).every(x=>x===selectedSide);
-  const three=recent.length>=3&&recent.every(x=>x===selectedSide);
+  const key=x=>(x%2===0?"E":"O");
+  const recent=d.slice(-500).map(key);
+  const pattern=candidate.type==="PATTERN"?String(candidate.main).split(" → ").slice(0,-1):[candidate.trigger];
   const score=Number(candidate.score)||0;
   const confidence=parseInt(candidate.confidence,10)||0;
   const strongHistorical=score>=6&&confidence>=78;
-  if(!strongHistorical||(!one)||(!two&&score<8)||(!three&&score<7))return null;
-  const confirmation=three?"3-tick live follow-through confirmed":two?"2-tick live follow-through confirmed":"1-tick live follow-through confirmed; 2–3 ticks remain confidence boosters";
-  return {...candidate,reason:candidate.reason+" "+confirmation+" for "+selectedSide+".",evidence:candidate.evidence+" • "+confirmation+"."};
+  let depth=0;
+  for(const k of [3,2,1]){
+    if(recent.length<pattern.length+k)continue;
+    const start=recent.length-pattern.length-k;
+    const matched=pattern.every((v,i)=>recent[start+i]===v);
+    const follow=recent.slice(start+pattern.length);
+    if(matched&&follow.length===k&&follow.every(v=>v===selectedSide)){depth=k;break;}
+  }
+  if(!strongHistorical||!depth||(depth<2&&score<8)||(depth<3&&score<7))return null;
+  const confirmation=depth===3?"3-tick live follow-through confirmed":depth===2?"2-tick live follow-through confirmed":"1-tick live follow-through confirmed; 2–3 ticks remain confidence boosters";
+  return {...candidate,reason:candidate.reason+" Current trigger pattern and "+confirmation+" for "+selectedSide+".",evidence:candidate.evidence+" • live trigger matched • "+confirmation+"."};
 }
 
 function renderEvenOdd(root,d,last,n){
@@ -728,21 +735,26 @@ function riseFallEntry(prices,analysis){
   if(!best)return null;
   const strong=(best.r1>=.55||best.r2>=.55)&&best.recentRate>=.52&&best.total>=10&&best.score>=55&&(!second||best.score-second.score>=1);
   if(!strong)return null;
-  // Live follow-through strengthens the decision, but 3 moves are not mandatory
-  // when historical trigger quality and 1–2 move reaction evidence are already strong.
-  const liveFollowThrough=dirs.slice(-3);
-  const live1=liveFollowThrough.length>=1&&liveFollowThrough.at(-1)===targetDir;
-  const live2=liveFollowThrough.length>=2&&liveFollowThrough.slice(-2).every(x=>x===targetDir);
-  const live3=liveFollowThrough.length>=3&&liveFollowThrough.every(x=>x===targetDir);
+  // Require the selected historical pattern to be present in the current stream,
+  // followed by 1–3 target-direction moves. Follow-through is flexible, not a fixed 3-tick gate.
+  const pattern=best.pattern.split(" → ");
+  let depth=0;
+  for(const k of [3,2,1]){
+    if(dirs.length<pattern.length+k)continue;
+    const start=dirs.length-pattern.length-k;
+    const matched=pattern.every((v,i)=>dirs[start+i]===v);
+    const follow=dirs.slice(start+pattern.length);
+    if(matched&&follow.length===k&&follow.every(x=>x===targetDir)){depth=k;break;}
+  }
   const historyStrong=best.total>=15&&best.score>=55&&best.recentRate>=.53&&(best.r1>=.54||best.r2>=.53);
-  if(!historyStrong||!live1||(!live2&&best.score<65)||(!live3&&best.score<60))return null;
+  if(!historyStrong||!depth||(depth<2&&best.score<65)||(depth<3&&best.score<60))return null;
   let confidence=Math.round(70+(best.r1-.5)*45+(best.r2-.5)*35+(best.r3-.5)*15+(best.recentRate-.5)*25+Math.min(6,best.total/25));
   confidence=Math.max(60,Math.min(88,confidence));
   return {
     type:"PATTERN",status:"CONFIRMED ENTRY",main:best.pattern+" → "+target,
     confidence:confidence+"%",
-    reason:"Historical trigger quality passed independent sample, reaction and recent-stability checks; "+(live3?"3-tick":live2?"2-tick":"1-tick")+" live follow-through supports "+target+".",
-    evidence:best.total+" trigger observations • r1 "+Math.round(best.r1*100)+"% • r2 "+Math.round(best.r2*100)+"% • recent "+Math.round(best.recentRate*100)+"% • "+(live3?"3-tick":live2?"2-tick":"1-tick")+" live confirmation."
+    reason:"Historical trigger quality passed independent sample, reaction and recent-stability checks; current pattern matched with "+depth+" target-direction live move(s).",
+    evidence:best.total+" trigger observations • r1 "+Math.round(best.r1*100)+"% • r2 "+Math.round(best.r2*100)+"% • recent "+Math.round(best.recentRate*100)+"% • live trigger matched • "+depth+"-tick follow-through."
   };
 }
 
@@ -763,7 +775,7 @@ function renderRiseFall(root,last,n){
     main:a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"?"NO CONFIRMED ENTRY":"NO ACTIVE ENTRY",
     confidence:"—",
     reason:a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"
-      ?"Waiting for a validated historical trigger and three consecutive live price moves toward "+a.selected+"."
+      ?"Waiting for the historical trigger pattern to match the live stream and show qualified 1–3 move follow-through toward "+a.selected+"."
       :"Entry activates only when the selected direction reaches SIGNAL or STRONG SIGNAL."
   };
   const latest=a.stats.map(x=>x.directional>=10?Math.round(x.rate*100)+"% RISE":"—").join(" / ");
@@ -783,7 +795,7 @@ function renderRiseFall(root,last,n){
     "Selected-direction support: "+Math.round(a.recentTarget*100)+"% • movement-weighted rise: "+Math.round(a.recentMove*100)+"%",
     "Momentum "+Math.round(a.momentum*100)+" • persistence "+Math.round(a.persistence*100)+" • target streak "+a.streak,
     "Reversal pressure "+Math.round(a.reversalPressure*100)+" • evidence "+Math.round(a.evidence*100)+"%",
-    entry?"✓ Confirmed entry: 3 actual price moves support "+a.selected:"× No entry confirmed yet; historical patterns alone cannot trigger an entry"
+    entry?"✓ Confirmed entry: historical trigger matched the live stream with qualified follow-through toward "+a.selected:"× No entry confirmed yet; historical patterns alone cannot trigger an entry"
   ],n);
 }
 document.querySelectorAll(".parity-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedParity=btn.dataset.parity;renderParityControls();renderEngine()}));
