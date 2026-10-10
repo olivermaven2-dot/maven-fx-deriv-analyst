@@ -386,6 +386,63 @@ function renderOUControls(){
   });
   document.querySelectorAll(".ou-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.side===state.selectedSide));
 }
+
+function spikeRiskAssessment(){
+  const prices=state.ticks.map(t=>Number(t.quote)).filter(Number.isFinite);
+  const age=state.lastTickAt?Date.now()-state.lastTickAt:Infinity;
+  if(!state.connected||age>15000)return {level:"UNKNOWN",title:"SPIKE RISK UNKNOWN",reason:"Live feed is disconnected or stale. New entries are blocked until fresh live ticks resume."};
+  if(prices.length<100)return {level:"UNKNOWN",title:"SPIKE RISK UNKNOWN",reason:"At least 100 live/history price points are needed to establish a market-specific movement baseline."};
+  const moves=[];
+  for(let i=1;i<prices.length;i++)moves.push(Math.abs(prices[i]-prices[i-1]));
+  const nonzero=moves.filter(x=>x>0);
+  if(nonzero.length<40)return {level:"UNKNOWN",title:"SPIKE RISK UNKNOWN",reason:"Not enough non-zero price changes to estimate abnormal movement reliably."};
+  const sorted=nonzero.slice().sort((a,b)=>a-b);
+  const median=sorted[Math.floor(sorted.length*.5)]||0;
+  const baseline=median||sorted[Math.floor(sorted.length*.75)]||0;
+  if(!(baseline>0))return {level:"UNKNOWN",title:"SPIKE RISK UNKNOWN",reason:"A stable movement baseline cannot be estimated from the current sample."};
+  const recent=moves.slice(-12);
+  const ratios=recent.map(x=>x/baseline);
+  const extreme=ratios.filter(x=>x>=5).length;
+  const elevated=ratios.filter(x=>x>=3.2).length;
+  let reversals=0,adjacent=0;
+  const signed=[];
+  for(let i=Math.max(1,prices.length-13);i<prices.length;i++){
+    const delta=prices[i]-prices[i-1];
+    if(delta!==0)signed.push(Math.sign(delta));
+  }
+  for(let i=1;i<signed.length;i++){adjacent++;if(signed[i]!==signed[i-1])reversals++}
+  const reversalRate=adjacent?reversals/adjacent:0;
+  if(extreme>=2||ratios.at(-1)>=7|| (elevated>=4&&reversalRate>=.65))
+    return {level:"HIGH",title:"HIGH SPIKE RISK",reason:"Recent price movement is unusually large or clustered, or volatility is unstable. New entry recommendations are blocked."};
+  if(extreme===1||elevated>=2||reversalRate>=.78)
+    return {level:"MODERATE",title:"MODERATE SPIKE RISK",reason:"Movement is elevated or reversals are frequent. Treat signals cautiously; stronger confirmation is required."};
+  return {level:"LOW",title:"LOW DETECTED SPIKE RISK",reason:"No current spike trigger was detected against the recent market-specific baseline. This is not a guarantee of safety."};
+}
+function applySpikeRiskProtection(root){
+  const r=spikeRiskAssessment();
+  const old=root.querySelector(".spike-risk-banner");if(old)old.remove();
+  const banner=document.createElement("div");
+  banner.className="spike-risk-banner spike-risk-"+r.level.toLowerCase();
+  banner.innerHTML='<strong>'+esc(r.title)+'</strong><div>'+esc(r.reason)+'</div>';
+  const panelRoot=root.querySelector(".engine-panel");
+  if(!panelRoot)return;
+  const kicker=panelRoot.querySelector(".panel-kicker");
+  if(kicker)kicker.insertAdjacentElement("afterend",banner);else panelRoot.prepend(banner);
+  if(r.level==="HIGH"||r.level==="UNKNOWN"){
+    const signal=panelRoot.querySelector(".state");
+    if(signal){signal.textContent="ENTRY BLOCKED";signal.className="state none"}
+    const reason=panelRoot.querySelector(".reason");
+    if(reason)reason.textContent="The analysis may still show a directional setup, but the shared spike-risk protection layer is blocking new entry recommendations.";
+    const entry=panelRoot.querySelector(".entry");
+    if(entry)entry.innerHTML='<div class="entry-head">ENTRY PROTECTION</div><div class="entry-main">NO ENTRY — '+esc(r.title)+'</div><div class="entry-meta">'+esc(r.reason)+'</div>';
+    const why=panelRoot.querySelector(".why ul");
+    if(why){const li=document.createElement("li");li.className="block";li.textContent="× Shared spike-risk protection blocked entry eligibility.";why.prepend(li)}
+  }else if(r.level==="MODERATE"){
+    const why=panelRoot.querySelector(".why ul");
+    if(why){const li=document.createElement("li");li.textContent="! Moderate spike risk: confidence is reduced; wait for conditions to normalize.";why.prepend(li)}
+  }
+}
+
 function renderEngine(){
   const d=state.digits, n=d.length, c=counts(d), last=d.at(-1);
   const root=$("engineRoot");
@@ -397,6 +454,7 @@ function renderEngine(){
   if(state.engine==="overunder")renderOverUnder(root,d,c,last,n);
   if(state.engine==="evenodd")renderEvenOdd(root,d,last,n);
   if(state.engine==="risefall")renderRiseFall(root,last,n);
+  applySpikeRiskProtection(root);
 }
 function panel(stateText,reason,entry,why,n){
   const cls=stateText==="STRONG SIGNAL"?"strong":stateText==="SIGNAL"?"signal":stateText==="NO SIGNAL"||stateText==="NO ENTRY"?"none":"wait";
@@ -724,5 +782,5 @@ marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symb
 let touchX=0,touchY=0;
 document.querySelector(".engine-nav").addEventListener("touchstart",e=>{touchX=e.changedTouches[0].clientX;touchY=e.changedTouches[0].clientY},{passive:true});
 document.querySelector(".engine-nav").addEventListener("touchend",e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)){const names=["overunder","evenodd","risefall"],i=names.indexOf(state.engine),next=names[Math.max(0,Math.min(2,i+(dx<0?1:-1)))];document.querySelector(`[data-engine="${next}"]`).click()}},{passive:true});
-setInterval(()=>{if(state.lastTickAt){$("diagAge").textContent=Math.round((Date.now()-state.lastTickAt)/1000)+"s";if(Date.now()-state.lastTickAt>15000&&state.connected)setStatus("offline","Waiting for data")}},1000);
+setInterval(()=>{if(state.lastTickAt){$("diagAge").textContent=Math.round((Date.now()-state.lastTickAt)/1000)+"s";if(Date.now()-state.lastTickAt>15000&&state.connected)setStatus("offline","Waiting for data")}const root=$("engineRoot");if(root&&root.querySelector(".engine-panel"))applySpikeRiskProtection(root)},1000);
 connect();
