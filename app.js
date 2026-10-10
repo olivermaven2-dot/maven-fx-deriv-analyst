@@ -144,7 +144,7 @@ function ouValidationKey(){
 function resetOUValidationIfNeeded(){
   const key=ouValidationKey();
   if(state.ouValidation.key!==key){
-    state.ouValidation={key,pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"};
+    state.ouValidation={key,pending:state.ouValidation.pending||[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"};
   }
 }
 function ouValidationRecordKey(market,digit,side,candidate){
@@ -169,10 +169,12 @@ function processOUValidationTick(digit){
       }
       rec.lastUpdated=Date.now();
     }
-    for(const horizon of [1,2,3]){
-      if(p.steps===horizon){
-        v.completed[horizon].n++;
-        if(p.hits.slice(0,horizon).every(Boolean))v.completed[horizon].hits++;
+    if(p.selectedDigit===state.selectedDigit&&p.side===state.selectedSide){
+      for(const horizon of [1,2,3]){
+        if(p.steps===horizon){
+          v.completed[horizon].n++;
+          if(p.hits.slice(0,horizon).every(Boolean))v.completed[horizon].hits++;
+        }
       }
     }
     if(p.steps>=3)v.pending.splice(i,1);
