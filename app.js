@@ -333,6 +333,8 @@ function overUnderEntry(d,selectedDigit,selectedSide){
   const candidates=[];
   const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
   for(let candidate=0;candidate<=9;candidate++){
+    // Exclude spike-prone extreme entry digits for the selected direction.
+    if((selectedSide==="UNDER"&&(candidate===0||candidate===1))||(selectedSide==="OVER"&&(candidate===8||candidate===9)))continue;
     const t=ouTransitionStats(d,candidate,selectedDigit,selectedSide);
     if(t.total<20||t.recentTotal<5)continue;
     const sample=Math.min(1,t.total/100),recentWeight=Math.min(1,t.recentTotal/40);
