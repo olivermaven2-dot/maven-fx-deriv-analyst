@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="description" content="Maven FX Deriv Analyst — live market analysis">
 <title>Maven FX Deriv Analyst</title>
-<link rel="stylesheet" href="styles.css?v=20261011-subscribed-market1">
+<link rel="stylesheet" href="styles.css?v=20261012-navigation-layout1">
 </head>
 <body>
 <header class="topbar">
@@ -54,11 +54,12 @@
     </section>
   </div>
 
-  <section class="control-card">
-    <label for="marketSelect">MARKET</label>
+  <section class="control-card market-picker-card" aria-label="Market selection">
+    <label for="marketSelect">ACTIVE MARKET · CHOOSE FEED</label>
     <select id="marketSelect" disabled><option>Loading markets…</option></select>
   </section>
 
+  <div class="workspace-label"><span class="workspace-label-dot"></span> ANALYSIS WORKSPACE <span class="workspace-current" id="workspaceCurrent">OVER/UNDER</span></div>
   <nav class="engine-nav" aria-label="Analysis engines" role="tablist">
     <button class="engine-tab active" data-engine="overunder" role="tab">OVER/UNDER</button>
     <button class="engine-tab" data-engine="evenodd" role="tab">EVEN/ODD</button>
@@ -87,7 +88,7 @@
     </div>
   </section>
 
-  <section id="engineRoot" class="engine"></section>
+  <section id="engineRoot" class="engine" aria-label="Selected analysis engine"></section>
 
   <section id="ouValidationCard" class="ou-validation-card" aria-label="Over Under entry validation" style="display:none">
     <div class="ou-validation-title"><span>ENTRY ENGINE TRACK RECORD</span><span class="ou-validation-session">LIVE SESSION</span></div>
@@ -96,13 +97,13 @@
     <div id="ouValidationResults" aria-live="polite"></div>
   </section>
 
-  <section class="stream-card">
-    <div class="section-title"><span>DIGIT STREAM</span><span id="streamInfo">0 digits</span></div>
+  <section class="stream-card" aria-label="Recent live digit history">
+    <div class="section-title"><span>LIVE DIGIT HISTORY</span><span id="streamInfo">0 digits</span></div>
     <div id="digitStream" class="digit-stream" aria-live="polite"></div>
   </section>
 
   <details class="details">
-    <summary>Diagnostics</summary>
+    <summary>SYSTEM HEALTH &amp; DIAGNOSTICS</summary>
     <div class="diagnostics">
       <div><span>Connection</span><strong id="diagConnection">—</strong></div>
       <div><span>Ticks received</span><strong id="diagTicks">0</strong></div>
@@ -114,6 +115,6 @@
 </main>
 
 <footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261011-subscribed-market1"></script>
+<script src="app.js?v=20261012-navigation-layout1"></script>
 </body>
 </html>
