@@ -192,6 +192,7 @@ function syncDeepScannerSubscriptions(){
 }
 function receiveScannerTick(t){
   if(!t||!t.symbol||t.symbol===state.symbol)return;
+  for(const [req,sym] of Object.entries(state.deepScanner.subscribeRequests))if(sym===t.symbol)delete state.deepScanner.subscribeRequests[req];
   const r=state.deepScanner.data[t.symbol];if(!r)return;
   const quote=Number(t.quote);if(!Number.isFinite(quote))return;
   const epoch=t.epoch||Math.floor(Date.now()/1000),sig=String(epoch)+":"+String(quote);
@@ -277,7 +278,7 @@ function renderDeepScanner(rows=null){
   const best=rows.find(r=>r.score>0);
   if(winner){
     if(best){winner.innerHTML="<strong>"+esc(state.symbol===best.symbol?"AUTO-LOADED • "+best.name:"TOP MARKET • "+best.name)+"</strong><span>Score "+best.score+"/100 • "+best.signal+" • Entry digit "+best.entry+" • Risk "+best.risk+"</span>";}
-    else if(!state.deepScanner.autoLoaded)winner.innerHTML="<strong>SCANNING FOR A STRONG MARKET</strong><span>No market has passed all gates yet. The scanner will not force a selection.</span>";
+    else if(!state.deepScanner.autoLoaded&&Date.now()-state.deepScanner.startedAt>20000)winner.innerHTML="<strong>NO STRONG MARKET FOUND</strong><span>No market passed every evidence, entry and live-risk gate. Scanning continues.</span>";else if(!state.deepScanner.autoLoaded)winner.innerHTML="<strong>SCANNING FOR A STRONG MARKET</strong><span>No market has passed all gates yet. The scanner will not force a selection.</span>";
   }
   const results=$("deepScannerResults");if(!results)return;
   const show=rows.slice(0,8);
