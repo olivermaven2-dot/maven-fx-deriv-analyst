@@ -251,54 +251,44 @@ function deepScannerEvaluate(force=false){
   }
   rows.sort((a,b)=>b.score-a.score||b.evidence-a.evidence||b.sample-a.sample);
   ds.lastScanAt=Date.now();
-  const readyCount=state.markets.filter(m=>scannerRecord(m).digits.length>=100).length;
-  const waitComplete=readyCount===state.markets.length||Date.now()-ds.startedAt>20000;
-  if(rows.length){
-    const best=rows[0],current=rows.find(x=>x.symbol===state.symbol);
-    if(!ds.autoLoaded&&!ds.manualOverride&&waitComplete){
-      loadScannerMarket(best.symbol,false,best.score);ds.autoLoaded=true;
-    }else if(ds.autoLoaded&&!ds.manualOverride&&best.symbol!==state.symbol&&best.score>Math.max(current?.score||0,ds.lastLoadedScore)+8&&Date.now()-ds.switchAfter>30000){
-      loadScannerMarket(best.symbol,false,best.score);
-    }else if(ds.lastLoadedSymbol===state.symbol&&current)ds.lastLoadedScore=current.score;
-  }else if(!ds.autoLoaded&&!ds.manualOverride&&Date.now()-ds.startedAt>20000){
-    const winner=$("scannerWinner");if(winner)winner.innerHTML="<strong>NO STRONG MARKET FOUND</strong><span>No market passed every evidence, entry and live-risk gate. Scanning continues.</span>";
-  }
+  ds.strongestCandidate=rows[0]||null;
   renderDeepScanner(rows);
   return rows;
+}
+function loadStrongestScannerMarket(){
+  const ds=state.deepScanner;
+  const best=ds.strongestCandidate;
+  if(!best){deepScannerEvaluate(true);return;}
+  loadScannerMarket(best.symbol,true,best.score);
+  ds.lastLoadedSymbol=best.symbol;ds.lastLoadedScore=best.score;ds.autoLoaded=false;ds.manualOverride=true;
+  const winner=$("scannerWinner");
+  if(winner)winner.innerHTML="<strong>MARKET LOADED • "+esc(best.name)+"</strong><span>"+esc(best.symbol)+" loaded into the Over/Under engine. Analysis will refresh using this market's own live data.</span>";
+  renderDeepScanner([best]);
 }
 function loadScannerMarket(symbol,manual=false,score=0){
   const m=state.markets.find(x=>x.symbol===symbol);if(!m)return;
   state.deepScanner.lastLoadedSymbol=symbol;state.deepScanner.lastLoadedScore=score;state.deepScanner.switchAfter=Date.now();
-  if(manual){state.deepScanner.manualOverride=true;state.deepScanner.autoLoaded=true;}
+  if(manual){state.deepScanner.manualOverride=true;state.deepScanner.autoLoaded=false;}
   if(state.symbol===symbol){renderDeepScanner();return}
   state.symbol=m.symbol;state.marketName=m.name;state.pipSize=m.pipSize;marketSelect.value=m.symbol;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true);syncDeepScannerSubscriptions();renderDeepScanner();
 }
 function renderDeepScanner(rows=null){
   const card=$("deepScannerCard");if(!card)return;
   const ds=state.deepScanner;rows=rows||[];
-  if(!rows.length){
-    rows=[];
-    for(const m of state.markets){const r=ds.data[m.symbol];if(!r)continue;const risk=scannerRisk(r);if(r.digits.length>=100)rows.push({symbol:m.symbol,name:m.name,score:0,signal:"COLLECTING",evidence:0,entry:"—",entryScore:0,sample:r.digits.length,risk:risk.level,riskReason:risk.reason,reason:r.error||"Building a qualifying live sample"});}
-    rows.sort((a,b)=>b.sample-a.sample);
-  }
+  const best=rows.find(r=>r.score>0)||ds.strongestCandidate||null;
   const total=state.markets.length,ready=state.markets.filter(m=>(ds.data[m.symbol]?.digits.length||0)>=100).length;
-  const status=$("deepScannerStatus");if(status)status.textContent=!state.connected?"FEED OFFLINE":rows.some(r=>r.score>0)?"RANKING":ready+"/"+total+" READY";
-  const progress=$("scannerProgress");if(progress)progress.textContent=ready+" of "+total+" markets have 100+ digits • Setup "+state.selectedSide+" "+state.selectedDigit;
+  const status=$("deepScannerStatus");if(status)status.textContent=!state.connected?"FEED OFFLINE":best?"STRONG SETUP READY":ready+"/"+total+" READY";
+  const progress=$("scannerProgress");if(progress)progress.textContent=ready+" of "+total+" markets checked internally • Setup "+state.selectedSide+" "+state.selectedDigit;
   const setup=$("scannerSetup");if(setup)setup.textContent=state.selectedSide+" "+state.selectedDigit;
-  const count=$("scannerResultCount");if(count)count.textContent=rows.filter(r=>r.score>0).length+" eligible";
   const winner=$("scannerWinner");
-  const best=rows.find(r=>r.score>0);
   if(winner){
-    if(best){winner.innerHTML="<strong>"+esc(state.symbol===best.symbol?"AUTO-LOADED • "+best.name:"TOP MARKET • "+best.name)+"</strong><span>Score "+best.score+"/100 • "+best.signal+" • Entry digit "+best.entry+" • Risk "+best.risk+"</span>";}
-    else if(!state.deepScanner.autoLoaded&&Date.now()-state.deepScanner.startedAt>20000)winner.innerHTML="<strong>NO STRONG MARKET FOUND</strong><span>No market passed every evidence, entry and live-risk gate. Scanning continues.</span>";else if(!state.deepScanner.autoLoaded)winner.innerHTML="<strong>SCANNING FOR A STRONG MARKET</strong><span>No market has passed all gates yet. The scanner will not force a selection.</span>";
+    if(best)winner.innerHTML="<strong>STRONGEST ELIGIBLE SETUP READY</strong><span>Signal "+esc(best.signal)+" • Evidence "+best.evidence+"% • Entry digit "+best.entry+" • Risk "+esc(best.risk)+". Press LOAD STRONGEST MARKET to switch your active market.</span>";
+    else winner.innerHTML="<strong>NO STRONG MARKET READY</strong><span>The scanner continues checking markets privately. Your current market selection will not change unless you press LOAD STRONGEST MARKET.</span>";
   }
-  const results=$("deepScannerResults");if(!results)return;
-  const show=rows.slice(0,8);
-  results.innerHTML=show.length?show.map((r,i)=>'<article class="scanner-result '+(r.symbol===state.symbol?'scanner-result-active':'')+'"><div class="scanner-rank">'+(i+1)+'</div><div class="scanner-result-main"><strong>'+esc(r.name)+'</strong><span>'+esc(r.symbol)+' • '+r.sample+' ticks • '+esc(r.signal)+'</span><span class="scanner-result-detail">Evidence '+r.evidence+'% • Entry digit '+r.entry+' • Risk '+esc(r.risk)+'</span><span class="scanner-result-reason">'+esc(r.reason||r.riskReason||"Collecting evidence")+'</span></div><div class="scanner-result-side"><b>'+(r.score?r.score+"/100":"—")+'</b><button type="button" data-load-scanner="'+esc(r.symbol)+'" '+(r.symbol===state.symbol?'disabled':'')+'>LOAD MARKET</button></div></article>').join(""):'<div class="scanner-empty">No eligible markets yet. The scanner is collecting separate live histories and checking entry evidence.</div>';
-  results.querySelectorAll("[data-load-scanner]").forEach(btn=>btn.addEventListener("click",()=>loadScannerMarket(btn.dataset.loadScanner,true,Number(btn.closest(".scanner-result")?.querySelector(".scanner-result-side b")?.textContent)||0)));
-  const autoBtn=$("autoSelectBtn");if(autoBtn)autoBtn.textContent="AUTO-SELECT: "+(ds.enabled?"ON":"OFF");
+  const loadBtn=$("loadStrongestBtn");if(loadBtn){loadBtn.disabled=!best;loadBtn.textContent=best?"LOAD STRONGEST MARKET":"NO STRONG MARKET READY";}
+  const results=$("deepScannerResults");if(results){results.innerHTML="";results.hidden=true;}
+  const count=$("scannerResultCount");if(count)count.textContent="";
 }
-
 function ouValidationKey(){
   return state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide;
 }
@@ -998,10 +988,10 @@ function renderRiseFall(root,last,n){
 }
 document.querySelectorAll(".parity-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedParity=btn.dataset.parity;renderParityControls();renderEngine()}));
 document.querySelectorAll(".rise-fall-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedRiseFall=btn.dataset.direction;renderRiseFallControls();renderEngine()}));
-document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
-document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
+document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.strongestCandidate=null;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
+document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.strongestCandidate=null;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.engine=btn.dataset.engine;renderEngine()}));
-const scanNowBtn=$("scanNowBtn");if(scanNowBtn)scanNowBtn.addEventListener("click",()=>{deepScannerEvaluate(true);renderDeepScanner()});const autoSelectBtn=$("autoSelectBtn");if(autoSelectBtn)autoSelectBtn.addEventListener("click",()=>{state.deepScanner.enabled=!state.deepScanner.enabled;if(state.deepScanner.enabled){state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.startedAt=Date.now();startDeepScanner()}renderDeepScanner()});
+const scanNowBtn=$("scanNowBtn");if(scanNowBtn)scanNowBtn.addEventListener("click",()=>{deepScannerEvaluate(true)});const loadStrongestBtn=$("loadStrongestBtn");if(loadStrongestBtn)loadStrongestBtn.addEventListener("click",loadStrongestScannerMarket);
 const payoutInput=$("ouPayoutPercent");if(payoutInput)payoutInput.addEventListener("input",()=>{state.ouPayoutPercent=Math.max(1,Math.min(500,Number(payoutInput.value)||95));renderOUValidationPanel()});
 marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true);syncDeepScannerSubscriptions();renderDeepScanner();}});
 let touchX=0,touchY=0;
