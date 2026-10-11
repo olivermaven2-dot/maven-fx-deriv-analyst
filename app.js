@@ -999,3 +999,15 @@ document.querySelector(".engine-nav").addEventListener("touchstart",e=>{touchX=e
 document.querySelector(".engine-nav").addEventListener("touchend",e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)){const names=["overunder","evenodd","risefall"],i=names.indexOf(state.engine),next=names[Math.max(0,Math.min(2,i+(dx<0?1:-1)))];document.querySelector(`[data-engine="${next}"]`).click()}},{passive:true});
 setInterval(()=>{if(state.deepScanner.enabled&&Date.now()-state.deepScanner.lastScanAt>4000)deepScannerEvaluate(false);if(state.lastTickAt){$("diagAge").textContent=Math.round((Date.now()-state.lastTickAt)/1000)+"s";if(Date.now()-state.lastTickAt>15000&&state.connected)setStatus("offline","Waiting for data")}const root=$("engineRoot");if(root&&root.querySelector(".engine-panel"))applySpikeRiskProtection(root)},1000);
 connect();
+// Deep Scanner floating popup controls
+(function setupDeepScannerPopup(){
+  const fab=document.getElementById("deepScannerFab"),modal=document.getElementById("deepScannerModal"),close=document.getElementById("closeDeepScanner"),dot=document.getElementById("deepScannerFabDot");
+  if(!fab||!modal||!close)return;
+  const open=()=>{modal.classList.add("open");modal.setAttribute("aria-hidden","false");fab.setAttribute("aria-expanded","true");document.body.style.overflow="hidden";close.focus();};
+  const shut=()=>{modal.classList.remove("open");modal.setAttribute("aria-hidden","true");fab.setAttribute("aria-expanded","false");document.body.style.overflow="";fab.focus();};
+  fab.addEventListener("click",open);close.addEventListener("click",shut);
+  modal.querySelectorAll("[data-close-scanner]").forEach(el=>el.addEventListener("click",shut));
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&modal.classList.contains("open"))shut();});
+  const updateDot=()=>{const b=document.getElementById("loadStrongestBtn");if(dot&&b&&!b.disabled)dot.classList.add("ready");else if(dot)dot.classList.remove("ready");};
+  setInterval(updateDot,1200);updateDot();
+})();
