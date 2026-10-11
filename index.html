@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="description" content="Maven FX Deriv Analyst — live market analysis">
 <title>Maven FX Deriv Analyst</title>
-<link rel="stylesheet" href="styles.css?v=20261011-deep-scanner-manual1">
+<link rel="stylesheet" href="styles.css?v=20261011-scanner-popup1">
 </head>
 <body>
 <header class="topbar">
@@ -31,9 +31,14 @@
   </section>
 
 
-  <section id="deepScannerCard" class="deep-scanner-card" aria-label="Deep market scanner">
+  <button id="deepScannerFab" class="deep-scanner-fab" type="button" aria-label="Open Deep Market Scanner" aria-controls="deepScannerModal" aria-expanded="false"><span class="scanner-fab-icon" aria-hidden="true">⌕</span><span class="scanner-fab-label">SCANNER</span><span id="deepScannerFabDot" class="scanner-fab-dot" aria-hidden="true"></span></button>
+  <div id="deepScannerModal" class="deep-scanner-modal" aria-hidden="true">
+    <div class="deep-scanner-modal-backdrop" data-close-scanner></div>
+    <section class="deep-scanner-dialog" role="dialog" aria-modal="true" aria-labelledby="deepScannerDialogTitle">
+      <div class="deep-scanner-dialog-top"><span>MARKET INTELLIGENCE</span><button id="closeDeepScanner" class="deep-scanner-close" type="button" aria-label="Close Deep Market Scanner">×</button></div>
+  <section id="deepScannerCard" class="deep-scanner-card deep-scanner-card-modal" aria-label="Deep market scanner">
     <div class="deep-scanner-head">
-      <div><span class="eyebrow">MAVEN FX • MARKET INTELLIGENCE</span><h2>DEEP MARKET SCANNER</h2></div>
+      <div><span class="eyebrow">MAVEN FX • MARKET INTELLIGENCE</span><h2 id="deepScannerDialogTitle">DEEP MARKET SCANNER</h2></div>
       <span id="deepScannerStatus" class="scanner-status">INITIALIZING</span>
     </div>
     <p class="deep-scanner-intro">Quietly scans available Volatility and Jump Indices against your selected Over/Under digit and direction. Your active market is never changed automatically.</p>
@@ -45,6 +50,8 @@
     <div class="scanner-actions"><button id="scanNowBtn" type="button">SCAN NOW</button><button id="loadStrongestBtn" type="button" disabled>NO STRONG MARKET READY</button></div>
     <p class="scanner-footnote">Individual scanned markets and ranked results are kept off this panel. Only the strongest eligible setup is summarized. Scores rank evidence quality, not win probability. Analysis only — no contracts are placed.</p>
   </section>
+    </section>
+  </div>
 
   <section class="control-card">
     <label for="marketSelect">MARKET</label>
@@ -106,6 +113,6 @@
 </main>
 
 <footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261011-deep-scanner-manual2"></script>
+<script src="app.js?v=20261011-scanner-popup1"></script>
 </body>
 </html>
