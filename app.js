@@ -261,9 +261,9 @@ function loadStrongestScannerMarket(){
   if(!best){deepScannerEvaluate(true);return;}
   loadScannerMarket(best.symbol,true,best.score);
   ds.lastLoadedSymbol=best.symbol;ds.lastLoadedScore=best.score;ds.autoLoaded=false;ds.manualOverride=true;
+  renderDeepScanner([best]);
   const winner=$("scannerWinner");
   if(winner)winner.innerHTML="<strong>MARKET LOADED • "+esc(best.name)+"</strong><span>"+esc(best.symbol)+" loaded into the Over/Under engine. Analysis will refresh using this market's own live data.</span>";
-  renderDeepScanner([best]);
 }
 function loadScannerMarket(symbol,manual=false,score=0){
   const m=state.markets.find(x=>x.symbol===symbol);if(!m)return;
