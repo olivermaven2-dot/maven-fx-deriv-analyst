@@ -70,7 +70,7 @@ connect();return;}
   ws.onopen=()=>{
     clearTimeout(state.connectTimer);
     resetDeepScannerSubscriptions();
-    state.connected=true; state.reconnectDelay=1000; state.lastError="—";
+    state.connected=true; state.reconnectDelay=1000; state.lastError="—";renderSubscribedMarketStatus("switching");
     setStatus("live","LIVE — testing R_100 feed");
     state.lastMessage="WebSocket OPEN";
     request({ping:1,req_id:nextReq()});
@@ -87,7 +87,7 @@ connect();return;}
   ws.onclose=e=>{
     clearTimeout(state.connectTimer);
     state.connected=false;
-    state.lastError=`Close ${e.code}${e.reason?": "+e.reason:""}${e.code===1006?" — abnormal close before a WebSocket close frame":""}`;
+    state.lastError=`Close ${e.code}${e.reason?": "+e.reason:""}${e.code===1006?" — abnormal close before a WebSocket close frame":""}`;renderSubscribedMarketStatus("switching");
     state.endpointIndex=(state.endpointIndex+1)%WS_URLS.length;
     setStatus("offline",`Disconnected (${e.code}) — switching endpoint`);
     scheduleReconnect();
@@ -118,6 +118,7 @@ function handleMessage(d){
   if(d.msg_type==="tick"){
     const t=d.tick;
     if(t&&t.symbol===state.symbol){
+      renderSubscribedMarketStatus("connected");
       const r=state.deepScanner.data[t.symbol];
       const pending=Object.entries(state.deepScanner.subscribeRequests).find(([,sym])=>sym===t.symbol);
       const scannerSub=!!(r?.subscriptionId&&t.subscription?.id===r.subscriptionId)||(!!pending&&String(t.req_id)===String(pending[0]));
@@ -140,14 +141,14 @@ function loadMarkets(raw){
   for(const [g,items] of Object.entries(groups)){const og=document.createElement("optgroup");og.label=g;for(const m of items){const o=document.createElement("option");o.value=m.symbol;o.textContent=m.name;o.dataset.name=m.name;og.appendChild(o)}marketSelect.appendChild(og)}
   marketSelect.disabled=!state.markets.length;
   const selected=state.markets.find(m=>m.symbol===state.symbol)||state.markets[0];
-  if(selected){state.symbol=selected.symbol;state.marketName=selected.name;state.pipSize=selected.pipSize;marketSelect.value=selected.symbol;$("marketName").textContent=selected.name;if(!state.marketStarted)startMarket(true)}
+  if(selected){state.symbol=selected.symbol;state.marketName=selected.name;state.pipSize=selected.pipSize;marketSelect.value=selected.symbol;$("marketName").textContent=selected.name;renderSubscribedMarketStatus("switching");if(!state.marketStarted)startMarket(true)}
   startDeepScanner();
 }
 function startMarket(force=false){
   if(!force && state.marketStarted && state.symbol==="R_100")return;
   state.marketStarted=true;
   const selected=state.markets.find(m=>m.symbol===state.symbol);if(selected?.pipSize!=null)state.pipSize=selected.pipSize;
-  state.ticks=[];state.digits=[];state.lastTickAt=0;$("lastPrice").textContent="—";$("lastDigit").textContent="—";renderStream();renderEngine();
+  state.ticks=[];state.digits=[];state.lastTickAt=0;renderSubscribedMarketStatus("switching");$("lastPrice").textContent="—";$("lastDigit").textContent="—";renderStream();renderEngine();
   request({ticks_history:state.symbol,end:"latest",count:1000,style:"ticks",req_id:nextReq()});
   request({ticks:state.symbol,subscribe:1,req_id:nextReq()});
   if($("diagSubscription"))$("diagSubscription").textContent=`Requested ${state.symbol}`;
@@ -993,7 +994,7 @@ document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.engine=btn.dataset.engine;renderEngine()}));
 const scanNowBtn=$("scanNowBtn");if(scanNowBtn)scanNowBtn.addEventListener("click",()=>{deepScannerEvaluate(true)});const loadStrongestBtn=$("loadStrongestBtn");if(loadStrongestBtn)loadStrongestBtn.addEventListener("click",loadStrongestScannerMarket);
 const payoutInput=$("ouPayoutPercent");if(payoutInput)payoutInput.addEventListener("input",()=>{state.ouPayoutPercent=Math.max(1,Math.min(500,Number(payoutInput.value)||95));renderOUValidationPanel()});
-marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true);syncDeepScannerSubscriptions();renderDeepScanner();}});
+marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;renderSubscribedMarketStatus("switching");state.marketStarted=false;startMarket(true);syncDeepScannerSubscriptions();renderDeepScanner();}});
 let touchX=0,touchY=0;
 document.querySelector(".engine-nav").addEventListener("touchstart",e=>{touchX=e.changedTouches[0].clientX;touchY=e.changedTouches[0].clientY},{passive:true});
 document.querySelector(".engine-nav").addEventListener("touchend",e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)){const names=["overunder","evenodd","risefall"],i=names.indexOf(state.engine),next=names[Math.max(0,Math.min(2,i+(dx<0?1:-1)))];document.querySelector(`[data-engine="${next}"]`).click()}},{passive:true});
@@ -1011,3 +1012,14 @@ connect();
   const updateDot=()=>{const b=document.getElementById("loadStrongestBtn");if(dot&&b&&!b.disabled)dot.classList.add("ready");else if(dot)dot.classList.remove("ready");};
   setInterval(updateDot,1200);updateDot();
 })();
+
+// Keep the extraction block explicit about the market whose tick feed is active.
+function renderSubscribedMarketStatus(mode="switching"){
+  const box=$("subscribedMarketStatus"),name=$("subscribedMarketName"),symbol=$("subscribedMarketSymbol");
+  if(!box||!name||!symbol)return;
+  const market=state.markets.find(m=>m.symbol===state.symbol);
+  const label=market?.name||state.marketName||state.symbol||"No market selected";
+  name.textContent=label;
+  symbol.textContent="Symbol: "+(state.symbol||"—")+" · "+(mode==="connected"?"Live tick subscription active":mode==="switching"?"Switching / requesting live tick feed":"Waiting for live tick feed");
+  box.classList.toggle("connected",mode==="connected");box.classList.toggle("switching",mode!=="connected");
+}
