@@ -115,8 +115,14 @@ function handleMessage(d){
     loadHistory(d.history?.prices||[],d.history?.times||[],d.history?.pip_size??d.pip_size??state.pipSize);return
   }
   if(d.msg_type==="tick"){
-    const t=d.tick;if(t&&t.symbol===state.symbol){receiveTick(t);syncCurrentIntoScanner(t)}
-    else receiveScannerTick(t);
+    const t=d.tick;
+    if(t&&t.symbol===state.symbol){
+      const r=state.deepScanner.data[t.symbol];
+      const pending=Object.entries(state.deepScanner.subscribeRequests).find(([,sym])=>sym===t.symbol);
+      const scannerSub=!!(r?.subscriptionId&&t.subscription?.id===r.subscriptionId)||(!!pending&&String(t.req_id)===String(pending[0]));
+      if(scannerSub){if(pending)delete state.deepScanner.subscribeRequests[pending[0]];if(t.subscription?.id){request({forget:t.subscription.id,req_id:nextReq()});delete state.deepScanner.subscriptions[t.symbol];}if(r){r.subscriptionId=null;r.subscribed=false;}return;}
+      receiveTick(t);syncCurrentIntoScanner(t);
+    }else receiveScannerTick(t);
   }
 }
 function normalizeMarket(m){
