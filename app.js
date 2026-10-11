@@ -69,6 +69,7 @@ connect();return;}
   },12000);
   ws.onopen=()=>{
     clearTimeout(state.connectTimer);
+    resetDeepScannerSubscriptions();
     state.connected=true; state.reconnectDelay=1000; state.lastError="—";
     setStatus("live","LIVE — testing R_100 feed");
     state.lastMessage="WebSocket OPEN";
@@ -146,7 +147,7 @@ function startMarket(force=false){
   if(!force && state.marketStarted && state.symbol==="R_100")return;
   state.marketStarted=true;
   const selected=state.markets.find(m=>m.symbol===state.symbol);if(selected?.pipSize!=null)state.pipSize=selected.pipSize;
-  state.ticks=[];state.digits=[];$("lastPrice").textContent="—";$("lastDigit").textContent="—";renderStream();renderEngine();
+  state.ticks=[];state.digits=[];state.lastTickAt=0;$("lastPrice").textContent="—";$("lastDigit").textContent="—";renderStream();renderEngine();
   request({ticks_history:state.symbol,end:"latest",count:1000,style:"ticks",req_id:nextReq()});
   request({ticks:state.symbol,subscribe:1,req_id:nextReq()});
   if($("diagSubscription"))$("diagSubscription").textContent=`Requested ${state.symbol}`;
@@ -163,6 +164,11 @@ function scannerRecord(m){
   const s=m.symbol;
   if(!state.deepScanner.data[s])state.deepScanner.data[s]={symbol:s,name:m.name,market:m.market,submarket:m.submarket,subgroup:m.subgroup,pipSize:m.pipSize,ticks:[],digits:[],lastTickAt:0,lastHistoryAt:0,historyReady:false,subscribed:false,seen:"",error:""};
   const r=state.deepScanner.data[s];r.name=m.name;r.market=m.market;r.submarket=m.submarket;r.subgroup=m.subgroup;if(m.pipSize!=null)r.pipSize=m.pipSize;return r;
+}
+function resetDeepScannerSubscriptions(){
+  const ds=state.deepScanner;
+  ds.historyRequests={};ds.subscribeRequests={};ds.subscriptions={};
+  for(const r of Object.values(ds.data)){r.subscribed=false;r.subscriptionId=null;r.historyReady=false;r.lastTickAt=0;r.seen="";}
 }
 function startDeepScanner(){
   const ds=state.deepScanner;if(!state.markets.length)return;
