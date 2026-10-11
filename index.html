@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="description" content="Maven FX Deriv Analyst — live market analysis">
 <title>Maven FX Deriv Analyst</title>
-<link rel="stylesheet" href="styles.css?v=20261011-deep-scanner1">
+<link rel="stylesheet" href="styles.css?v=20261011-deep-scanner-manual1">
 </head>
 <body>
 <header class="topbar">
@@ -36,15 +36,14 @@
       <div><span class="eyebrow">MAVEN FX • MARKET INTELLIGENCE</span><h2>DEEP MARKET SCANNER</h2></div>
       <span id="deepScannerStatus" class="scanner-status">INITIALIZING</span>
     </div>
-    <p class="deep-scanner-intro">Scans live Volatility and Jump Indices for your selected Over/Under digit and direction. The strongest eligible market is loaded automatically.</p>
+    <p class="deep-scanner-intro">Quietly scans available Volatility and Jump Indices against your selected Over/Under digit and direction. Your active market is never changed automatically.</p>
     <div class="scanner-selected">
-      <span>ACTIVE SCANNER SETUP</span><strong id="scannerSetup">OVER 2</strong>
-      <span id="scannerProgress">Preparing market histories…</span>
+      <span>SCANNING SETUP</span><strong id="scannerSetup">OVER 2</strong>
+      <span id="scannerProgress">Preparing independent market histories…</span>
     </div>
-    <div id="scannerWinner" class="scanner-winner"><strong>NO STRONG MARKET FOUND YET</strong><span>Collecting independent market evidence.</span></div>
-    <div class="scanner-actions"><button id="scanNowBtn" type="button">SCAN NOW</button><button id="autoSelectBtn" type="button" class="scanner-secondary">AUTO-SELECT: ON</button></div>
-    <div class="scanner-table-wrap"><div class="scanner-table-head"><span>RANKED MARKETS</span><span id="scannerResultCount">0 eligible</span></div><div id="deepScannerResults" class="deep-scanner-results"><div class="scanner-empty">Waiting for live market data…</div></div></div>
-    <p class="scanner-footnote">Scores rank evidence quality; they are not win probabilities. No qualifying market means no automatic selection. Analysis only — no contracts are placed.</p>
+    <div id="scannerWinner" class="scanner-winner"><strong>SCANNING FOR A STRONG MARKET</strong><span>No market changes until you press the load button.</span></div>
+    <div class="scanner-actions"><button id="scanNowBtn" type="button">SCAN NOW</button><button id="loadStrongestBtn" type="button" disabled>NO STRONG MARKET READY</button></div>
+    <p class="scanner-footnote">Individual scanned markets and ranked results are kept off this panel. Only the strongest eligible setup is summarized. Scores rank evidence quality, not win probability. Analysis only — no contracts are placed.</p>
   </section>
 
   <section class="control-card">
@@ -107,6 +106,6 @@
 </main>
 
 <footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261011-deep-scanner2"></script>
+<script src="app.js?v=20261011-deep-scanner-manual1"></script>
 </body>
 </html>
