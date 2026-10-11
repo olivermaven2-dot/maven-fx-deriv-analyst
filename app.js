@@ -24,7 +24,7 @@ function renderOverUnder(root,d,c,last,n){
 }
 const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
 
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
@@ -101,11 +101,23 @@ function nextReq(){return ++state.req}
 function request(obj){if(state.socket?.readyState===WebSocket.OPEN)state.socket.send(JSON.stringify(obj))}
 
 function handleMessage(d){
-  if(d.error){state.lastError=`${d.error.code||"API"}: ${d.error.message||"Deriv data error"}`;if($("diagError"))$("diagError").textContent=state.lastError;console.warn("Deriv API error:",d.error);setStatus("error",d.error.message||"Deriv data error");return}
+  if(d.error){
+    const req=d.req_id;
+    if(req!=null&&state.deepScanner.historyRequests[req]){const sym=state.deepScanner.historyRequests[req];delete state.deepScanner.historyRequests[req];const rec=state.deepScanner.data[sym];if(rec){rec.historyReady=false;rec.error=d.error.message||"History unavailable"}renderDeepScanner();return}
+    if(req!=null&&state.deepScanner.subscribeRequests[req]){const sym=state.deepScanner.subscribeRequests[req];delete state.deepScanner.subscribeRequests[req];const rec=state.deepScanner.data[sym];if(rec)rec.error=d.error.message||"Subscription unavailable";renderDeepScanner();return}
+    state.lastError=`${d.error.code||"API"}: ${d.error.message||"Deriv data error"}`;if($("diagError"))$("diagError").textContent=state.lastError;console.warn("Deriv API error:",d.error);setStatus("error",d.error.message||"Deriv data error");return
+  }
   if(d.msg_type==="ping"){$("diagSocket").textContent="OPEN • PING OK";return}
   if(d.msg_type==="active_symbols")loadMarkets(d.active_symbols||[]);
-  if(d.msg_type==="history")loadHistory(d.history?.prices||[],d.history?.times||[],d.history?.pip_size??d.pip_size??state.pipSize);
-  if(d.msg_type==="tick")receiveTick(d.tick);
+  if(d.msg_type==="history"){
+    const req=d.req_id, sym=req!=null?state.deepScanner.historyRequests[req]:null;
+    if(sym){delete state.deepScanner.historyRequests[req];const rec=state.deepScanner.data[sym];if(rec){const prices=d.history?.prices||[],times=d.history?.times||[],pip=d.history?.pip_size??d.pip_size??rec.pipSize;rec.pipSize=pip;rec.ticks=prices.map((p,i)=>({quote:Number(p),epoch:times[i]||0})).filter(x=>Number.isFinite(x.quote)).slice(-MAX_TICKS);rec.digits=rec.ticks.map(x=>digitFromQuote(x.quote,rec.pipSize)).filter(Number.isInteger);rec.historyReady=true;rec.lastHistoryAt=Date.now();}renderDeepScanner();deepScannerEvaluate(false);return}
+    loadHistory(d.history?.prices||[],d.history?.times||[],d.history?.pip_size??d.pip_size??state.pipSize);return
+  }
+  if(d.msg_type==="tick"){
+    const t=d.tick;if(t&&t.symbol===state.symbol){receiveTick(t);syncCurrentIntoScanner(t)}
+    else receiveScannerTick(t);
+  }
 }
 function normalizeMarket(m){
   const symbol=m.underlying_symbol||m.symbol; const name=m.underlying_symbol_name||m.display_name||symbol;
@@ -122,6 +134,7 @@ function loadMarkets(raw){
   marketSelect.disabled=!state.markets.length;
   const selected=state.markets.find(m=>m.symbol===state.symbol)||state.markets[0];
   if(selected){state.symbol=selected.symbol;state.marketName=selected.name;state.pipSize=selected.pipSize;marketSelect.value=selected.symbol;$("marketName").textContent=selected.name;if(!state.marketStarted)startMarket(true)}
+  startDeepScanner();
 }
 function startMarket(force=false){
   if(!force && state.marketStarted && state.symbol==="R_100")return;
@@ -131,13 +144,148 @@ function startMarket(force=false){
   request({ticks_history:state.symbol,end:"latest",count:1000,style:"ticks",req_id:nextReq()});
   request({ticks:state.symbol,subscribe:1,req_id:nextReq()});
   if($("diagSubscription"))$("diagSubscription").textContent=`Requested ${state.symbol}`;
+  syncDeepScannerSubscriptions();
 }
 function loadHistory(prices,times,pipSize=null){
   if(pipSize!=null)state.pipSize=pipSize;
   const arr=prices.map((p,i)=>({quote:p,epoch:times[i]||0})).filter(x=>Number.isFinite(Number(x.quote)));
   state.ticks=arr.slice(-MAX_TICKS);state.digits=arr.map(x=>digitFromQuote(x.quote,state.pipSize)).filter(Number.isInteger).slice(-MAX_TICKS);
-  $("diagHistory").textContent=String(arr.length);updateQuality();renderStream();renderEngine();
+  $("diagHistory").textContent=String(arr.length);updateQuality();renderStream();renderEngine();syncCurrentIntoScanner();
 }
+
+function scannerRecord(m){
+  const s=m.symbol;
+  if(!state.deepScanner.data[s])state.deepScanner.data[s]={symbol:s,name:m.name,market:m.market,submarket:m.submarket,subgroup:m.subgroup,pipSize:m.pipSize,ticks:[],digits:[],lastTickAt:0,lastHistoryAt:0,historyReady:false,subscribed:false,seen:"",error:""};
+  const r=state.deepScanner.data[s];r.name=m.name;r.market=m.market;r.submarket=m.submarket;r.subgroup=m.subgroup;if(m.pipSize!=null)r.pipSize=m.pipSize;return r;
+}
+function startDeepScanner(){
+  const ds=state.deepScanner;if(!state.markets.length)return;
+  if(!ds.startedAt)ds.startedAt=Date.now();
+  for(const m of state.markets)scannerRecord(m);
+  syncCurrentIntoScanner();
+  syncDeepScannerSubscriptions();
+  renderDeepScanner();
+}
+function syncCurrentIntoScanner(t=null){
+  if(!state.symbol)return;
+  const m=state.markets.find(x=>x.symbol===state.symbol);if(!m)return;
+  const r=scannerRecord(m);
+  if(state.ticks.length){r.ticks=state.ticks.slice(-MAX_TICKS);r.digits=state.digits.slice(-MAX_TICKS);r.pipSize=state.pipSize;r.historyReady=r.digits.length>=100;}
+  if(t&&t.symbol===state.symbol){const sig=String(t.epoch||"")+":"+String(t.quote);r.lastSeen=sig;r.lastTickAt=Date.now();}
+  else if(state.lastTickAt)r.lastTickAt=state.lastTickAt;
+}
+function syncDeepScannerSubscriptions(){
+  const ds=state.deepScanner;if(!ds.enabled||!state.markets.length||!state.connected)return;
+  for(const m of state.markets){
+    const r=scannerRecord(m);
+    if(m.symbol===state.symbol){
+      if(r.subscriptionId){request({forget:r.subscriptionId,req_id:nextReq()});delete ds.subscriptions[m.symbol];r.subscriptionId=null;r.subscribed=false;}
+      continue;
+    }
+    if(!r.historyReady&&!Object.values(ds.historyRequests).includes(m.symbol)){
+      const req=nextReq();ds.historyRequests[req]=m.symbol;request({ticks_history:m.symbol,end:"latest",count:500,style:"ticks",req_id:req});
+    }
+    if(!r.subscribed&&!Object.values(ds.subscribeRequests).includes(m.symbol)){
+      const req=nextReq();ds.subscribeRequests[req]=m.symbol;r.subscribeReq=req;request({ticks:m.symbol,subscribe:1,req_id:req});
+    }
+  }
+}
+function receiveScannerTick(t){
+  if(!t||!t.symbol||t.symbol===state.symbol)return;
+  const r=state.deepScanner.data[t.symbol];if(!r)return;
+  const quote=Number(t.quote);if(!Number.isFinite(quote))return;
+  const epoch=t.epoch||Math.floor(Date.now()/1000),sig=String(epoch)+":"+String(quote);
+  if(r.seen===sig)return;r.seen=sig;
+  if(t.pip_size!=null)r.pipSize=t.pip_size;
+  const digit=digitFromQuote(quote,r.pipSize);if(!Number.isInteger(digit))return;
+  r.ticks.push({quote,epoch});r.digits.push(digit);
+  if(r.ticks.length>MAX_TICKS)r.ticks.shift();if(r.digits.length>MAX_TICKS)r.digits.shift();
+  r.lastTickAt=Date.now();r.historyReady=r.digits.length>=100;r.error="";
+  if(t.subscription?.id){r.subscriptionId=t.subscription.id;r.subscribed=true;state.deepScanner.subscriptions[t.symbol]=t.subscription.id;}
+}
+function scannerRisk(r){
+  if(!state.connected||!r.lastTickAt||Date.now()-r.lastTickAt>60000)return {level:"UNKNOWN",reason:"No sufficiently fresh live ticks"};
+  if(r.ticks.length<100)return {level:"UNKNOWN",reason:"Fewer than 100 price samples"};
+  const moves=[];for(let i=1;i<r.ticks.length;i++)moves.push(Math.abs(r.ticks[i].quote-r.ticks[i-1].quote));
+  const nonzero=moves.filter(x=>x>0);if(nonzero.length<40)return {level:"UNKNOWN",reason:"Insufficient movement baseline"};
+  const sorted=nonzero.slice().sort((a,b)=>a-b),base=sorted[Math.floor(sorted.length*.5)]||0;
+  if(!base)return {level:"UNKNOWN",reason:"No stable movement baseline"};
+  const ratios=moves.slice(-12).map(x=>x/base),extreme=ratios.filter(x=>x>=5).length,elevated=ratios.filter(x=>x>=3.2).length;
+  let reversals=0,adjacent=0,dirs=[];
+  for(let i=Math.max(1,r.ticks.length-13);i<r.ticks.length;i++){const d=r.ticks[i].quote-r.ticks[i-1].quote;if(d)dirs.push(Math.sign(d))}
+  for(let i=1;i<dirs.length;i++){adjacent++;if(dirs[i]!==dirs[i-1])reversals++}
+  const reversalRate=adjacent?reversals/adjacent:0;
+  if(extreme>=2||ratios.at(-1)>=7||(elevated>=4&&reversalRate>=.65))return {level:"HIGH",reason:"Unusual or clustered price movement"};
+  if(elevated>=2||reversalRate>=.8)return {level:"MODERATE",reason:"Elevated movement or reversals"};
+  return {level:"LOW",reason:"Movement is within its recent market-specific baseline"};
+}
+function deepScannerSetupKey(){return state.selectedDigit+"|"+state.selectedSide}
+function deepScannerEvaluate(force=false){
+  const ds=state.deepScanner;if(!ds.enabled||!state.markets.length)return [];
+  syncCurrentIntoScanner();
+  const setup=deepScannerSetupKey();
+  if(ds.lastSetupKey!==setup){ds.lastSetupKey=setup;ds.autoLoaded=false;ds.manualOverride=false;ds.lastLoadedSymbol="";ds.lastLoadedScore=0;ds.startedAt=Date.now();}
+  const rows=[];
+  for(const m of state.markets){
+    const r=scannerRecord(m),risk=scannerRisk(r);
+    if(r.digits.length<100||risk.level==="HIGH"||risk.level==="UNKNOWN")continue;
+    const a=overUnderEvidence(r.digits,state.selectedDigit,state.selectedSide);
+    if(!(a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL")||a.probabilityConflict)continue;
+    const entry=overUnderEntry(r.digits,state.selectedDigit,state.selectedSide);
+    if(!entry||!entry.entries?.length)continue;
+    const top=entry.entries[0],score=Math.round(a.evidence*60+Math.min(100,top.score||0)*.30+(risk.level==="LOW"?10:3));
+    rows.push({symbol:m.symbol,name:m.name,score,signal:a.signal,evidence:Math.round(a.evidence*100),entry:top.digit,entryScore:top.score||0,sample:r.digits.length,risk:risk.level,riskReason:risk.reason,reason:a.signal==="STRONG SIGNAL"?"Strong multi-factor Over/Under evidence with a qualifying entry-digit reaction":"Qualified Over/Under evidence and entry-digit reaction"});
+  }
+  rows.sort((a,b)=>b.score-a.score||b.evidence-a.evidence||b.sample-a.sample);
+  ds.lastScanAt=Date.now();
+  const readyCount=state.markets.filter(m=>scannerRecord(m).digits.length>=100).length;
+  const waitComplete=readyCount===state.markets.length||Date.now()-ds.startedAt>20000;
+  if(rows.length){
+    const best=rows[0],current=rows.find(x=>x.symbol===state.symbol);
+    if(!ds.autoLoaded&&!ds.manualOverride&&waitComplete){
+      loadScannerMarket(best.symbol,false,best.score);ds.autoLoaded=true;
+    }else if(ds.autoLoaded&&!ds.manualOverride&&best.symbol!==state.symbol&&best.score>Math.max(current?.score||0,ds.lastLoadedScore)+8&&Date.now()-ds.switchAfter>30000){
+      loadScannerMarket(best.symbol,false,best.score);
+    }else if(ds.lastLoadedSymbol===state.symbol&&current)ds.lastLoadedScore=current.score;
+  }else if(!ds.autoLoaded&&!ds.manualOverride&&Date.now()-ds.startedAt>20000){
+    const winner=$("scannerWinner");if(winner)winner.innerHTML="<strong>NO STRONG MARKET FOUND</strong><span>No market passed every evidence, entry and live-risk gate. Scanning continues.</span>";
+  }
+  renderDeepScanner(rows);
+  return rows;
+}
+function loadScannerMarket(symbol,manual=false,score=0){
+  const m=state.markets.find(x=>x.symbol===symbol);if(!m)return;
+  state.deepScanner.lastLoadedSymbol=symbol;state.deepScanner.lastLoadedScore=score;state.deepScanner.switchAfter=Date.now();
+  if(manual){state.deepScanner.manualOverride=true;state.deepScanner.autoLoaded=true;}
+  if(state.symbol===symbol){renderDeepScanner();return}
+  state.symbol=m.symbol;state.marketName=m.name;state.pipSize=m.pipSize;marketSelect.value=m.symbol;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true);syncDeepScannerSubscriptions();renderDeepScanner();
+}
+function renderDeepScanner(rows=null){
+  const card=$("deepScannerCard");if(!card)return;
+  const ds=state.deepScanner;rows=rows||[];
+  if(!rows.length){
+    rows=[];
+    for(const m of state.markets){const r=ds.data[m.symbol];if(!r)continue;const risk=scannerRisk(r);if(r.digits.length>=100)rows.push({symbol:m.symbol,name:m.name,score:0,signal:"COLLECTING",evidence:0,entry:"—",entryScore:0,sample:r.digits.length,risk:risk.level,riskReason:risk.reason,reason:r.error||"Building a qualifying live sample"});}
+    rows.sort((a,b)=>b.sample-a.sample);
+  }
+  const total=state.markets.length,ready=state.markets.filter(m=>(ds.data[m.symbol]?.digits.length||0)>=100).length;
+  const status=$("deepScannerStatus");if(status)status.textContent=!state.connected?"FEED OFFLINE":rows.some(r=>r.score>0)?"RANKING":ready+"/"+total+" READY";
+  const progress=$("scannerProgress");if(progress)progress.textContent=ready+" of "+total+" markets have 100+ digits • Setup "+state.selectedSide+" "+state.selectedDigit;
+  const setup=$("scannerSetup");if(setup)setup.textContent=state.selectedSide+" "+state.selectedDigit;
+  const count=$("scannerResultCount");if(count)count.textContent=rows.filter(r=>r.score>0).length+" eligible";
+  const winner=$("scannerWinner");
+  const best=rows.find(r=>r.score>0);
+  if(winner){
+    if(best){winner.innerHTML="<strong>"+esc(state.symbol===best.symbol?"AUTO-LOADED • "+best.name:"TOP MARKET • "+best.name)+"</strong><span>Score "+best.score+"/100 • "+best.signal+" • Entry digit "+best.entry+" • Risk "+best.risk+"</span>";}
+    else if(!state.deepScanner.autoLoaded)winner.innerHTML="<strong>SCANNING FOR A STRONG MARKET</strong><span>No market has passed all gates yet. The scanner will not force a selection.</span>";
+  }
+  const results=$("deepScannerResults");if(!results)return;
+  const show=rows.slice(0,8);
+  results.innerHTML=show.length?show.map((r,i)=>'<article class="scanner-result '+(r.symbol===state.symbol?'scanner-result-active':'')+'"><div class="scanner-rank">'+(i+1)+'</div><div class="scanner-result-main"><strong>'+esc(r.name)+'</strong><span>'+esc(r.symbol)+' • '+r.sample+' ticks • '+esc(r.signal)+'</span><span class="scanner-result-detail">Evidence '+r.evidence+'% • Entry digit '+r.entry+' • Risk '+esc(r.risk)+'</span><span class="scanner-result-reason">'+esc(r.reason||r.riskReason||"Collecting evidence")+'</span></div><div class="scanner-result-side"><b>'+(r.score?r.score+"/100":"—")+'</b><button type="button" data-load-scanner="'+esc(r.symbol)+'" '+(r.symbol===state.symbol?'disabled':'')+'>LOAD MARKET</button></div></article>').join(""):'<div class="scanner-empty">No eligible markets yet. The scanner is collecting separate live histories and checking entry evidence.</div>';
+  results.querySelectorAll("[data-load-scanner]").forEach(btn=>btn.addEventListener("click",()=>loadScannerMarket(btn.dataset.loadScanner,true,Number(btn.closest(".scanner-result")?.querySelector(".scanner-result-side b")?.textContent)||0)));
+  const autoBtn=$("autoSelectBtn");if(autoBtn)autoBtn.textContent="AUTO-SELECT: "+(ds.enabled?"ON":"OFF");
+}
+
 function ouValidationKey(){
   return state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide;
 }
@@ -837,13 +985,14 @@ function renderRiseFall(root,last,n){
 }
 document.querySelectorAll(".parity-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedParity=btn.dataset.parity;renderParityControls();renderEngine()}));
 document.querySelectorAll(".rise-fall-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedRiseFall=btn.dataset.direction;renderRiseFallControls();renderEngine()}));
-document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);renderOUControls();renderEngine()}));
-document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;renderOUControls();renderEngine()}));
+document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
+document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.engine=btn.dataset.engine;renderEngine()}));
+const scanNowBtn=$("scanNowBtn");if(scanNowBtn)scanNowBtn.addEventListener("click",()=>{deepScannerEvaluate(true);renderDeepScanner()});const autoSelectBtn=$("autoSelectBtn");if(autoSelectBtn)autoSelectBtn.addEventListener("click",()=>{state.deepScanner.enabled=!state.deepScanner.enabled;if(state.deepScanner.enabled){state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.startedAt=Date.now();startDeepScanner()}renderDeepScanner()});
 const payoutInput=$("ouPayoutPercent");if(payoutInput)payoutInput.addEventListener("input",()=>{state.ouPayoutPercent=Math.max(1,Math.min(500,Number(payoutInput.value)||95));renderOUValidationPanel()});
-marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true)}});
+marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true);syncDeepScannerSubscriptions();renderDeepScanner();}});
 let touchX=0,touchY=0;
 document.querySelector(".engine-nav").addEventListener("touchstart",e=>{touchX=e.changedTouches[0].clientX;touchY=e.changedTouches[0].clientY},{passive:true});
 document.querySelector(".engine-nav").addEventListener("touchend",e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)){const names=["overunder","evenodd","risefall"],i=names.indexOf(state.engine),next=names[Math.max(0,Math.min(2,i+(dx<0?1:-1)))];document.querySelector(`[data-engine="${next}"]`).click()}},{passive:true});
-setInterval(()=>{if(state.lastTickAt){$("diagAge").textContent=Math.round((Date.now()-state.lastTickAt)/1000)+"s";if(Date.now()-state.lastTickAt>15000&&state.connected)setStatus("offline","Waiting for data")}const root=$("engineRoot");if(root&&root.querySelector(".engine-panel"))applySpikeRiskProtection(root)},1000);
+setInterval(()=>{if(state.deepScanner.enabled&&Date.now()-state.deepScanner.lastScanAt>4000)deepScannerEvaluate(false);if(state.lastTickAt){$("diagAge").textContent=Math.round((Date.now()-state.lastTickAt)/1000)+"s";if(Date.now()-state.lastTickAt>15000&&state.connected)setStatus("offline","Waiting for data")}const root=$("engineRoot");if(root&&root.querySelector(".engine-panel"))applySpikeRiskProtection(root)},1000);
 connect();
