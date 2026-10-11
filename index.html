@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="description" content="Maven FX Deriv Analyst — live market analysis">
 <title>Maven FX Deriv Analyst</title>
-<link rel="stylesheet" href="styles.css?v=20261011-scanner-popup1">
+<link rel="stylesheet" href="styles.css?v=20261011-subscribed-market1">
 </head>
 <body>
 <header class="topbar">
@@ -27,7 +27,8 @@
       <div><span>LAST PRICE</span><strong id="lastPrice">—</strong></div>
       <div><span>LAST DIGIT</span><strong id="lastDigit">—</strong></div>
     </div>
-    <div class="live-meta"><span id="tickCount">0 ticks</span><span id="updatedAt">Waiting for data</span></div>
+    <div id="subscribedMarketStatus" class="subscribed-market-status" role="status" aria-live="polite"><span class="subscribed-market-indicator"></span><div><span class="subscribed-market-label">MAVEN FX DATA EXTRACTION · SUBSCRIBED MARKET</span><strong id="subscribedMarketName">Waiting for market subscription…</strong><small id="subscribedMarketSymbol">No active market yet</small></div></div>
+  <div class="live-meta"><span id="tickCount">0 ticks</span><span id="updatedAt">Waiting for data</span></div>
   </section>
 
 
@@ -113,6 +114,6 @@
 </main>
 
 <footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261011-scanner-popup1"></script>
+<script src="app.js?v=20261011-subscribed-market1"></script>
 </body>
 </html>
