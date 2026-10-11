@@ -30,6 +30,23 @@
     <div class="live-meta"><span id="tickCount">0 ticks</span><span id="updatedAt">Waiting for data</span></div>
   </section>
 
+
+  <section id="deepScannerCard" class="deep-scanner-card" aria-label="Deep market scanner">
+    <div class="deep-scanner-head">
+      <div><span class="eyebrow">MAVEN FX • MARKET INTELLIGENCE</span><h2>DEEP MARKET SCANNER</h2></div>
+      <span id="deepScannerStatus" class="scanner-status">INITIALIZING</span>
+    </div>
+    <p class="deep-scanner-intro">Scans live Volatility and Jump Indices for your selected Over/Under digit and direction. The strongest eligible market is loaded automatically.</p>
+    <div class="scanner-selected">
+      <span>ACTIVE SCANNER SETUP</span><strong id="scannerSetup">OVER 2</strong>
+      <span id="scannerProgress">Preparing market histories…</span>
+    </div>
+    <div id="scannerWinner" class="scanner-winner"><strong>NO STRONG MARKET FOUND YET</strong><span>Collecting independent market evidence.</span></div>
+    <div class="scanner-actions"><button id="scanNowBtn" type="button">SCAN NOW</button><button id="autoSelectBtn" type="button" class="scanner-secondary">AUTO-SELECT: ON</button></div>
+    <div class="scanner-table-wrap"><div class="scanner-table-head"><span>RANKED MARKETS</span><span id="scannerResultCount">0 eligible</span></div><div id="deepScannerResults" class="deep-scanner-results"><div class="scanner-empty">Waiting for live market data…</div></div></div>
+    <p class="scanner-footnote">Scores rank evidence quality; they are not win probabilities. No qualifying market means no automatic selection. Analysis only — no contracts are placed.</p>
+  </section>
+
   <section class="control-card">
     <label for="marketSelect">MARKET</label>
     <select id="marketSelect" disabled><option>Loading markets…</option></select>
@@ -90,6 +107,6 @@
 </main>
 
 <footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261010-evenodd-entry-fix1"></script>
+<script src="app.js?v=20261011-deep-scanner2"></script>
 </body>
 </html>
