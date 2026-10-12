@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="description" content="Maven FX Deriv Analyst — live market analysis">
 <title>Maven FX Deriv Analyst</title>
-<link rel="stylesheet" href="styles.css?v=20261012-setup-signal-focus2">
+<link rel="stylesheet" href="styles.css?v=20261012-auto-trade1">
 </head>
 <body>
 <header class="topbar">
@@ -51,6 +51,32 @@
     <div class="scanner-actions"><button id="scanNowBtn" type="button">SCAN NOW</button><button id="loadStrongestBtn" type="button" disabled>NO STRONG MARKET READY</button></div>
     <p class="scanner-footnote">Individual scanned markets and ranked results are kept off this panel. Only the strongest eligible setup is summarized. Scores rank evidence quality, not win probability. Analysis only — no contracts are placed.</p>
   </section>
+    </section>
+  </div>
+
+
+  <button id="autoTradeFab" class="auto-trade-fab" type="button" aria-label="Open Auto Trade" aria-controls="autoTradeModal" aria-expanded="false"><span aria-hidden="true">⇄</span><small>AUTO</small><i id="autoTradeDot"></i></button>
+  <div id="autoTradeModal" class="deep-scanner-modal auto-trade-modal" aria-hidden="true">
+    <div class="deep-scanner-modal-backdrop" data-close-trade></div>
+    <section class="deep-scanner-dialog auto-trade-dialog" role="dialog" aria-modal="true" aria-labelledby="autoTradeTitle">
+      <div class="deep-scanner-dialog-top"><span>MAVEN FX · EXECUTION ENGINE</span><button id="closeAutoTrade" class="deep-scanner-close" type="button" aria-label="Close Auto Trade">×</button></div>
+      <div class="auto-trade-head"><div><span class="eyebrow">AUTOMATED OVER / UNDER</span><h2 id="autoTradeTitle">AUTO TRADE</h2></div><span id="autoTradeStatus" class="auto-trade-status">DISCONNECTED</span></div>
+      <p class="auto-trade-note">Uses the current Over/Under setup and the existing Entry Engine. It only considers entries when the Final Signal is SIGNAL or STRONG SIGNAL, probability comparison passes, and live data is fresh.</p>
+      <div class="auto-trade-current"><div><span>ACTIVE MARKET</span><strong id="autoTradeMarket">R_100</strong></div><div><span>SETUP</span><strong id="autoTradeSetup">OVER 2</strong></div><div><span>ENTRY DIGITS</span><strong id="autoTradeEntries">Waiting</strong></div></div>
+      <div class="auto-trade-fields">
+        <label class="auto-trade-wide">Deriv API token <input id="autoTradeToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste a token with trade permission"><small>Token is held in memory only and cleared from this field after connection. Never share it in chat.</small></label>
+        <div class="auto-trade-actions"><button id="autoTradeConnect" type="button">CONNECT ACCOUNT</button><button id="autoTradeDisconnect" type="button" class="secondary" disabled>DISCONNECT</button></div>
+        <label>Stake (<span id="autoTradeCurrency">account currency</span>)<input id="autoTradeStake" type="number" min="0.35" max="100" step="0.01" value="0.35" inputmode="decimal"></label>
+        <label>Martingale multiplier<input id="autoTradeMartingale" type="number" min="1" max="10" step="0.1" value="2" inputmode="decimal"></label>
+        <label>Take profit (<span class="autoTradeCurrencyText">account currency</span>)<input id="autoTradeTP" type="number" min="0.01" step="0.01" value="2" inputmode="decimal"></label>
+        <label>Stop loss (<span class="autoTradeCurrencyText">account currency</span>)<input id="autoTradeSL" type="number" min="0.01" step="0.01" value="3" inputmode="decimal"></label>
+      </div>
+      <div id="autoTradeRealGate" class="auto-trade-real-gate" hidden><label><input id="autoTradeRealCheck" type="checkbox"> I understand real-money trades can lose money.</label><input id="autoTradeRealPhrase" type="text" autocomplete="off" placeholder="Type TRADE REAL to unlock real account trading"></div>
+      <div class="auto-trade-account"><span id="autoTradeAccount">No account connected</span><span id="autoTradePnL">Session P/L: 0.00</span></div>
+      <div class="auto-trade-run"><div><span>RUN RULE</span><strong>2 contracts per entry trigger</strong></div><div><span>NEXT STAKE</span><strong id="autoTradeNextStake">0.35</strong></div><div><span>RUN PROGRESS</span><strong id="autoTradeRunProgress">Idle</strong></div></div>
+      <div class="auto-trade-actions main-actions"><button id="autoTradeStart" type="button" disabled>START AUTO TRADE</button><button id="autoTradeStop" type="button" class="secondary" disabled>PAUSE BOT</button></div>
+      <div id="autoTradeLog" class="auto-trade-log" role="log" aria-live="polite"><div>Waiting for account connection. Demo account recommended.</div></div>
+      <p class="scanner-footnote">Risk controls pause new entries at take-profit/stop-loss limits, on disconnect, stale data, high/unknown spike risk, or invalid signal. A qualifying trigger starts up to two sequential one-tick contracts, then the bot waits for a fresh entry-digit trigger. Automation cannot guarantee profit.</p>
     </section>
   </div>
 
@@ -116,7 +142,7 @@
   </details>
 </main>
 
-<footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261012-setup-signal-focus2"></script>
+<footer>Live analysis • Auto Trade is optional and requires your Deriv account authorization</footer>
+<script src="app.js?v=20261012-auto-trade1"></script>
 </body>
 </html>
