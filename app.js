@@ -4,6 +4,8 @@ function renderOverUnder(root,d,c,last,n){
   const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const entry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
   state.ouEntrySnapshot={key:ouValidationKey(),active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[]};
+  state.ouSignalSnapshot={key:ouValidationKey(),active:activeSignal&&!e.probabilityConflict,signal:e.signal,probabilityConflict:!!e.probabilityConflict,tickCount:state.digits.length};
+  autoTradeUpdateLiveFields();
   let reason;
   if(e.probabilityConflict)reason="Probability Comparison is blocking the selected setup because the complementary setup has stronger live probability evidence.";
   else if(e.signal==="AVOID")reason="The selected setup does not have enough aligned A-Setup evidence.";
@@ -376,7 +378,7 @@ function receiveTick(t){
   state.lastTickAt=Date.now();
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
-  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream();renderEngine();refreshOUTradeSnapshot();processAutoTradeTick(digit);recordOUValidationTrigger(digit);
+  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream();renderEngine();if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);recordOUValidationTrigger(digit);
 }
 function updateQuality(){
   const n=state.digits.length,pill=$("qualityPill");
@@ -639,7 +641,7 @@ function renderEngine(){
   renderOUValidationPanel();
   if(parity)parity.style.display=state.engine==="evenodd"?"":"none";
   const rf=$("riseFallControls");if(rf)rf.style.display=state.engine==="risefall"?"":"none";
-  if(n<30){root.innerHTML=panel("INSUFFICIENT DATA","Collecting more validated market data before analysis.",null,["At least 30 recent digits are required","Live data stream is active when ticks are arriving"],n);return}
+  if(n<30){state.ouSignalSnapshot={key:ouValidationKey(),active:false,signal:"WAIT",probabilityConflict:false,tickCount:n};state.ouEntrySnapshot={key:ouValidationKey(),active:false,digits:[]};root.innerHTML=panel("INSUFFICIENT DATA","Collecting more validated market data before analysis.",null,["At least 30 recent digits are required","Live data stream is active when ticks are arriving"],n);return}
   if(state.engine==="overunder")renderOverUnder(root,d,c,last,n);
   if(state.engine==="evenodd")renderEvenOdd(root,d,last,n);
   if(state.engine==="risefall")renderRiseFall(root,last,n);
@@ -1067,14 +1069,12 @@ function autoTradeRender(){
   const gate=$("autoTradeRealGate");if(gate)gate.hidden=!autoTrade.account||autoTrade.account.is_virtual;
   autoTradeStatus(autoTrade.enabled?"RUNNING":autoTrade.authorized?(autoTrade.account?.is_virtual?"DEMO CONNECTED":"REAL ACCOUNT LOCKED"):"DISCONNECTED",autoTrade.enabled?"running":autoTrade.authorized?"connected":"");
 }
-function refreshOUTradeSnapshot(){
-  if(state.digits.length<30){state.ouSignalSnapshot={key:ouValidationKey(),active:false,signal:"WAIT",probabilityConflict:false};state.ouEntrySnapshot={key:ouValidationKey(),active:false,digits:[]};autoTradeRender();return}
-  const e=overUnderEvidence(state.digits,state.selectedDigit,state.selectedSide);
-  const active=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
-  const entry=active&&!e.probabilityConflict?overUnderEntry(state.digits,state.selectedDigit,state.selectedSide):null;
-  state.ouSignalSnapshot={key:ouValidationKey(),active:active&&!e.probabilityConflict,signal:e.signal,probabilityConflict:!!e.probabilityConflict};
-  state.ouEntrySnapshot={key:ouValidationKey(),active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[]};
-  autoTradeRender();
+function autoTradeUpdateLiveFields(){
+  const modal=$("autoTradeModal");if(!modal||!modal.classList.contains("open"))return;
+  const market=$("autoTradeMarket"),setup=$("autoTradeSetup"),entries=$("autoTradeEntries");
+  if(market)market.textContent=state.symbol+" · "+state.marketName;
+  if(setup)setup.textContent=state.selectedSide+" "+state.selectedDigit;
+  if(entries)entries.textContent=state.ouEntrySnapshot?.active&&state.ouEntrySnapshot.digits?.length?state.ouEntrySnapshot.digits.join(" / "):"No valid entry";
 }
 function autoTradeMarketChanged(){
   autoTrade.armed=true;autoTrade.lastDigit=null;
@@ -1102,7 +1102,7 @@ function autoTradeStart(){
 }
 function autoTradeReadyToEnter(digit){
   if(!autoTrade.enabled||!autoTrade.authorized||!state.connected||!state.lastTickAt||Date.now()-state.lastTickAt>15000)return {ok:false,reason:"live data disconnected or stale"};
-  if(state.symbol!==state.ouEntrySnapshot?.key?.split("|")[0]||state.ouSignalSnapshot?.key!==ouValidationKey()||!state.ouSignalSnapshot?.active||!state.ouEntrySnapshot?.active)return {ok:false,reason:"Final Signal or Entry Engine is not valid"};
+  if(state.engine!=="overunder"||state.ouSignalSnapshot?.tickCount!==state.digits.length||state.symbol!==state.ouEntrySnapshot?.key?.split("|")[0]||state.ouSignalSnapshot?.key!==ouValidationKey()||!state.ouSignalSnapshot?.active||!state.ouEntrySnapshot?.active)return {ok:false,reason:"Final Signal or Entry Engine is not valid"};
   const risk=spikeRiskAssessment();
   if(risk.level==="UNKNOWN"||risk.level==="HIGH")return {ok:false,reason:risk.title};
   if(risk.level==="MODERATE"&&state.ouSignalSnapshot.signal!=="STRONG SIGNAL")return {ok:false,reason:"moderate spike risk requires STRONG SIGNAL"};
@@ -1110,7 +1110,6 @@ function autoTradeReadyToEnter(digit){
   return {ok:true};
 }
 function processAutoTradeTick(digit){
-  autoTradeRender();
   if(!autoTrade.enabled)return;
   const candidates=state.ouEntrySnapshot?.digits||[];
   if(!candidates.includes(digit)){autoTrade.armed=true;autoTrade.lastDigit=digit;return}
@@ -1126,7 +1125,7 @@ function autoTradePlaceNext(){
   if(state.symbol!==autoTrade.runSymbol){autoTrade.runRemaining=0;autoTradeLog("Run stopped because the selected market changed.");return}
   if(state.selectedSide!==autoTrade.runSide||state.selectedDigit!==autoTrade.runSelectedDigit){autoTrade.runRemaining=0;autoTradeLog("Run stopped because the selected Over/Under setup changed.");return}
   if(!state.connected||Date.now()-state.lastTickAt>15000){autoTradePause("live data stale or disconnected");return}
-  if(!state.ouSignalSnapshot?.active||state.ouSignalSnapshot.key!==ouValidationKey()){autoTradePause("Over/Under signal no longer qualifies");return}
+  if(state.engine!=="overunder"||state.ouSignalSnapshot?.tickCount!==state.digits.length||!state.ouSignalSnapshot?.active||state.ouSignalSnapshot.key!==ouValidationKey()){autoTradePause("Over/Under signal no longer qualifies");return}
   if(autoTrade.sessionProfit>=autoTrade.takeProfit){autoTradePause("take-profit limit reached");return}
   if(autoTrade.sessionProfit<=-autoTrade.stopLoss){autoTradePause("stop-loss limit reached");return}
   const stake=Math.max(0.35,Math.min(100,Number(autoTrade.nextStake)||autoTrade.stake));
