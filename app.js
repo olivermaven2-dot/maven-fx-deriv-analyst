@@ -73,7 +73,7 @@ connect();return;}
     clearTimeout(state.connectTimer);
     resetDeepScannerSubscriptions();
     state.connected=true; state.reconnectDelay=1000; state.lastError="—";renderSubscribedMarketStatus("switching");
-    setStatus("live",`LIVE — ${state.marketName||state.symbol} feed`);
+    setStatus("connecting",`Connected — requesting ${state.marketName||state.symbol}`);
     state.lastMessage="WebSocket OPEN";
     request({ping:1,req_id:nextReq()});
     request({active_symbols:"brief",req_id:nextReq()});
@@ -1023,6 +1023,8 @@ function renderSubscribedMarketStatus(mode="switching"){
   const label=market?.name||state.marketName||state.symbol||"No market selected";
   name.textContent=label;
   symbol.textContent="Symbol: "+(state.symbol||"—")+" · "+(mode==="connected"?"Live tick subscription active":mode==="switching"?"Switching / requesting live tick feed":"Waiting for live tick feed");
+  if(mode==="connected"&&state.connected)setStatus("live",`LIVE — ${label} feed`);
+  else if(state.connected)setStatus("connecting",`Connected — requesting ${label}`);
   box.classList.toggle("connected",mode==="connected");box.classList.toggle("switching",mode!=="connected");
 }
 
