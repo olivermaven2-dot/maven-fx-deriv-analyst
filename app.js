@@ -989,8 +989,8 @@ function renderRiseFall(root,last,n){
 }
 document.querySelectorAll(".parity-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedParity=btn.dataset.parity;renderParityControls();renderEngine()}));
 document.querySelectorAll(".rise-fall-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedRiseFall=btn.dataset.direction;renderRiseFallControls();renderEngine()}));
-document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.strongestCandidate=null;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
-document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.strongestCandidate=null;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
+document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);autoTradeSetupChanged();state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.strongestCandidate=null;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
+document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;autoTradeSetupChanged();state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.strongestCandidate=null;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>{b.classList.remove("active");b.setAttribute("aria-selected","false")});btn.classList.add("active");btn.setAttribute("aria-selected","true");state.engine=btn.dataset.engine;const current=document.getElementById("workspaceCurrent");if(current)current.textContent=btn.textContent.trim();renderEngine()}));
 const scanNowBtn=$("scanNowBtn");if(scanNowBtn)scanNowBtn.addEventListener("click",()=>{deepScannerEvaluate(true)});const loadStrongestBtn=$("loadStrongestBtn");if(loadStrongestBtn)loadStrongestBtn.addEventListener("click",loadStrongestScannerMarket);
 const payoutInput=$("ouPayoutPercent");if(payoutInput)payoutInput.addEventListener("input",()=>{state.ouPayoutPercent=Math.max(1,Math.min(500,Number(payoutInput.value)||95));renderOUValidationPanel()});
@@ -1028,7 +1028,7 @@ function renderSubscribedMarketStatus(mode="switching"){
 /* Auto Trade: separate authenticated trading socket; never shares the public tick socket. */
 const autoTrade={
   socket:null,authorized:false,account:null,enabled:false,realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
-  nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,armed:true,lastDigit:null,
+  nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,logLines:[]
 };
 function autoTradeLog(message){
@@ -1082,6 +1082,11 @@ function autoTradeMarketChanged(){
   if(autoTrade.enabled)autoTradeLog("Following selected market: new entries will use the new market after fresh signal and entry validation.");
   autoTradeRender();
 }
+function autoTradeSetupChanged(){
+  autoTrade.armed=true;autoTrade.lastDigit=null;
+  if(autoTrade.runRemaining){autoTrade.runRemaining=0;autoTrade.runSymbol="";autoTradeLog("Over/Under setup changed. Remaining contracts in the previous run were cancelled; open contracts will still settle.");}
+  autoTradeRender();
+}
 function autoTradePause(reason){
   autoTrade.enabled=false;autoTrade.runRemaining=0;autoTrade.runSymbol="";
   autoTradeStatus("PAUSED");autoTradeLog("BOT PAUSED · "+reason);autoTradeRender();
@@ -1112,13 +1117,14 @@ function processAutoTradeTick(digit){
   if(!autoTrade.armed){autoTrade.lastDigit=digit;return}
   const check=autoTradeReadyToEnter(digit);
   if(!check.ok){autoTradeLog("Entry blocked · "+check.reason);autoTrade.lastDigit=digit;return}
-  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=2;autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;
+  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=2;autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;autoTrade.runSide=state.selectedSide;autoTrade.runSelectedDigit=state.selectedDigit;
   autoTradeLog("ENTRY TRIGGER · "+state.symbol+" digit "+digit+" · "+state.selectedSide+" "+state.selectedDigit+" · starting 2-contract run.");
   autoTradePlaceNext();
 }
 function autoTradePlaceNext(){
   if(!autoTrade.enabled||!autoTrade.authorized||!autoTrade.runRemaining)return;
   if(state.symbol!==autoTrade.runSymbol){autoTrade.runRemaining=0;autoTradeLog("Run stopped because the selected market changed.");return}
+  if(state.selectedSide!==autoTrade.runSide||state.selectedDigit!==autoTrade.runSelectedDigit){autoTrade.runRemaining=0;autoTradeLog("Run stopped because the selected Over/Under setup changed.");return}
   if(!state.connected||Date.now()-state.lastTickAt>15000){autoTradePause("live data stale or disconnected");return}
   if(!state.ouSignalSnapshot?.active||state.ouSignalSnapshot.key!==ouValidationKey()){autoTradePause("Over/Under signal no longer qualifies");return}
   if(autoTrade.sessionProfit>=autoTrade.takeProfit){autoTradePause("take-profit limit reached");return}
@@ -1126,9 +1132,9 @@ function autoTradePlaceNext(){
   const stake=Math.max(0.35,Math.min(100,Number(autoTrade.nextStake)||autoTrade.stake));
   const req={
     proposal:1,amount:Number(stake.toFixed(2)),basis:"stake",
-    contract_type:state.selectedSide==="OVER"?"DIGITOVER":"DIGITUNDER",
+    contract_type:autoTrade.runSide==="OVER"?"DIGITOVER":"DIGITUNDER",
     currency:autoTrade.currency,duration:1,duration_unit:"t",symbol:autoTrade.runSymbol,
-    barrier:String(state.selectedDigit)
+    barrier:String(autoTrade.runSelectedDigit)
   };
   try{autoTradeReq(req,"proposal");autoTradeLog("Requesting 1-tick "+state.selectedSide+" "+state.selectedDigit+" proposal · stake "+stake.toFixed(2)+" "+autoTrade.currency+".")}
   catch(e){autoTradePause("proposal request failed: "+e.message)}
