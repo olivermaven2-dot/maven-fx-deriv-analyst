@@ -372,13 +372,13 @@ function receiveTick(t){
   const quote=t.quote;if(!Number.isFinite(Number(quote)))return;
   if(t.pip_size!=null)state.pipSize=t.pip_size;
   const digit=digitFromQuote(quote,state.pipSize);if(!Number.isInteger(digit))return;
-  processOUValidationTick(digit);
+
   state.ticks.push({quote:Number(quote),epoch:t.epoch||Math.floor(Date.now()/1000)});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
   state.lastTickAt=Date.now();
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
-  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream();renderEngine();if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);recordOUValidationTrigger(digit);
+  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream();renderEngine();if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);
 }
 function updateQuality(){
   const n=state.digits.length,pill=$("qualityPill");
@@ -638,7 +638,6 @@ function renderEngine(){
   const root=$("engineRoot");
   const ou=$("overUnderControls"),parity=$("evenOddControls");
   if(ou)ou.style.display=state.engine==="overunder"?"":"none";
-  renderOUValidationPanel();
   if(parity)parity.style.display=state.engine==="evenodd"?"":"none";
   const rf=$("riseFallControls");if(rf)rf.style.display=state.engine==="risefall"?"":"none";
   if(n<30){state.ouSignalSnapshot={key:ouValidationKey(),active:false,signal:"WAIT",probabilityConflict:false,tickCount:n};state.ouEntrySnapshot={key:ouValidationKey(),active:false,digits:[]};root.innerHTML=panel("INSUFFICIENT DATA","Collecting more validated market data before analysis.",null,["At least 30 recent digits are required","Live data stream is active when ticks are arriving"],n);return}
