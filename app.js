@@ -73,7 +73,7 @@ connect();return;}
     clearTimeout(state.connectTimer);
     resetDeepScannerSubscriptions();
     state.connected=true; state.reconnectDelay=1000; state.lastError="—";renderSubscribedMarketStatus("switching");
-    setStatus("live","LIVE — testing R_100 feed");
+    setStatus("live",`LIVE — ${state.marketName||state.symbol} feed`);
     state.lastMessage="WebSocket OPEN";
     request({ping:1,req_id:nextReq()});
     request({active_symbols:"brief",req_id:nextReq()});
