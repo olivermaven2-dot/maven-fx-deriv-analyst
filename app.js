@@ -24,7 +24,7 @@ function renderOverUnder(root,d,c,last,n){
 }
 const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
 
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
@@ -376,7 +376,7 @@ function receiveTick(t){
   state.lastTickAt=Date.now();
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
-  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream();renderEngine();recordOUValidationTrigger(digit);
+  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream();renderEngine();refreshOUTradeSnapshot();processAutoTradeTick(digit);recordOUValidationTrigger(digit);
 }
 function updateQuality(){
   const n=state.digits.length,pill=$("qualityPill");
@@ -994,7 +994,7 @@ document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>{b.classList.remove("active");b.setAttribute("aria-selected","false")});btn.classList.add("active");btn.setAttribute("aria-selected","true");state.engine=btn.dataset.engine;const current=document.getElementById("workspaceCurrent");if(current)current.textContent=btn.textContent.trim();renderEngine()}));
 const scanNowBtn=$("scanNowBtn");if(scanNowBtn)scanNowBtn.addEventListener("click",()=>{deepScannerEvaluate(true)});const loadStrongestBtn=$("loadStrongestBtn");if(loadStrongestBtn)loadStrongestBtn.addEventListener("click",loadStrongestScannerMarket);
 const payoutInput=$("ouPayoutPercent");if(payoutInput)payoutInput.addEventListener("input",()=>{state.ouPayoutPercent=Math.max(1,Math.min(500,Number(payoutInput.value)||95));renderOUValidationPanel()});
-marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;renderSubscribedMarketStatus("switching");state.marketStarted=false;startMarket(true);syncDeepScannerSubscriptions();renderDeepScanner();}});
+marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){autoTradeMarketChanged();state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;renderSubscribedMarketStatus("switching");state.marketStarted=false;startMarket(true);syncDeepScannerSubscriptions();renderDeepScanner();}});
 let touchX=0,touchY=0;
 document.querySelector(".engine-nav").addEventListener("touchstart",e=>{touchX=e.changedTouches[0].clientX;touchY=e.changedTouches[0].clientY},{passive:true});
 document.querySelector(".engine-nav").addEventListener("touchend",e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)){const names=["overunder","evenodd","risefall"],i=names.indexOf(state.engine),next=names[Math.max(0,Math.min(2,i+(dx<0?1:-1)))];document.querySelector(`[data-engine="${next}"]`).click()}},{passive:true});
@@ -1023,3 +1023,195 @@ function renderSubscribedMarketStatus(mode="switching"){
   symbol.textContent="Symbol: "+(state.symbol||"—")+" · "+(mode==="connected"?"Live tick subscription active":mode==="switching"?"Switching / requesting live tick feed":"Waiting for live tick feed");
   box.classList.toggle("connected",mode==="connected");box.classList.toggle("switching",mode!=="connected");
 }
+
+
+/* Auto Trade: separate authenticated trading socket; never shares the public tick socket. */
+const autoTrade={
+  socket:null,authorized:false,account:null,enabled:false,realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
+  nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,armed:true,lastDigit:null,
+  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,logLines:[]
+};
+function autoTradeLog(message){
+  const stamp=new Date().toLocaleTimeString();
+  autoTrade.logLines.unshift(stamp+" · "+message);autoTrade.logLines=autoTrade.logLines.slice(0,35);
+  const log=$("autoTradeLog");if(log)log.innerHTML=autoTrade.logLines.map(x=>"<div>"+esc(x)+"</div>").join("");
+}
+function autoTradeStatus(text,kind=""){
+  const el=$("autoTradeStatus");if(el){el.textContent=text;el.className="auto-trade-status "+kind}
+  const dot=$("autoTradeDot");if(dot){dot.classList.toggle("ready",autoTrade.authorized);dot.classList.toggle("running",autoTrade.enabled)}
+  const start=$("autoTradeStart"),stop=$("autoTradeStop");
+  if(start)start.disabled=!autoTrade.authorized||autoTrade.enabled||!autoTradeCanStart();
+  if(stop)stop.disabled=!autoTrade.enabled;
+  const dis=$("autoTradeDisconnect");if(dis)dis.disabled=!autoTrade.socket;
+}
+function autoTradeReq(obj,kind){
+  if(!autoTrade.socket||autoTrade.socket.readyState!==WebSocket.OPEN)throw new Error("Trading connection is not open");
+  const id=++autoTrade.req;autoTrade.requests[id]=kind;obj.req_id=id;autoTrade.socket.send(JSON.stringify(obj));return id;
+}
+function autoTradeCanStart(){
+  if(!autoTrade.authorized||!autoTrade.account)return false;
+  if(autoTrade.account.is_virtual)return true;
+  return $("autoTradeRealCheck")?.checked===true&&$("autoTradeRealPhrase")?.value.trim()==="TRADE REAL";
+}
+function autoTradeRender(){
+  const market=$("autoTradeMarket"),setup=$("autoTradeSetup"),entries=$("autoTradeEntries");
+  if(market)market.textContent=state.symbol+" · "+state.marketName;
+  if(setup)setup.textContent=state.selectedSide+" "+state.selectedDigit;
+  if(entries)entries.textContent=state.ouEntrySnapshot?.active&&state.ouEntrySnapshot.digits?.length?state.ouEntrySnapshot.digits.join(" / "):"No valid entry";
+  if($("autoTradeCurrency"))$("autoTradeCurrency").textContent=autoTrade.currency||"account currency";
+  document.querySelectorAll(".autoTradeCurrencyText").forEach(x=>x.textContent=autoTrade.currency||"account currency");
+  if($("autoTradeAccount"))$("autoTradeAccount").textContent=autoTrade.account?(autoTrade.account.loginid+" · "+(autoTrade.account.is_virtual?"DEMO":"REAL")+" · "+autoTrade.currency):"No account connected";
+  if($("autoTradePnL"))$("autoTradePnL").textContent="Session P/L: "+autoTrade.sessionProfit.toFixed(2)+" "+(autoTrade.currency||"");
+  if($("autoTradeNextStake"))$("autoTradeNextStake").textContent=autoTrade.nextStake.toFixed(2)+" "+(autoTrade.currency||"");
+  if($("autoTradeRunProgress"))$("autoTradeRunProgress").textContent=autoTrade.runRemaining?((2-autoTrade.runRemaining)+"/2 settled"):autoTrade.enabled?"Waiting for entry":"Idle";
+  const gate=$("autoTradeRealGate");if(gate)gate.hidden=!autoTrade.account||autoTrade.account.is_virtual;
+  autoTradeStatus(autoTrade.enabled?"RUNNING":autoTrade.authorized?(autoTrade.account?.is_virtual?"DEMO CONNECTED":"REAL ACCOUNT LOCKED"):"DISCONNECTED",autoTrade.enabled?"running":autoTrade.authorized?"connected":"");
+}
+function refreshOUTradeSnapshot(){
+  if(state.digits.length<30){state.ouSignalSnapshot={key:ouValidationKey(),active:false,signal:"WAIT",probabilityConflict:false};state.ouEntrySnapshot={key:ouValidationKey(),active:false,digits:[]};autoTradeRender();return}
+  const e=overUnderEvidence(state.digits,state.selectedDigit,state.selectedSide);
+  const active=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
+  const entry=active&&!e.probabilityConflict?overUnderEntry(state.digits,state.selectedDigit,state.selectedSide):null;
+  state.ouSignalSnapshot={key:ouValidationKey(),active:active&&!e.probabilityConflict,signal:e.signal,probabilityConflict:!!e.probabilityConflict};
+  state.ouEntrySnapshot={key:ouValidationKey(),active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[]};
+  autoTradeRender();
+}
+function autoTradeMarketChanged(){
+  autoTrade.armed=true;autoTrade.lastDigit=null;
+  if(autoTrade.runRemaining){autoTradeLog("Market changed. Remaining contracts in the previous run were cancelled; open contracts will still settle.");autoTrade.runRemaining=0;autoTrade.runSymbol="";}
+  if(autoTrade.enabled)autoTradeLog("Following selected market: new entries will use the new market after fresh signal and entry validation.");
+  autoTradeRender();
+}
+function autoTradePause(reason){
+  autoTrade.enabled=false;autoTrade.runRemaining=0;autoTrade.runSymbol="";
+  autoTradeStatus("PAUSED");autoTradeLog("BOT PAUSED · "+reason);autoTradeRender();
+}
+function autoTradeStart(){
+  if(!autoTradeCanStart()){autoTradeLog("Start blocked: connect an account; real accounts additionally require the checkbox and exact phrase TRADE REAL.");autoTradeRender();return}
+  const stake=Number($("autoTradeStake").value),mg=Number($("autoTradeMartingale").value),tp=Number($("autoTradeTP").value),sl=Number($("autoTradeSL").value);
+  if(!(stake>=0.35&&stake<=100&&mg>=1&&mg<=10&&tp>0&&sl>0)){autoTradeLog("Invalid risk settings. Stake must be 0.35–100, multiplier 1–10, and take-profit/stop-loss must be positive.");return}
+  autoTrade.stake=stake;autoTrade.martingale=mg;autoTrade.takeProfit=tp;autoTrade.stopLoss=sl;autoTrade.nextStake=stake;
+  autoTrade.sessionProfit=0;autoTrade.wins=0;autoTrade.losses=0;autoTrade.settled=new Set();autoTrade.enabled=true;autoTrade.armed=true;autoTrade.lastDigit=null;autoTrade.startedAt=Date.now();
+  autoTradeLog("Bot started on "+state.symbol+" · "+state.selectedSide+" "+state.selectedDigit+" · stake "+stake+" "+autoTrade.currency+" · 2 contracts per trigger.");
+  autoTradeRender();
+}
+function autoTradeReadyToEnter(digit){
+  if(!autoTrade.enabled||!autoTrade.authorized||!state.connected||!state.lastTickAt||Date.now()-state.lastTickAt>15000)return {ok:false,reason:"live data disconnected or stale"};
+  if(state.symbol!==state.ouEntrySnapshot?.key?.split("|")[0]||state.ouSignalSnapshot?.key!==ouValidationKey()||!state.ouSignalSnapshot?.active||!state.ouEntrySnapshot?.active)return {ok:false,reason:"Final Signal or Entry Engine is not valid"};
+  const risk=spikeRiskAssessment();
+  if(risk.level==="UNKNOWN"||risk.level==="HIGH")return {ok:false,reason:risk.title};
+  if(risk.level==="MODERATE"&&state.ouSignalSnapshot.signal!=="STRONG SIGNAL")return {ok:false,reason:"moderate spike risk requires STRONG SIGNAL"};
+  if(!state.ouEntrySnapshot.digits.includes(digit))return {ok:false,reason:"digit is not a current Entry Engine candidate"};
+  return {ok:true};
+}
+function processAutoTradeTick(digit){
+  autoTradeRender();
+  if(!autoTrade.enabled)return;
+  const candidates=state.ouEntrySnapshot?.digits||[];
+  if(!candidates.includes(digit)){autoTrade.armed=true;autoTrade.lastDigit=digit;return}
+  if(!autoTrade.armed){autoTrade.lastDigit=digit;return}
+  const check=autoTradeReadyToEnter(digit);
+  if(!check.ok){autoTradeLog("Entry blocked · "+check.reason);autoTrade.lastDigit=digit;return}
+  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=2;autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;
+  autoTradeLog("ENTRY TRIGGER · "+state.symbol+" digit "+digit+" · "+state.selectedSide+" "+state.selectedDigit+" · starting 2-contract run.");
+  autoTradePlaceNext();
+}
+function autoTradePlaceNext(){
+  if(!autoTrade.enabled||!autoTrade.authorized||!autoTrade.runRemaining)return;
+  if(state.symbol!==autoTrade.runSymbol){autoTrade.runRemaining=0;autoTradeLog("Run stopped because the selected market changed.");return}
+  if(!state.connected||Date.now()-state.lastTickAt>15000){autoTradePause("live data stale or disconnected");return}
+  if(!state.ouSignalSnapshot?.active||state.ouSignalSnapshot.key!==ouValidationKey()){autoTradePause("Over/Under signal no longer qualifies");return}
+  if(autoTrade.sessionProfit>=autoTrade.takeProfit){autoTradePause("take-profit limit reached");return}
+  if(autoTrade.sessionProfit<=-autoTrade.stopLoss){autoTradePause("stop-loss limit reached");return}
+  const stake=Math.max(0.35,Math.min(100,Number(autoTrade.nextStake)||autoTrade.stake));
+  const req={
+    proposal:1,amount:Number(stake.toFixed(2)),basis:"stake",
+    contract_type:state.selectedSide==="OVER"?"DIGITOVER":"DIGITUNDER",
+    currency:autoTrade.currency,duration:1,duration_unit:"t",symbol:autoTrade.runSymbol,
+    barrier:String(state.selectedDigit)
+  };
+  try{autoTradeReq(req,"proposal");autoTradeLog("Requesting 1-tick "+state.selectedSide+" "+state.selectedDigit+" proposal · stake "+stake.toFixed(2)+" "+autoTrade.currency+".")}
+  catch(e){autoTradePause("proposal request failed: "+e.message)}
+}
+function autoTradeHandleMessage(d){
+  if(d.error){
+    const kind=autoTrade.requests[d.req_id];delete autoTrade.requests[d.req_id];
+    autoTradeLog("Deriv API error"+(d.error.code?" ["+d.error.code+"]":"")+": "+(d.error.message||"Request failed"));
+    if(kind==="authorize"){autoTrade.authorized=false;autoTrade.account=null;autoTradeStatus("AUTH FAILED")}
+    if(kind==="proposal"||kind==="buy")autoTradePause("Deriv rejected a trade request");
+    autoTradeRender();return;
+  }
+  const kind=autoTrade.requests[d.req_id];if(kind)delete autoTrade.requests[d.req_id];
+  if(kind==="authorize"&&d.authorize){
+    autoTrade.account={loginid:d.authorize.loginid,is_virtual:Number(d.authorize.is_virtual)===1};
+    autoTrade.currency=d.authorize.currency||"USD";autoTrade.authorized=true;autoTrade.nextStake=autoTrade.stake;
+    $("autoTradeToken").value="";
+    autoTradeLog("Account authorized · "+autoTrade.account.loginid+" · "+(autoTrade.account.is_virtual?"DEMO":"REAL")+" · "+autoTrade.currency+".");
+    if(!autoTrade.account.is_virtual)autoTradeLog("Real account detected. Trading stays locked until the in-panel confirmation is completed.");
+    autoTradeRender();return;
+  }
+  if(kind==="proposal"&&d.proposal){
+    try{autoTradeReq({buy:d.proposal.id,price:d.proposal.ask_price},"buy")}
+    catch(e){autoTradePause("buy request failed: "+e.message)}
+    return;
+  }
+  if(kind==="buy"&&d.buy){
+    const id=String(d.buy.contract_id);autoTrade.activeContracts[id]={symbol:autoTrade.runSymbol,stake:Number(d.buy.buy_price)||autoTrade.nextStake};
+    autoTradeLog("Contract purchased · #"+id+" · "+(autoTrade.runRemaining===2?"1st":"2nd")+" contract of run.");
+    try{autoTradeReq({proposal_open_contract:1,contract_id:Number(id),subscribe:1},"open_contract")}
+    catch(e){autoTradePause("contract tracking failed: "+e.message)}
+    return;
+  }
+  if(d.msg_type==="proposal_open_contract"&&d.proposal_open_contract){
+    const c=d.proposal_open_contract,id=String(c.contract_id);
+    if(!c.is_sold||autoTrade.settled.has(id))return;
+    autoTrade.settled.add(id);
+    const profit=Number(c.profit)||0;autoTrade.sessionProfit+=profit;
+    if(profit>=0){autoTrade.wins++;autoTrade.nextStake=autoTrade.stake;autoTradeLog("SETTLED WIN · "+profit.toFixed(2)+" "+autoTrade.currency+".")}
+    else{autoTrade.losses++;autoTrade.nextStake=Math.min(100,Number((autoTrade.nextStake*autoTrade.martingale).toFixed(2)));autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · next stake "+autoTrade.nextStake.toFixed(2)+".")}
+    if(c.subscription?.id){try{autoTradeReq({forget:c.subscription.id},"forget")}catch{}}
+    delete autoTrade.activeContracts[id];
+    if(autoTrade.sessionProfit>=autoTrade.takeProfit){autoTradePause("take-profit limit reached");return}
+    if(autoTrade.sessionProfit<=-autoTrade.stopLoss){autoTradePause("stop-loss limit reached");return}
+    if(autoTrade.runRemaining>0)autoTrade.runRemaining--;
+    autoTradeRender();
+    if(autoTrade.runRemaining>0){autoTradePlaceNext()}
+    else if(autoTrade.enabled){autoTrade.runSymbol="";autoTradeLog("Two-contract run complete. Paused from entries until an entry digit leaves and appears again.");autoTradeRender()}
+  }
+}
+function autoTradeConnect(){
+  const token=$("autoTradeToken").value.trim();if(!token){autoTradeLog("Enter your own Deriv API token in this popup; never paste it into chat.");return}
+  if(autoTrade.socket){try{autoTrade.socket.close()}catch{}}
+  autoTrade.enabled=false;autoTrade.authorized=false;autoTrade.account=null;autoTrade.requests={};
+  let ws;
+  try{ws=new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089")}
+  catch(e){autoTradeLog("Could not create secure Deriv connection: "+e.message);return}
+  autoTrade.socket=ws;autoTradeStatus("CONNECTING");
+  ws.onopen=()=>{autoTradeLog("Secure trading WebSocket connected. Authorizing account…");try{autoTradeReq({authorize:token},"authorize")}catch(e){autoTradeLog(e.message)}};
+  ws.onmessage=e=>{try{autoTradeHandleMessage(JSON.parse(e.data))}catch(err){autoTradeLog("Response handling error: "+err.message)}};
+  ws.onerror=()=>{autoTradeLog("Trading WebSocket error. Bot is paused.");autoTradePause("trading WebSocket error")};
+  ws.onclose=()=>{const wasEnabled=autoTrade.enabled;autoTrade.enabled=false;autoTrade.authorized=false;autoTrade.account=null;autoTradeStatus("DISCONNECTED");if(wasEnabled)autoTradeLog("Trading connection closed; no new contracts will be placed.");autoTradeRender()};
+  $("autoTradeToken").value="";
+}
+function autoTradeDisconnect(){
+  autoTradePause("manual disconnect");autoTrade.authorized=false;autoTrade.account=null;
+  if(autoTrade.socket){try{autoTrade.socket.close()}catch{}autoTrade.socket=null}
+  autoTradeStatus("DISCONNECTED");autoTradeRender();autoTradeLog("Disconnected. Any already-purchased contract may still settle on Deriv.");
+}
+(function setupAutoTrade(){
+  const fab=$("autoTradeFab"),modal=$("autoTradeModal"),close=$("closeAutoTrade");
+  if(!fab||!modal||!close)return;
+  const open=()=>{modal.classList.add("open");modal.setAttribute("aria-hidden","false");fab.setAttribute("aria-expanded","true");document.body.style.overflow="hidden";autoTradeRender();close.focus()};
+  const shut=()=>{modal.classList.remove("open");modal.setAttribute("aria-hidden","true");fab.setAttribute("aria-expanded","false");document.body.style.overflow="";fab.focus()};
+  fab.addEventListener("click",open);close.addEventListener("click",shut);
+  modal.querySelectorAll("[data-close-trade]").forEach(x=>x.addEventListener("click",shut));
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&modal.classList.contains("open"))shut()});
+  $("autoTradeConnect").addEventListener("click",autoTradeConnect);
+  $("autoTradeDisconnect").addEventListener("click",autoTradeDisconnect);
+  $("autoTradeStart").addEventListener("click",autoTradeStart);
+  $("autoTradeStop").addEventListener("click",()=>autoTradePause("paused by user"));
+  $("autoTradeRealCheck").addEventListener("change",()=>{autoTradeRender()});
+  $("autoTradeRealPhrase").addEventListener("input",()=>{autoTradeRender()});
+  ["autoTradeStake","autoTradeMartingale","autoTradeTP","autoTradeSL"].forEach(id=>$(id).addEventListener("input",()=>{if(!autoTrade.enabled){autoTrade.stake=Number($("autoTradeStake").value)||0.35;autoTrade.nextStake=autoTrade.stake;autoTradeRender()}}));
+  autoTradeRender();
+})();
