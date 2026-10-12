@@ -1033,6 +1033,7 @@ function renderSubscribedMarketStatus(mode="switching"){
 const autoTrade={
   socket:null,authorized:false,account:null,enabled:false,realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
+  recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,
   activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,logLines:[]
 };
 function autoTradeLog(message){
@@ -1097,9 +1098,13 @@ function autoTradeStart(){
   if(!autoTradeCanStart()){autoTradeLog("Start blocked: connect an account; real accounts additionally require the checkbox and exact phrase TRADE REAL.");autoTradeRender();return}
   const stake=Number($("autoTradeStake").value),mg=Number($("autoTradeMartingale").value),tp=Number($("autoTradeTP").value),sl=Number($("autoTradeSL").value);
   if(!(stake>=0.35&&stake<=100&&mg>=1&&mg<=10&&tp>0&&sl>0)){autoTradeLog("Invalid risk settings. Stake must be 0.35–100, multiplier 1–10, and take-profit/stop-loss must be positive.");return}
+  const recoveryEnabled=$("autoTradeRecoveryEnabled").checked;
+  const digit1=Number($("autoTradeRecoveryDigit1").value),digit2=Number($("autoTradeRecoveryDigit2").value);
+  if(!Number.isInteger(digit1)||digit1<0||digit1>9||!Number.isInteger(digit2)||digit2<0||digit2>9){autoTradeLog("Recovery digits must be whole numbers from 0 to 9.");return}
   autoTrade.stake=stake;autoTrade.martingale=mg;autoTrade.takeProfit=tp;autoTrade.stopLoss=sl;autoTrade.nextStake=stake;
+  autoTrade.recoveryEnabled=recoveryEnabled;autoTrade.recoveryPhase=0;autoTrade.recoveryDigit1=digit1;autoTrade.recoveryDigit2=digit2;
   autoTrade.sessionProfit=0;autoTrade.wins=0;autoTrade.losses=0;autoTrade.settled=new Set();autoTrade.enabled=true;autoTrade.armed=true;autoTrade.lastDigit=null;autoTrade.startedAt=Date.now();
-  autoTradeLog("Bot started on "+state.symbol+" · "+state.selectedSide+" "+state.selectedDigit+" · stake "+stake+" "+autoTrade.currency+" · 2 contracts per trigger.");
+  autoTradeLog("Bot started on "+state.symbol+" · "+state.selectedSide+" "+state.selectedDigit+" · stake "+stake+" "+autoTrade.currency+" · recovery "+(recoveryEnabled?"ON":"OFF")+".");
   autoTradeRender();
 }
 function autoTradeReadyToEnter(digit){
@@ -1118,26 +1123,24 @@ function processAutoTradeTick(digit){
   if(!autoTrade.armed){autoTrade.lastDigit=digit;return}
   const check=autoTradeReadyToEnter(digit);
   if(!check.ok){autoTradeLog("Entry blocked · "+check.reason);autoTrade.lastDigit=digit;return}
-  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=2;autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;autoTrade.runSide=state.selectedSide;autoTrade.runSelectedDigit=state.selectedDigit;
-  autoTradeLog("ENTRY TRIGGER · "+state.symbol+" digit "+digit+" · "+state.selectedSide+" "+state.selectedDigit+" · starting 2-contract run.");
+  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=1;autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;autoTrade.runSide=state.selectedSide;autoTrade.runSelectedDigit=state.selectedDigit;autoTrade.recoveryPhase=0;
+  autoTradeLog("ENTRY TRIGGER · "+state.symbol+" digit "+digit+" · "+state.selectedSide+" "+state.selectedDigit+" · placing one base contract.");
   autoTradePlaceNext();
 }
 function autoTradePlaceNext(){
   if(!autoTrade.enabled||!autoTrade.authorized||!autoTrade.runRemaining)return;
-  if(state.symbol!==autoTrade.runSymbol){autoTrade.runRemaining=0;autoTradeLog("Run stopped because the selected market changed.");return}
-  if(state.selectedSide!==autoTrade.runSide||state.selectedDigit!==autoTrade.runSelectedDigit){autoTrade.runRemaining=0;autoTradeLog("Run stopped because the selected Over/Under setup changed.");return}
+  if(state.symbol!==autoTrade.runSymbol){autoTradePause("selected market changed");return}
+  const isRecovery=autoTrade.recoveryPhase>0;
+  if(!isRecovery&&(state.selectedSide!==autoTrade.runSide||state.selectedDigit!==autoTrade.runSelectedDigit)){autoTradePause("selected Over/Under setup changed");return}
   if(!state.connected||Date.now()-state.lastTickAt>15000){autoTradePause("live data stale or disconnected");return}
-  if(state.engine!=="overunder"||state.ouSignalSnapshot?.tickCount!==state.digits.length||!state.ouSignalSnapshot?.active||state.ouSignalSnapshot.key!==ouValidationKey()){autoTradePause("Over/Under signal no longer qualifies");return}
+  if(!isRecovery&&(state.engine!=="overunder"||state.ouSignalSnapshot?.tickCount!==state.digits.length||!state.ouSignalSnapshot?.active||state.ouSignalSnapshot.key!==ouValidationKey())){autoTradePause("Over/Under signal no longer qualifies");return}
   if(autoTrade.sessionProfit>=autoTrade.takeProfit){autoTradePause("take-profit limit reached");return}
   if(autoTrade.sessionProfit<=-autoTrade.stopLoss){autoTradePause("stop-loss limit reached");return}
   const stake=Math.max(0.35,Math.min(100,Number(autoTrade.nextStake)||autoTrade.stake));
-  const req={
-    proposal:1,amount:Number(stake.toFixed(2)),basis:"stake",
-    contract_type:autoTrade.runSide==="OVER"?"DIGITOVER":"DIGITUNDER",
-    currency:autoTrade.currency,duration:1,duration_unit:"t",symbol:autoTrade.runSymbol,
-    barrier:String(autoTrade.runSelectedDigit)
-  };
-  try{autoTradeReq(req,"proposal");autoTradeLog("Requesting 1-tick "+state.selectedSide+" "+state.selectedDigit+" proposal · stake "+stake.toFixed(2)+" "+autoTrade.currency+".")}
+  const side=isRecovery?(autoTrade.recoveryPhase===1?autoTrade.runSide:(autoTrade.runSide==="OVER"?"UNDER":"OVER")):autoTrade.runSide;
+  const digit=isRecovery?(autoTrade.recoveryPhase===1?autoTrade.recoveryDigit1:autoTrade.recoveryDigit2):autoTrade.runSelectedDigit;
+  const req={proposal:1,amount:Number(stake.toFixed(2)),basis:"stake",contract_type:side==="OVER"?"DIGITOVER":"DIGITUNDER",currency:autoTrade.currency,duration:1,duration_unit:"t",symbol:autoTrade.runSymbol,barrier:String(digit)};
+  try{autoTradeReq(req,"proposal");autoTradeLog("Requesting "+(isRecovery?"RECOVERY "+autoTrade.recoveryPhase:"BASE")+" · "+side+" "+digit+" · stake "+stake.toFixed(2)+" "+autoTrade.currency+".")}
   catch(e){autoTradePause("proposal request failed: "+e.message)}
 }
 function autoTradeHandleMessage(d){
@@ -1174,20 +1177,32 @@ function autoTradeHandleMessage(d){
     if(!c.is_sold||autoTrade.settled.has(id))return;
     autoTrade.settled.add(id);
     const profit=Number(c.profit)||0;autoTrade.sessionProfit+=profit;
-    if(profit>=0){autoTrade.wins++;autoTrade.nextStake=autoTrade.stake;autoTradeLog("SETTLED WIN · "+profit.toFixed(2)+" "+autoTrade.currency+".")}
-    else{autoTrade.losses++;autoTrade.nextStake=Math.min(100,Number((autoTrade.nextStake*autoTrade.martingale).toFixed(2)));autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · next stake "+autoTrade.nextStake.toFixed(2)+".")}
+    const wasRecovery=autoTrade.recoveryPhase;
     if(c.subscription?.id){try{autoTradeReq({forget:c.subscription.id},"forget")}catch{}}
     delete autoTrade.activeContracts[id];
+    if(profit>=0){
+      autoTrade.wins++;autoTrade.nextStake=autoTrade.stake;autoTrade.recoveryPhase=0;
+      autoTradeLog("SETTLED WIN · "+profit.toFixed(2)+" "+autoTrade.currency+". Recovery sequence reset.");
+    }else{
+      autoTrade.losses++;
+      if(!autoTrade.recoveryEnabled){autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · recovery OFF, stopping immediately.");autoTradePause("loss — recovery mode is OFF");return}
+      if(wasRecovery===1){autoTrade.recoveryPhase=2;autoTrade.nextStake=Number((autoTrade.nextStake*autoTrade.martingale).toFixed(2));autoTradeLog("FIRST RECOVERY LOST · second recovery stake "+autoTrade.nextStake.toFixed(2)+" "+autoTrade.currency+".")}
+      else if(wasRecovery===2){autoTradeLog("SECOND RECOVERY LOST · recovery sequence exhausted.");autoTradePause("second recovery lost");return}
+      else{autoTrade.recoveryPhase=1;autoTrade.nextStake=Number((autoTrade.stake*autoTrade.martingale).toFixed(2));autoTradeLog("BASE TRADE LOST · first recovery stake "+autoTrade.nextStake.toFixed(2)+" "+autoTrade.currency+".")}
+    }
     if(autoTrade.sessionProfit>=autoTrade.takeProfit){autoTradePause("take-profit limit reached");return}
     if(autoTrade.sessionProfit<=-autoTrade.stopLoss){autoTradePause("stop-loss limit reached");return}
-    if(autoTrade.runRemaining>0)autoTrade.runRemaining--;
-    autoTradeRender();
-    if(autoTrade.runRemaining>0){autoTradePlaceNext()}
-    else if(autoTrade.enabled){autoTrade.runSymbol="";autoTradeLog("Two-contract run complete. Paused from entries until an entry digit leaves and appears again.");autoTradeRender()}
-  }
-}
+    autoTrade.runRemaining=0;autoTradeRender();
+    if(autoTrade.enabled){
+      if(autoTrade.recoveryPhase>0){autoTrade.runRemaining=1;autoTradePlaceNext()}
+      else{autoTrade.runSymbol="";autoTrade.armed=true;autoTradeLog("Waiting for a fresh analysis-approved entry trigger.");autoTradeRender()}
+    }
+  }}
 function autoTradeConnect(){
-  const token=$("autoTradeToken").value.trim();if(!token){autoTradeLog("Enter your own Deriv API token in this popup; never paste it into chat.");return}
+  const token=$("autoTradeToken").value.trim()||(function(){try{return localStorage.getItem("mavenFxDerivApiToken")||""}catch{return ""}})();
+  if(!token){autoTradeLog("Enter your own Deriv API token in this popup; never paste it into chat.");return}
+  if($("autoTradeRemember").checked){try{localStorage.setItem("mavenFxDerivApiToken",token)}catch{autoTradeLog("Could not save token in this browser; connect for this session only.")}}
+  else{try{localStorage.removeItem("mavenFxDerivApiToken")}catch{}}
   if(autoTrade.socket){try{autoTrade.socket.close()}catch{}}
   autoTrade.enabled=false;autoTrade.authorized=false;autoTrade.account=null;autoTrade.requests={};
   let ws;
@@ -1219,6 +1234,13 @@ function autoTradeDisconnect(){
   $("autoTradeStop").addEventListener("click",()=>autoTradePause("paused by user"));
   $("autoTradeRealCheck").addEventListener("change",()=>{autoTradeRender()});
   $("autoTradeRealPhrase").addEventListener("input",()=>{autoTradeRender()});
+  const savedToken=(()=>{try{return localStorage.getItem("mavenFxDerivApiToken")||""}catch{return ""}})();
+  if(savedToken){$("autoTradeToken").value=savedToken;$("autoTradeRemember").checked=true}
+  $("autoTradeRemember").addEventListener("change",()=>{if(!$("autoTradeRemember").checked){try{localStorage.removeItem("mavenFxDerivApiToken")}catch{}}});
+  $("autoTradeRecoveryEnabled").addEventListener("change",()=>{$("autoTradeRecoveryFields").hidden=!$("autoTradeRecoveryEnabled").checked});
+  $("autoTradeRecoveryDigit1").value=String(state.selectedDigit);
+  $("autoTradeRecoveryDigit1").addEventListener("focus",()=>{if(!$("autoTradeRecoveryDigit1").dataset.edited)$("autoTradeRecoveryDigit1").value=String(state.selectedDigit)});
+  $("autoTradeRecoveryDigit1").addEventListener("input",()=>{$("autoTradeRecoveryDigit1").dataset.edited="1"});
   ["autoTradeStake","autoTradeMartingale","autoTradeTP","autoTradeSL"].forEach(id=>$(id).addEventListener("input",()=>{if(!autoTrade.enabled){autoTrade.stake=Number($("autoTradeStake").value)||0.35;autoTrade.nextStake=autoTrade.stake;autoTradeRender()}}));
   autoTradeRender();
 })();
