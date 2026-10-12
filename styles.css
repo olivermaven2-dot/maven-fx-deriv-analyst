@@ -201,3 +201,22 @@ button,select,summary{touch-action:manipulation}
   .decision-summary .reason{max-height:2.5em;overflow:hidden}
   .decision-summary .entry-main{font-size:17px}
 }
+
+
+/* Keep selected setup directly above the live decision panel */
+.ou-controls{margin-top:5px}
+#overUnderControls,#evenOddControls,#riseFallControls{scroll-margin-top:100px}
+@media(max-width:520px){
+  #overUnderControls,#evenOddControls,#riseFallControls{padding:7px 8px;margin-top:4px;border-radius:11px}
+  .ou-label{margin-bottom:5px;font-size:9px}
+  .ou-selected-name{font-size:11px}
+  .ou-row{gap:4px}
+  .ou-digit,.ou-side{min-height:29px;font-size:10px;border-radius:7px}
+  .ou-sides{margin-top:5px;gap:5px}
+  .engine{margin-top:4px}
+  .decision-summary{top:94px}
+}
+@media(max-width:380px){
+  #overUnderControls,#evenOddControls,#riseFallControls{padding:6px}
+  .ou-digit,.ou-side{min-height:27px;font-size:9px}
+}
