@@ -401,15 +401,15 @@ function updateQuality(){
 function renderStream(incremental=false){
   const d=state.digits.slice(-STREAM_SIZE),host=$("digitStream");
   $("streamInfo").textContent=d.length+" digits";
-  if(incremental&&window.matchMedia&&window.matchMedia("(max-width: 600px)").matches&&host.children.length===d.length&&d.length>0){
+  if(incremental&&host.children.length===d.length&&d.length>0){
     const previous=host.lastElementChild;if(previous)previous.classList.remove("latest");
     if(host.children.length>=STREAM_SIZE)host.firstElementChild.remove();
     const node=document.createElement("span");node.className="digit latest";node.textContent=String(d[d.length-1]);host.appendChild(node);
   }else{
     host.innerHTML=d.map((x,i)=>`<span class="digit ${i===d.length-1?"latest":""}">${x}</span>`).join("");
   }
-  const mobile=window.matchMedia&&window.matchMedia("(max-width: 600px)").matches,now=Date.now();
-  if(!mobile||!incremental||now-lastDistributionRenderAt>=1500){renderDigitDistribution();lastDistributionRenderAt=now;}
+  const now=Date.now();
+  if(!incremental||now-lastDistributionRenderAt>=1500){renderDigitDistribution();lastDistributionRenderAt=now;}
 }
 function renderDigitDistribution(){
   const windowDigits=state.digits.slice(-1000);
