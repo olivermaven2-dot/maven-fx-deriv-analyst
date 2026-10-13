@@ -1237,7 +1237,7 @@ function autoTradeHandleMessage(d){
   if((kind==="buy"||kind==="demo_test_buy")&&d.buy){
     const id=String(d.buy.contract_id);
     if(kind==="demo_test_buy")autoTrade.demoTestContractId=id;
-    autoTrade.activeContracts[id]={symbol:kind==="demo_test_buy"?state.symbol:autoTrade.runSymbol,stake:Number(d.buy.buy_price)||(kind==="demo_test_buy"?0.35:autoTrade.nextStake)};
+    autoTrade.activeContracts[id]={symbol:kind==="demo_test_buy"?autoTrade.demoTestSymbol:autoTrade.runSymbol,stake:Number(d.buy.buy_price)||(kind==="demo_test_buy"?0.35:autoTrade.nextStake)};
     autoTradeLog((kind==="demo_test_buy"?"ONE DEMO CONTRACT PURCHASED":"Contract purchased")+" · #"+id+". "+(kind==="demo_test_buy"?"Tracking settlement; no second trade will be placed.":""));
     try{autoTradeReq({proposal_open_contract:1,contract_id:Number(id),subscribe:1},"open_contract")}
     catch(e){if(kind==="demo_test_buy"){autoTrade.demoTestActive=false;autoTradeLog("Demo contract bought but tracking failed. Check Deriv contract history; do not retry until verified.")}autoTradePause("contract tracking failed: "+e.message)}
