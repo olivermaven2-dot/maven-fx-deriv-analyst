@@ -27,6 +27,16 @@ function renderOverUnder(root,d,c,last,n){
 const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
 let lastDistributionRenderAt=0;
+let lastMobileEngineRenderAt=0;
+const MOBILE_ENGINE_RENDER_INTERVAL=300;
+function shouldRenderEngineForCurrentTick(){
+  const mobile=window.matchMedia&&window.matchMedia("(max-width: 600px)").matches;
+  if(!mobile||autoTrade.enabled)return true;
+  const now=Date.now();
+  if(now-lastMobileEngineRenderAt<MOBILE_ENGINE_RENDER_INTERVAL)return false;
+  lastMobileEngineRenderAt=now;
+  return true;
+}
 const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
 
 const $=id=>document.getElementById(id);
@@ -379,7 +389,7 @@ function receiveTick(t){
   state.lastTickAt=Date.now();
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
-  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream(true);renderEngine();if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);
+  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream(true);if(shouldRenderEngineForCurrentTick())renderEngine();if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);
 }
 function updateQuality(){
   const n=state.digits.length,pill=$("qualityPill");
