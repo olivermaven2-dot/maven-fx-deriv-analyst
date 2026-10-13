@@ -1202,16 +1202,64 @@ function autoTradeConnect(){
   if(!token){autoTradeLog("Enter your own Deriv API token in this popup; never paste it into chat.");return}
   if($("autoTradeRemember").checked){try{localStorage.setItem("mavenFxDerivApiToken",token)}catch{autoTradeLog("Could not save token in this browser; connect for this session only.")}}
   else{try{localStorage.removeItem("mavenFxDerivApiToken")}catch{}}
-  if(autoTrade.socket){try{autoTrade.socket.close()}catch{}}
+  if(autoTrade.socket){try{autoTrade.socket.onclose=null;autoTrade.socket.onerror=null;autoTrade.socket.close()}catch{}}
   autoTrade.enabled=false;autoTrade.authorized=false;autoTrade.account=null;autoTrade.requests={};
-  let ws;
-  try{ws=new WebSocket("wss://ws.derivws.com/websockets/v3?app_id=1089")}
-  catch(e){autoTradeLog("Could not create secure Deriv connection: "+e.message);return}
-  autoTrade.socket=ws;autoTradeStatus("CONNECTING");
-  ws.onopen=()=>{autoTradeLog("Secure trading WebSocket connected. Authorizing account…");try{autoTradeReq({authorize:token},"authorize")}catch(e){autoTradeLog(e.message)}};
-  ws.onmessage=e=>{try{autoTradeHandleMessage(JSON.parse(e.data))}catch(err){autoTradeLog("Response handling error: "+err.message)}};
-  ws.onerror=()=>{autoTradeLog("Trading WebSocket error. Bot is paused.");autoTradePause("trading WebSocket error")};
-  ws.onclose=()=>{const wasEnabled=autoTrade.enabled;autoTrade.enabled=false;autoTrade.authorized=false;autoTrade.account=null;autoTradeStatus("DISCONNECTED");if(wasEnabled)autoTradeLog("Trading connection closed; no new contracts will be placed.");autoTradeRender()};
+  const endpoints=["wss://ws.derivws.com/websockets/v3?app_id=1089","wss://ws.binaryws.com/websockets/v3?app_id=1089"];
+  let attempt=0, finished=false;
+  const connectEndpoint=()=>{
+    const url=endpoints[attempt%endpoints.length];
+    let ws;
+    try{ws=new WebSocket(url);autoTrade.socket=ws}
+    catch(e){
+      autoTradeLog("Trading socket creation failed ("+(attempt+1)+"/"+endpoints.length+"): "+(e.message||e));
+      attempt++;
+      if(attempt<endpoints.length){connectEndpoint();return}
+      autoTradeStatus("CONNECTION FAILED");autoTradeLog("Both Deriv trading endpoints failed to open. Check network/VPN/firewall and retry.");return;
+    }
+    autoTradeStatus("CONNECTING");
+    autoTradeLog("Connecting bot trading socket via "+(url.includes("binaryws.com")?"Binary WebSocket":"Deriv WebSocket")+" ("+(attempt+1)+"/"+endpoints.length+")…");
+    let opened=false;
+    const timeout=setTimeout(()=>{
+      if(!opened&&!finished){
+        try{ws.onclose=null;ws.onerror=null;ws.close()}catch{}
+        attempt++;
+        if(attempt<endpoints.length){autoTradeLog("Trading connection timed out; trying alternate endpoint.");connectEndpoint()}
+        else{finished=true;autoTradeStatus("CONNECTION FAILED");autoTradeLog("Both trading endpoints timed out. Check network/VPN/firewall, then retry Connect.")}
+      }
+    },10000);
+    ws.onopen=()=>{
+      opened=true;clearTimeout(timeout);
+      autoTradeLog("Trading WebSocket open. Sending account authorization…");
+      try{autoTradeReq({authorize:token},"authorize")}catch(e){autoTradeLog("Authorization request could not be sent: "+e.message)}
+    };
+    ws.onmessage=e=>{try{autoTradeHandleMessage(JSON.parse(e.data))}catch(err){autoTradeLog("Response handling error: "+err.message)}};
+    ws.onerror=()=>{
+      clearTimeout(timeout);
+      if(!opened&&!finished){
+        try{ws.close()}catch{}
+        attempt++;
+        if(attempt<endpoints.length){autoTradeLog("Trading WebSocket handshake failed; trying alternate endpoint.");connectEndpoint()}
+        else{finished=true;autoTradeStatus("CONNECTION FAILED");autoTradeLog("Both trading endpoints failed. Browser network may be blocking WebSockets; retry on another network or browser.")}
+      }else if(opened){
+        autoTradeLog("Trading socket reported a network error after opening; waiting for close details.");
+      }
+    };
+    ws.onclose=e=>{
+      clearTimeout(timeout);
+      if(finished)return;
+      if(!opened){
+        attempt++;
+        if(attempt<endpoints.length){autoTradeLog("Endpoint closed before opening (code "+e.code+"); trying alternate endpoint.");connectEndpoint();return}
+        finished=true;autoTradeStatus("CONNECTION FAILED");autoTradeLog("Both endpoints closed before opening. Last close code: "+e.code+(e.reason?" · "+e.reason:"")+".");return;
+      }
+      finished=true;
+      const wasEnabled=autoTrade.enabled;autoTrade.enabled=false;autoTrade.authorized=false;autoTrade.account=null;autoTradeStatus("DISCONNECTED");
+      autoTradeLog("Trading connection closed (code "+e.code+(e.reason?" · "+e.reason:"")+"). Reconnect manually; no new contracts will be placed.");
+      if(wasEnabled)autoTradeLog("Bot paused for safety after connection loss.");
+      autoTradeRender();
+    };
+  };
+  connectEndpoint();
   $("autoTradeToken").value="";
 }
 function autoTradeDisconnect(){
