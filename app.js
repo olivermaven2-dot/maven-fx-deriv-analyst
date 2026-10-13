@@ -390,25 +390,6 @@ function updateQuality(){
 function renderStream(){
   const d=state.digits.slice(-STREAM_SIZE);$("streamInfo").textContent=d.length+" digits";
   $("digitStream").innerHTML=d.map((x,i)=>`<span class="digit ${i===d.length-1?"latest":""}">${x}</span>`).join("");
-  renderDigitDistribution();
-}
-function renderDigitDistribution(){
-  const windowDigits=state.digits.slice(-1000);
-  const host=$("digitDistribution"),info=$("distributionInfo");
-  if(!host||!info)return;
-  const total=windowDigits.length;
-  info.textContent=total.toLocaleString()+" / 1,000 ticks";
-  if(!total){host.innerHTML='<div class="distribution-empty">Waiting for live Deriv ticks…</div>';return;}
-  const freq=Array(10).fill(0);
-  for(const digit of windowDigits)if(Number.isInteger(digit)&&digit>=0&&digit<=9)freq[digit]++;
-  const percentages=freq.map(count=>count/total*100);
-  const max=Math.max(...freq),min=Math.min(...freq),maxPct=Math.max(...percentages);
-  host.innerHTML=freq.map((count,digit)=>{
-    const pct=percentages[digit],isMost=count===max,isLeast=count===min;
-    const kind=isMost?' most':isLeast?' least':'',tag=isMost?'MOST':isLeast?'LEAST':'';
-    const share=maxPct?pct/maxPct*100:0;
-    return '<div class="distribution-cell'+kind+'"><div class="distribution-circle" style="--share:'+share.toFixed(2)+'%"><span>'+digit+'</span></div><span class="distribution-percent">'+pct.toFixed(1)+'%</span><span class="distribution-tag">'+tag+'</span></div>';
-  }).join('');
 }
 function counts(d){return d.reduce((a,x)=>(a[x]=(a[x]||0)+1,a),{})}
 function rate(a,b){return b?Math.round(a/b*100):0}
