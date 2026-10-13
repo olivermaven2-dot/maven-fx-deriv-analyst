@@ -1052,7 +1052,7 @@ const autoTrade={
   socket:null,authorized:false,account:null,enabled:false,realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,
-  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,logLines:[]
+  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,logLines:[],demoTestActive:false,demoTestContractId:null
 };
 function autoTradeLog(message){
   const stamp=new Date().toLocaleTimeString();
@@ -1161,6 +1161,20 @@ function autoTradePlaceNext(){
   try{autoTradeReq(req,"proposal");autoTradeLog("Requesting "+(isRecovery?"RECOVERY "+autoTrade.recoveryPhase:"BASE")+" · "+side+" "+digit+" · stake "+stake.toFixed(2)+" "+autoTrade.currency+".")}
   catch(e){autoTradePause("proposal request failed: "+e.message)}
 }
+function autoTradeRunDemoTradeTest(){
+  if(!autoTrade.authorized||!autoTrade.account||!autoTrade.account.is_virtual){autoTradeLog("DEMO TEST BLOCKED · connect a DEMO account first. Real-account test orders are not allowed.");return}
+  if(!autoTrade.socket||autoTrade.socket.readyState!==WebSocket.OPEN){autoTradeLog("DEMO TEST BLOCKED · authenticated trading connection is not open.");return}
+  if(autoTrade.enabled||autoTrade.demoTestActive||Object.keys(autoTrade.activeContracts).length){autoTradeLog("DEMO TEST BLOCKED · stop the bot and wait for any open contract to settle first.");return}
+  if(typeof confirm==="function"&&!confirm("Place exactly ONE demo contract for 0.35 "+autoTrade.currency+"? This is a real demo purchase and may lose the stake. No follow-up or recovery trade will be placed.")){autoTradeLog("One-contract demo test cancelled. No trade was placed.");return}
+  const side=state.selectedSide==="UNDER"?"UNDER":"OVER";
+  const selectedDigit=Number(state.selectedDigit);
+  const digit=side==="OVER"?Math.max(0,Math.min(8,Number.isInteger(selectedDigit)?selectedDigit:1)):Math.max(1,Math.min(9,Number.isInteger(selectedDigit)?selectedDigit:8));
+  autoTrade.demoTestActive=true;autoTrade.demoTestContractId=null;
+  try{
+    autoTradeReq({proposal:1,amount:0.35,basis:"stake",contract_type:side==="OVER"?"DIGITOVER":"DIGITUNDER",currency:autoTrade.currency,duration:1,duration_unit:"t",underlying_symbol:state.symbol,barrier:String(digit)},"demo_test_proposal");
+    autoTradeLog("ONE-CONTRACT DEMO TEST · requesting "+side+" "+digit+" on "+state.symbol+" for 0.35 "+autoTrade.currency+". No recovery or repeat trade.");
+  }catch(e){autoTrade.demoTestActive=false;autoTradeLog("Demo test request failed: "+(e.message||e))}
+}
 function autoTradeRunProposalTest(){
   if(!autoTrade.authorized||!autoTrade.socket||autoTrade.socket.readyState!==WebSocket.OPEN){autoTradeLog("Proposal test skipped: authenticated bot connection is not open.");return}
   const side=state.selectedSide==="UNDER"?"UNDER":"OVER";
@@ -1178,6 +1192,7 @@ function autoTradeHandleMessage(d){
     const kind=autoTrade.requests[d.req_id];delete autoTrade.requests[d.req_id];
     autoTradeLog("Deriv API error"+(d.error.code?" ["+d.error.code+"]":"")+": "+(d.error.message||"Request failed"));
     if(kind==="proposal_test")autoTradeLog("PROPOSAL TEST FAILED · quote rejected. No trade was placed.");
+    if(kind==="demo_test_proposal"||kind==="demo_test_buy"){autoTrade.demoTestActive=false;autoTrade.demoTestContractId=null;autoTradeLog("ONE-CONTRACT DEMO TEST FAILED · Deriv rejected the request. No further order will be attempted.");}
     if(kind==="authorize"){autoTrade.authorized=false;autoTrade.account=null;autoTradeStatus("AUTH FAILED")}
     if(kind==="proposal"||kind==="buy")autoTradePause("Deriv rejected a trade request");
     if(kind==="open_contract")autoTradePause("contract tracking failed after purchase; check Deriv contract history");
@@ -1202,19 +1217,27 @@ function autoTradeHandleMessage(d){
     if(!autoTrade.account.is_virtual)autoTradeLog("Real account detected. Trading stays locked until the in-panel confirmation is completed.");
     autoTradeRender();return;
   }
+  if(kind==="demo_test_proposal"){
+    if(!d.proposal){autoTrade.demoTestActive=false;autoTradeLog("ONE-CONTRACT DEMO TEST FAILED · no quote returned; no purchase sent.");autoTradeRender();return}
+    try{autoTradeReq({buy:d.proposal.id,price:d.proposal.ask_price},"demo_test_buy");autoTradeLog("Demo quote received · sending the single 0.35 demo purchase request.")}
+    catch(e){autoTrade.demoTestActive=false;autoTradeLog("Demo purchase request could not be sent: "+(e.message||e))}
+    autoTradeRender();return;
+  }
   if(kind==="proposal"&&d.proposal){
     try{autoTradeReq({buy:d.proposal.id,price:d.proposal.ask_price},"buy")}
     catch(e){autoTradePause("buy request failed: "+e.message)}
     return;
   }
   if(kind==="proposal"&&!d.proposal){autoTradePause("proposal response contained no quote; no buy request was sent");return}
-  if(kind==="buy"&&!d.buy){autoTradePause("buy response contained no contract details; check Deriv contract history");return}
+  if((kind==="buy"||kind==="demo_test_buy")&&!d.buy){if(kind==="demo_test_buy"){autoTrade.demoTestActive=false;autoTradeLog("DEMO TEST BUY RESPONSE INVALID · check Deriv contract history before trying again.");autoTradeRender()}else autoTradePause("buy response contained no contract details; check Deriv contract history");return}
   if(kind==="open_contract"&&!d.proposal_open_contract){autoTradePause("contract tracking response was not recognized; check Deriv contract history");return}
-  if(kind==="buy"&&d.buy){
-    const id=String(d.buy.contract_id);autoTrade.activeContracts[id]={symbol:autoTrade.runSymbol,stake:Number(d.buy.buy_price)||autoTrade.nextStake};
-    autoTradeLog("Contract purchased · #"+id+" · "+(autoTrade.runRemaining===2?"1st":"2nd")+" contract of run.");
+  if((kind==="buy"||kind==="demo_test_buy")&&d.buy){
+    const id=String(d.buy.contract_id);
+    if(kind==="demo_test_buy")autoTrade.demoTestContractId=id;
+    autoTrade.activeContracts[id]={symbol:kind==="demo_test_buy"?state.symbol:autoTrade.runSymbol,stake:Number(d.buy.buy_price)||(kind==="demo_test_buy"?0.35:autoTrade.nextStake)};
+    autoTradeLog((kind==="demo_test_buy"?"ONE DEMO CONTRACT PURCHASED":"Contract purchased")+" · #"+id+". "+(kind==="demo_test_buy"?"Tracking settlement; no second trade will be placed.":""));
     try{autoTradeReq({proposal_open_contract:1,contract_id:Number(id),subscribe:1},"open_contract")}
-    catch(e){autoTradePause("contract tracking failed: "+e.message)}
+    catch(e){if(kind==="demo_test_buy"){autoTrade.demoTestActive=false;autoTradeLog("Demo contract bought but tracking failed. Check Deriv contract history; do not retry until verified.")}autoTradePause("contract tracking failed: "+e.message)}
     return;
   }
   if(d.msg_type==="proposal_open_contract"&&d.proposal_open_contract){
@@ -1222,6 +1245,13 @@ function autoTradeHandleMessage(d){
     if(!c.is_sold||autoTrade.settled.has(id))return;
     autoTrade.settled.add(id);
     const profit=Number(c.profit)||0;autoTrade.sessionProfit+=profit;
+    if(autoTrade.demoTestActive&&id===String(autoTrade.demoTestContractId)){
+      if(c.subscription?.id){try{autoTradeReq({forget:c.subscription.id},"forget")}catch{}}
+      delete autoTrade.activeContracts[id];autoTrade.demoTestActive=false;autoTrade.runRemaining=0;
+      if(profit>=0){autoTrade.wins++;autoTradeLog("ONE-CONTRACT DEMO TEST SETTLED · WIN · "+profit.toFixed(2)+" "+autoTrade.currency+". Test finished; no further trade will be placed.")}
+      else{autoTrade.losses++;autoTradeLog("ONE-CONTRACT DEMO TEST SETTLED · LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+". Test finished; no further trade will be placed.")}
+      autoTradeRender();return;
+    }
     const wasRecovery=autoTrade.recoveryPhase;
     if(c.subscription?.id){try{autoTradeReq({forget:c.subscription.id},"forget")}catch{}}
     delete autoTrade.activeContracts[id];
@@ -1321,6 +1351,9 @@ function autoTradeDisconnect(){
   $("autoTradeConnect").addEventListener("click",autoTradeConnect);
   $("autoTradeDisconnect").addEventListener("click",autoTradeDisconnect);
   $("autoTradeStart").addEventListener("click",autoTradeStart);
+  const demoTestButton=document.createElement("button");
+  demoTestButton.type="button";demoTestButton.id="autoTradeDemoOneShotTest";demoTestButton.className=$("autoTradeStart").className;demoTestButton.textContent="One-contract DEMO test";demoTestButton.style.marginTop="8px";demoTestButton.addEventListener("click",autoTradeRunDemoTradeTest);
+  $("autoTradeStart").parentElement.insertBefore(demoTestButton,$("autoTradeStart").nextSibling);
   $("autoTradeStop").addEventListener("click",()=>autoTradePause("paused by user"));
   $("autoTradeRealCheck").addEventListener("change",()=>{autoTradeRender()});
   $("autoTradeRealPhrase").addEventListener("input",()=>{autoTradeRender()});
