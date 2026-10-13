@@ -28,7 +28,7 @@ const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.bi
 const MAX_TICKS=2000, STREAM_SIZE=80;
 let lastDistributionRenderAt=0;
 let lastMobileEngineRenderAt=0;
-const MOBILE_ENGINE_RENDER_INTERVAL=300;
+const MOBILE_ENGINE_RENDER_INTERVAL=650;
 function shouldRenderEngineForCurrentTick(){
   const mobile=window.matchMedia&&window.matchMedia("(max-width: 600px)").matches;
   if(!mobile||autoTrade.enabled)return true;
@@ -405,7 +405,7 @@ function updateQuality(){
 function renderStream(incremental=false){
   const d=state.digits.slice(-STREAM_SIZE),host=$("digitStream");
   $("streamInfo").textContent=d.length+" digits";
-  const expectedPreviousCount=Math.min(Math.max(0,d.length-1),STREAM_SIZE);
+  const expectedPreviousCount=d.length<STREAM_SIZE?Math.max(0,d.length-1):STREAM_SIZE;
   if(incremental&&host.children.length===expectedPreviousCount&&d.length>0){
     const previous=host.lastElementChild;if(previous)previous.classList.remove("latest");
     if(host.children.length>=STREAM_SIZE)host.firstElementChild.remove();
@@ -414,7 +414,7 @@ function renderStream(incremental=false){
     host.innerHTML=d.map((x,i)=>`<span class="digit ${i===d.length-1?"latest":""}">${x}</span>`).join("");
   }
   const now=Date.now();
-  if(!incremental||now-lastDistributionRenderAt>=1500){renderDigitDistribution();lastDistributionRenderAt=now;}
+  if(!incremental||now-lastDistributionRenderAt>=2500){renderDigitDistribution();lastDistributionRenderAt=now;}
 }
 function renderDigitDistribution(){
   const windowDigits=state.digits.slice(-1000);
