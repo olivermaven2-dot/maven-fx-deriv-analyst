@@ -1052,7 +1052,7 @@ const autoTrade={
   socket:null,authorized:false,account:null,enabled:false,realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,
-  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,logLines:[],demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyParameters:null
+  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,logLines:[],demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyParameters:null
 };
 function autoTradeLog(message){
   const stamp=new Date().toLocaleTimeString();
@@ -1085,7 +1085,7 @@ function autoTradeRender(){
   if($("autoTradeAccount"))$("autoTradeAccount").textContent=autoTrade.account?(autoTrade.account.loginid+" · "+(autoTrade.account.is_virtual?"DEMO":"REAL")+" · "+autoTrade.currency):"No account connected";
   if($("autoTradePnL"))$("autoTradePnL").textContent="Session P/L: "+autoTrade.sessionProfit.toFixed(2)+" "+(autoTrade.currency||"");
   if($("autoTradeNextStake"))$("autoTradeNextStake").textContent=autoTrade.nextStake.toFixed(2)+" "+(autoTrade.currency||"");
-  if($("autoTradeRunProgress"))$("autoTradeRunProgress").textContent=autoTrade.runRemaining?((2-autoTrade.runRemaining)+"/2 settled"):autoTrade.enabled?"Waiting for entry":"Idle";
+  if($("autoTradeRunProgress"))$("autoTradeRunProgress").textContent=autoTrade.runSymbol?(autoTrade.runSettled+"/2 settled"):autoTrade.enabled?"Waiting for entry":"Idle";
   const gate=$("autoTradeRealGate");if(gate)gate.hidden=!autoTrade.account||autoTrade.account.is_virtual;
   autoTradeStatus(autoTrade.enabled?"RUNNING":autoTrade.authorized?(autoTrade.account?.is_virtual?"DEMO CONNECTED":"REAL ACCOUNT LOCKED"):"DISCONNECTED",autoTrade.enabled?"running":autoTrade.authorized?"connected":"");
 }
@@ -1140,7 +1140,7 @@ function processAutoTradeTick(digit){
   if(!autoTrade.armed){autoTrade.lastDigit=digit;return}
   const check=autoTradeReadyToEnter(digit);
   if(!check.ok){autoTradeLog("Entry blocked · "+check.reason);autoTrade.lastDigit=digit;return}
-  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=1;autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;autoTrade.runSide=state.selectedSide;autoTrade.runSelectedDigit=state.selectedDigit;autoTrade.recoveryPhase=0;
+  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=1;autoTrade.runSettled=0;autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;autoTrade.runSide=state.selectedSide;autoTrade.runSelectedDigit=state.selectedDigit;autoTrade.recoveryPhase=0;
   autoTradeLog("ENTRY TRIGGER · "+state.symbol+" digit "+digit+" · "+state.selectedSide+" "+state.selectedDigit+" · placing one base contract.");
   autoTradePlaceNext();
 }
@@ -1263,13 +1263,15 @@ function autoTradeHandleMessage(d){
     const wasRecovery=autoTrade.recoveryPhase;
     if(c.subscription?.id){try{autoTradeReq({forget:c.subscription.id},"forget")}catch{}}
     delete autoTrade.activeContracts[id];
+    autoTrade.runSettled++;
     if(profit>=0){
       autoTrade.wins++;autoTrade.nextStake=autoTrade.stake;autoTrade.recoveryPhase=0;
       autoTradeLog("SETTLED WIN · "+profit.toFixed(2)+" "+autoTrade.currency+". Recovery sequence reset.");
     }else{
       autoTrade.losses++;
       if(!autoTrade.recoveryEnabled){autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · recovery OFF, stopping immediately.");autoTradePause("loss — recovery mode is OFF");return}
-      if(wasRecovery===1){autoTrade.recoveryPhase=2;autoTrade.nextStake=Number((autoTrade.nextStake*autoTrade.martingale).toFixed(2));autoTradeLog("FIRST RECOVERY LOST · second recovery stake "+autoTrade.nextStake.toFixed(2)+" "+autoTrade.currency+".")}
+      if(autoTrade.runSettled>=2){autoTradeLog("SECOND RUN LOST · this entry's two-contract limit is exhausted.");autoTradePause("second run lost — two-run entry complete");return}
+      if(wasRecovery===1){autoTradeLog("RECOVERY RUN LOST · this entry's two-contract limit is exhausted.");autoTradePause("recovery run lost — two-run entry complete");return}
       else if(wasRecovery===2){autoTradeLog("SECOND RECOVERY LOST · recovery sequence exhausted.");autoTradePause("second recovery lost");return}
       else{autoTrade.recoveryPhase=1;autoTrade.nextStake=Number((autoTrade.stake*autoTrade.martingale).toFixed(2));autoTradeLog("BASE TRADE LOST · first recovery stake "+autoTrade.nextStake.toFixed(2)+" "+autoTrade.currency+".")}
     }
@@ -1277,8 +1279,12 @@ function autoTradeHandleMessage(d){
     if(autoTrade.sessionProfit<=-autoTrade.stopLoss){autoTradePause("stop-loss limit reached");return}
     autoTrade.runRemaining=0;autoTradeRender();
     if(autoTrade.enabled){
-      if(autoTrade.recoveryPhase>0){autoTrade.runRemaining=1;autoTradePlaceNext()}
-      else{autoTrade.runSymbol="";autoTrade.armed=true;autoTradeLog("Waiting for a fresh analysis-approved entry trigger.");autoTradeRender()}
+      if(autoTrade.runSettled<2&&(autoTrade.recoveryPhase>0||profit>=0)){
+        if(profit>=0){autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;autoTradeLog("RUN 1 WIN · placing run 2 at the base stake for the same entry trigger.")}
+        autoTrade.runRemaining=1;autoTradePlaceNext();
+      }else{
+        autoTrade.runSymbol="";autoTrade.armed=true;autoTradeLog("Two-run entry complete. Waiting for a fresh analysis-approved entry trigger.");autoTradeRender();
+      }
     }
   }}
 async function autoTradeConnect(){
