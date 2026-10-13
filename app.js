@@ -1052,7 +1052,7 @@ const autoTrade={
   socket:null,authorized:false,account:null,enabled:false,realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,
-  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,logLines:[],demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
+  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,logLines:[],demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
 };
 function autoTradeLog(message){
   const stamp=new Date().toLocaleTimeString();
@@ -1143,6 +1143,13 @@ function autoTradeReadyToEnter(digit){
 }
 function processAutoTradeTick(digit){
   if(!autoTrade.enabled)return;
+  // Resume an already-approved sequence after the live analysis stream recovers; do not reinterpret it as a new entry.
+  if(autoTrade.waitingForFreshData&&autoTrade.runSymbol&&autoTrade.runRemaining&&state.connected&&Date.now()-state.lastTickAt<=15000){
+    autoTrade.waitingForFreshData=false;
+    autoTradeLog("LIVE DATA RESTORED · resuming the pending "+(autoTrade.recoveryPhase>0?"RECOVERY "+autoTrade.recoveryPhase:"contract")+" for the existing entry sequence.");
+    autoTradePlaceNext();
+    return;
+  }
   // Lock one entry sequence until its contracts settle and the sequence is explicitly completed.
   // Never let a fresh tick overwrite runSymbol/runSettled while a quote or contract is in flight.
   if(autoTrade.runSymbol||Object.keys(autoTrade.pendingBuyQuotes).length||Object.keys(autoTrade.activeContracts).length)return;
@@ -1160,7 +1167,7 @@ function autoTradePlaceNext(){
   if(state.symbol!==autoTrade.runSymbol){autoTradePause("selected market changed");return}
   const isRecovery=autoTrade.recoveryPhase>0;
   if(!isRecovery&&(state.selectedSide!==autoTrade.runSide||state.selectedDigit!==autoTrade.runSelectedDigit)){autoTradePause("selected Over/Under setup changed");return}
-  if(!state.connected||Date.now()-state.lastTickAt>15000){autoTradePause("live data stale or disconnected");return}
+  if(!state.connected||Date.now()-state.lastTickAt>15000){if(!autoTrade.waitingForFreshData)autoTradeLog("LIVE DATA STALE · holding the pending "+(isRecovery?"RECOVERY "+autoTrade.recoveryPhase:"contract")+" until fresh ticks resume; no new contract submitted.");autoTrade.waitingForFreshData=true;return}
   // Validate the live signal only before run 1. Run 2 belongs to the already-approved entry trigger and must not be cancelled just because the signal changes after run 1 settles.
   if(!isRecovery&&autoTrade.runSettled===0&&(state.engine!=="overunder"||state.ouSignalSnapshot?.tickCount!==state.digits.length||!state.ouSignalSnapshot?.active||state.ouSignalSnapshot.key!==ouValidationKey())){autoTradePause("Over/Under signal no longer qualifies before the first contract");return}
   if(autoTrade.sessionProfit>=autoTrade.takeProfit){autoTradePause("take-profit limit reached");return}
