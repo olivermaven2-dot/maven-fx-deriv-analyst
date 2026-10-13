@@ -37,7 +37,7 @@ function shouldRenderEngineForCurrentTick(){
   lastMobileEngineRenderAt=now;
   return true;
 }
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],lastTickSignature:"",engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
 
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
@@ -161,7 +161,7 @@ function startMarket(force=false){
   if(!force && state.marketStarted && state.symbol==="R_100")return;
   state.marketStarted=true;
   const selected=state.markets.find(m=>m.symbol===state.symbol);if(selected?.pipSize!=null)state.pipSize=selected.pipSize;
-  state.ticks=[];state.digits=[];state.lastTickAt=0;renderSubscribedMarketStatus("switching");$("lastPrice").textContent="—";$("lastDigit").textContent="—";renderStream();renderEngine();
+  state.ticks=[];state.digits=[];state.lastTickSignature="";state.lastTickAt=0;renderSubscribedMarketStatus("switching");$("lastPrice").textContent="—";$("lastDigit").textContent="—";renderStream();renderEngine();
   request({ticks_history:state.symbol,end:"latest",count:1000,style:"ticks",req_id:nextReq()});
   request({ticks:state.symbol,subscribe:1,req_id:nextReq()});
   if($("diagSubscription"))$("diagSubscription").textContent=`Requested ${state.symbol}`;
@@ -171,6 +171,7 @@ function loadHistory(prices,times,pipSize=null){
   if(pipSize!=null)state.pipSize=pipSize;
   const arr=prices.map((p,i)=>({quote:p,epoch:times[i]||0})).filter(x=>Number.isFinite(Number(x.quote)));
   state.ticks=arr.slice(-MAX_TICKS);state.digits=arr.map(x=>digitFromQuote(x.quote,state.pipSize)).filter(Number.isInteger).slice(-MAX_TICKS);
+  const latestHistoryTick=state.ticks.at(-1);state.lastTickSignature=latestHistoryTick?String(latestHistoryTick.epoch||"")+":"+String(latestHistoryTick.quote):"";
   $("diagHistory").textContent=String(arr.length);updateQuality();renderStream();renderEngine();syncCurrentIntoScanner();
 }
 
@@ -381,10 +382,13 @@ function renderOUValidationPanel(){
 function receiveTick(t){
   if(!t||t.symbol!==state.symbol)return;
   const quote=t.quote;if(!Number.isFinite(Number(quote)))return;
+  const epoch=t.epoch||Math.floor(Date.now()/1000),signature=String(epoch)+":"+String(quote);
+  if(signature===state.lastTickSignature)return;
   if(t.pip_size!=null)state.pipSize=t.pip_size;
   const digit=digitFromQuote(quote,state.pipSize);if(!Number.isInteger(digit))return;
 
-  state.ticks.push({quote:Number(quote),epoch:t.epoch||Math.floor(Date.now()/1000)});state.digits.push(digit);
+  state.lastTickSignature=signature;
+  state.ticks.push({quote:Number(quote),epoch});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
   state.lastTickAt=Date.now();
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
@@ -401,7 +405,8 @@ function updateQuality(){
 function renderStream(incremental=false){
   const d=state.digits.slice(-STREAM_SIZE),host=$("digitStream");
   $("streamInfo").textContent=d.length+" digits";
-  if(incremental&&host.children.length===d.length&&d.length>0){
+  const expectedPreviousCount=Math.min(Math.max(0,d.length-1),STREAM_SIZE);
+  if(incremental&&host.children.length===expectedPreviousCount&&d.length>0){
     const previous=host.lastElementChild;if(previous)previous.classList.remove("latest");
     if(host.children.length>=STREAM_SIZE)host.firstElementChild.remove();
     const node=document.createElement("span");node.className="digit latest";node.textContent=String(d[d.length-1]);host.appendChild(node);
