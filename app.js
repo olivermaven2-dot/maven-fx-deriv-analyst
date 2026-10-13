@@ -1222,7 +1222,7 @@ function autoTradeHandleMessage(d){
     if(!d.proposal){autoTrade.demoTestActive=false;autoTradeLog("ONE-CONTRACT DEMO TEST FAILED · no quote returned; no purchase sent.");autoTradeRender();return}
     if(!d.proposal.id||d.proposal.ask_price===undefined||d.proposal.ask_price===null){autoTrade.demoTestActive=false;autoTradeLog("DEMO TEST FAILED · quote response omitted its proposal ID or ask price; no purchase sent.");autoTradeRender();return}
     autoTradeLog("Demo quote received · sending one direct-parameter purchase with Deriv’s quoted maximum price.");
-    try{const parameters=autoTrade.demoTestPendingParameters;if(!parameters)throw new Error("The matching demo-test contract parameters were not saved.");autoTradeReq({buy:"1",parameters:{...parameters,price:Number(d.proposal.ask_price)}},"demo_test_buy")}
+    try{const parameters=autoTrade.demoTestPendingParameters;if(!parameters)throw new Error("The matching demo-test contract parameters were not saved.");autoTradeReq({buy:"1",parameters:{...parameters},price:Number(d.proposal.ask_price)},"demo_test_buy")}
     catch(e){autoTrade.demoTestActive=false;autoTradeLog("Demo purchase request could not be sent: "+(e.message||e))}
     autoTradeRender();return;
   }
@@ -1231,7 +1231,7 @@ function autoTradeHandleMessage(d){
       const pending=autoTrade.pendingBuyParameters;
       if(!pending||pending.reqId!==d.req_id)throw new Error("The matching contract parameters for this quote were not found.");
       autoTrade.pendingBuyParameters=null;
-      autoTradeReq({buy:"1",parameters:{...pending.parameters,price:Number(d.proposal.ask_price)}},"buy");
+      autoTradeReq({buy:"1",parameters:{...pending.parameters},price:Number(d.proposal.ask_price)},"buy");
       autoTradeLog("Quote accepted · submitting the documented direct-parameter buy request at the quoted maximum price.");
     }catch(e){autoTradePause("buy request failed: "+e.message)}
     return;
