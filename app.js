@@ -1170,6 +1170,8 @@ function autoTradeHandleMessage(d){
     autoTradeRender();return;
   }
   const kind=autoTrade.requests[d.req_id];if(kind)delete autoTrade.requests[d.req_id];
+  if(kind==="connection_test"&&d.balance){autoTradeLog("BOT CONNECTION TEST PASSED · authenticated demo account responded · balance response received. No trade was placed.");autoTradeRender();return}
+  if(kind==="connection_test"&&!d.balance){autoTradeLog("Connection is open, but the account test response was not recognized. No trade was placed.");autoTradeRender();return}
   if(kind==="authorize"&&d.authorize){
     autoTrade.account={loginid:d.authorize.loginid,is_virtual:Number(d.authorize.is_virtual)===1};
     autoTrade.currency=d.authorize.currency||"USD";autoTrade.authorized=true;autoTrade.nextStake=autoTrade.stake;
@@ -1266,6 +1268,7 @@ async function autoTradeConnect(){
       $("autoTradeToken").value="";
       autoTradeLog("Authenticated trading connection opened · "+chosen.label+".");
       if(!chosen.demo)autoTradeLog("REAL account selected. Trading remains locked until the in-panel TRADE REAL confirmation is completed.");
+      try{autoTradeReq({balance:1},"connection_test");autoTradeLog("Checking authenticated account response (no trade will be placed)…")}catch(e){autoTradeLog("Connection test could not be sent: "+(e.message||e))}
       autoTradeRender();
     };
     ws.onmessage=e=>{try{autoTradeHandleMessage(JSON.parse(e.data))}catch(err){autoTradeLog("Trading response handling error: "+(err.message||err))}};
