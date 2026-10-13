@@ -174,7 +174,7 @@ function renderDigitDistribution(){
   const freq=Array(10).fill(0);
   for(const digit of windowDigits)if(Number.isInteger(digit)&&digit>=0&&digit<=9)freq[digit]++;
   const percentages=freq.map(count=>count/total*100);
-  const max=Math.max(...freq),min=Math.min(...freq);
+  const max=Math.max(...freq),min=Math.min(...freq),maxPct=Math.max(...percentages);
   host.innerHTML=freq.map((count,digit)=>{
     const pct=percentages[digit];
     const isMost=count===max,isLeast=count===min;
@@ -182,7 +182,7 @@ function renderDigitDistribution(){
     const tag=isMost?'MOST':isLeast?'LEAST':'';
     return '<div class="distribution-row'+kind+'">'+
       '<span class="distribution-digit">'+digit+'</span>'+
-      '<div class="distribution-track"><div class="distribution-fill'+kind+'" style="width:'+pct.toFixed(4)+'%"></div></div>'+
+      '<div class="distribution-track"><div class="distribution-fill'+kind+'" style="width:'+(maxPct?pct/maxPct*100:0).toFixed(4)+'%"></div></div>'+
       '<span class="distribution-percent">'+pct.toFixed(1)+'%</span>'+
       '<span class="distribution-tag">'+tag+'</span>'+
       '</div>';
