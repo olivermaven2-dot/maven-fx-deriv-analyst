@@ -1161,17 +1161,38 @@ function autoTradePlaceNext(){
   try{autoTradeReq(req,"proposal");autoTradeLog("Requesting "+(isRecovery?"RECOVERY "+autoTrade.recoveryPhase:"BASE")+" · "+side+" "+digit+" · stake "+stake.toFixed(2)+" "+autoTrade.currency+".")}
   catch(e){autoTradePause("proposal request failed: "+e.message)}
 }
+function autoTradeRunProposalTest(){
+  if(!autoTrade.authorized||!autoTrade.socket||autoTrade.socket.readyState!==WebSocket.OPEN){autoTradeLog("Proposal test skipped: authenticated bot connection is not open.");return}
+  const side=state.selectedSide==="UNDER"?"UNDER":"OVER";
+  const selectedDigit=Number(state.selectedDigit);
+  const digit=side==="OVER"?Math.max(0,Math.min(8,Number.isInteger(selectedDigit)?selectedDigit:1)):Math.max(1,Math.min(9,Number.isInteger(selectedDigit)?selectedDigit:8));
+  const stake=Math.max(0.35,Math.min(100,Number(autoTrade.stake)||0.35));
+  const req={proposal:1,amount:Number(stake.toFixed(2)),basis:"stake",contract_type:side==="OVER"?"DIGITOVER":"DIGITUNDER",currency:autoTrade.currency,duration:1,duration_unit:"t",underlying_symbol:state.symbol,barrier:String(digit)};
+  try{
+    autoTradeReq(req,"proposal_test");
+    autoTradeLog("READ-ONLY PROPOSAL TEST · requesting a "+side+" "+digit+" quote on "+state.symbol+" · "+stake.toFixed(2)+" "+autoTrade.currency+". No buy request will be sent.");
+  }catch(e){autoTradeLog("Proposal test could not be sent: "+(e.message||e))}
+}
 function autoTradeHandleMessage(d){
   if(d.error){
     const kind=autoTrade.requests[d.req_id];delete autoTrade.requests[d.req_id];
     autoTradeLog("Deriv API error"+(d.error.code?" ["+d.error.code+"]":"")+": "+(d.error.message||"Request failed"));
+    if(kind==="proposal_test")autoTradeLog("PROPOSAL TEST FAILED · quote rejected. No trade was placed.");
     if(kind==="authorize"){autoTrade.authorized=false;autoTrade.account=null;autoTradeStatus("AUTH FAILED")}
     if(kind==="proposal"||kind==="buy")autoTradePause("Deriv rejected a trade request");
     autoTradeRender();return;
   }
   const kind=autoTrade.requests[d.req_id];if(kind)delete autoTrade.requests[d.req_id];
-  if(kind==="connection_test"&&d.balance){autoTradeLog("BOT CONNECTION TEST PASSED · authenticated demo account responded · balance response received. No trade was placed.");autoTradeRender();return}
+  if(kind==="connection_test"&&d.balance){
+    autoTradeLog("BOT CONNECTION TEST PASSED · authenticated account responded. No trade was placed.");
+    autoTradeRunProposalTest();autoTradeRender();return
+  }
   if(kind==="connection_test"&&!d.balance){autoTradeLog("Connection is open, but the account test response was not recognized. No trade was placed.");autoTradeRender();return}
+  if(kind==="proposal_test"){
+    if(d.proposal)autoTradeLog("PROPOSAL TEST PASSED · Deriv returned a valid quote for "+(d.proposal.longcode||d.proposal.contract_type||"the requested contract")+". Ask price: "+(d.proposal.ask_price??"not supplied")+" "+autoTrade.currency+". Quote only — no buy request was sent.");
+    else autoTradeLog("PROPOSAL TEST RESPONSE RECEIVED, but no proposal quote was present. No trade was placed.");
+    autoTradeRender();return
+  }
   if(kind==="authorize"&&d.authorize){
     autoTrade.account={loginid:d.authorize.loginid,is_virtual:Number(d.authorize.is_virtual)===1};
     autoTrade.currency=d.authorize.currency||"USD";autoTrade.authorized=true;autoTrade.nextStake=autoTrade.stake;
