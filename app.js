@@ -641,9 +641,11 @@ function applySpikeRiskProtection(root){
   const old=root.querySelector(".spike-risk-banner");if(old)old.remove();
   const banner=document.createElement("div");
   banner.className="spike-risk-banner spike-risk-"+r.level.toLowerCase();
-  banner.innerHTML='<strong>'+esc(r.title)+'</strong><div>'+esc(r.reason)+'</div>';
+  banner.innerHTML='<strong>SPIKE STATUS: '+esc(r.level==="UNKNOWN"?"CHECKING":r.title.replace(" SPIKE RISK","").replace(" DETECTED",""))+'</strong>';
   const panelRoot=root.querySelector(".engine-panel");
   if(!panelRoot)return;
+  const reasonNode=panelRoot.querySelector(".spike-risk-reason");
+  if(reasonNode)reasonNode.textContent=r.reason;
   const kicker=panelRoot.querySelector(".panel-kicker");
   if(kicker)kicker.insertAdjacentElement("afterend",banner);else panelRoot.prepend(banner);
   if(r.level==="HIGH"||r.level==="UNKNOWN"){
@@ -652,7 +654,7 @@ function applySpikeRiskProtection(root){
     const reason=panelRoot.querySelector(".reason");
     if(reason)reason.textContent="The analysis may still show a directional setup, but the shared spike-risk protection layer is blocking new entry recommendations.";
     const entry=panelRoot.querySelector(".entry");
-    if(entry)entry.innerHTML='<div class="entry-head">ENTRY PROTECTION</div><div class="entry-main">NO ENTRY — '+esc(r.title)+'</div><div class="entry-meta">'+esc(r.reason)+'</div>';
+    if(entry)entry.innerHTML='<div class="entry-head">ENTRY DIGITS</div><div class="entry-main">NO ENTRY</div>';
     const why=panelRoot.querySelector(".why ul");
     if(why){const li=document.createElement("li");li.className="block";li.textContent="× Shared spike-risk protection blocked entry eligibility.";why.prepend(li)}
   }else if(r.level==="MODERATE"){
@@ -676,9 +678,16 @@ function renderEngine(){
 }
 function panel(stateText,reason,entry,why,n){
   const cls=stateText==="STRONG SIGNAL"?"strong":stateText==="SIGNAL"?"signal":stateText==="NO SIGNAL"||stateText==="NO ENTRY"?"none":"wait";
-  return `<section class="engine-panel"><div class="decision-summary"><div class="panel-kicker">FINAL SIGNAL</div><div class="state ${cls}">${esc(stateText)}</div><div class="reason">${esc(reason)}</div>${entry?entryHtml(entry):""}</div><div class="why"><div class="why-title">WHY THIS STATE?</div><ul>${why.map(x=>`<li class="${x[0]==="×"?"block":""}">${esc(x)}</li>`).join("")}</ul></div><details class="analysis-details"><summary>Detailed analysis</summary><div class="stats"><div class="stat"><span>Sample</span><strong>${n}</strong></div><div class="stat"><span>Evidence</span><strong>${entry?.evidence||"Building"}</strong></div><div class="stat"><span>Data quality</span><strong>${n>=500?"GOOD":n>=100?"BUILDING":"INSUFFICIENT"}</strong></div><div class="stat"><span>Last digit</span><strong>${state.digits?.at(-1)??"—"}</strong></div></div></details></section>`;
+  const entryReason=entry?(entry.reason||entry.meta||"No qualifying entry was produced."):"Entry analysis is not active yet.";
+  const entryEvidence=entry?.evidence||"Building";
+  return `<section class="engine-panel"><div class="decision-summary"><div class="panel-kicker">FINAL SIGNAL</div><div class="state ${cls}">${esc(stateText)}</div><div class="spike-risk-banner spike-risk-unknown"><strong>SPIKE STATUS: CHECKING</strong></div>${entry?entryHtml(entry):""}</div><details class="why-details"><summary>Why this state?</summary><div class="why-content"><div class="why-section"><strong>Signal reason</strong><p class="reason">${esc(reason)}</p></div><div class="why-section"><strong class="spike-reason-label">Spike assessment</strong><p class="spike-risk-reason">Checking recent market movement.</p></div><div class="why-section"><strong>Entry reason</strong><p class="entry-reason">${esc(entryReason)}</p><p class="entry-evidence">${esc(entryEvidence)}</p></div><div class="why"><div class="why-title">Analysis checks</div><ul>${why.map(x=>`<li class="${x[0]==="×"?"block":""}">${esc(x)}</li>`).join("")}</ul></div><details class="analysis-details"><summary>Technical details</summary><div class="stats"><div class="stat"><span>Sample</span><strong>${n}</strong></div><div class="stat"><span>Evidence</span><strong>${entryEvidence}</strong></div><div class="stat"><span>Data quality</span><strong>${n>=500?"GOOD":n>=100?"BUILDING":"INSUFFICIENT"}</strong></div><div class="stat"><span>Last digit</span><strong>${state.digits?.at(-1)??"—"}</strong></div></div></details></div></details></section>`;
 }
-function entryHtml(e){const cards=Array.isArray(e.entries)?'<div class="entry-candidates">'+e.entries.map(x=>'<div class="entry-candidate"><strong>ENTRY DIGIT '+esc(x.digit)+'</strong><span>SCORE '+esc(x.score)+'/100</span><small>'+esc(x.status)+'</small></div>').join("")+'</div>':'<div class="entry-main">'+esc(e.main)+'</div>';return '<div class="entry"><div class="entry-head">ENTRY DIGITS • RANKING SCORE, NOT WIN PROBABILITY</div>'+cards+'<div class="entry-meta">'+esc(e.meta||e.reason||"Qualifying setup")+'</div></div>'}
+function entryHtml(e){
+  const cards=Array.isArray(e.entries)
+    ? '<div class="entry-candidates">'+e.entries.map(x=>'<div class="entry-candidate"><strong>'+esc(x.digit)+'</strong><span>SCORE '+esc(x.score)+'/100</span></div>').join("")+'</div>'
+    : '<div class="entry-main">'+esc(e.main||"NO ENTRY")+'</div>';
+  return '<div class="entry"><div class="entry-head">ENTRY DIGITS</div>'+cards+'</div>';
+}
 function parityStats(d,selectedSide){
   const key=x=>x%2===0?"EVEN":"ODD";
   const target=selectedSide,other=target==="EVEN"?"ODD":"EVEN";
