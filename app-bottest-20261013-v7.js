@@ -24,8 +24,9 @@ function renderOverUnder(root,d,c,last,n){
     ouValidationSummary()
   ],n);
 }
-const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
+const WS_URLS=["wss://ws.derivws.com/websockets/v3?app_id=1089","wss://ws.binaryws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
+let heartbeatTimer=null;
 const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
 
 const $=id=>document.getElementById(id);
@@ -52,6 +53,7 @@ function digitFromQuote(quote,pipSize=state.pipSize){
 function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
 
 function connect(){
+  clearInterval(heartbeatTimer);heartbeatTimer=null;
   if(state.socket){try{state.socket.onclose=null;state.socket.close()}catch{}}
   clearTimeout(state.connectTimer); clearTimeout(state.reconnectTimer);
   state.connected=false;
@@ -76,6 +78,8 @@ connect();return;}
     setStatus("connecting",`Connected — requesting ${state.marketName||state.symbol}`);
     state.lastMessage="WebSocket OPEN";
     request({ping:1,req_id:nextReq()});
+    clearInterval(heartbeatTimer);
+    heartbeatTimer=setInterval(()=>{if(state.socket===ws&&ws.readyState===WebSocket.OPEN)request({ping:1,req_id:nextReq()})},30000);
     request({active_symbols:"brief",req_id:nextReq()});
     startMarket(true);
   };
@@ -87,6 +91,7 @@ connect();return;}
     setStatus("error","WebSocket error — switching endpoint");
   };
   ws.onclose=e=>{
+    clearInterval(heartbeatTimer);heartbeatTimer=null;
     clearTimeout(state.connectTimer);
     state.connected=false;
     state.lastError=`Close ${e.code}${e.reason?": "+e.reason:""}${e.code===1006?" — abnormal close before a WebSocket close frame":""}`;renderSubscribedMarketStatus("switching");
