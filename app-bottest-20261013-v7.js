@@ -26,7 +26,7 @@ function renderOverUnder(root,d,c,last,n){
 }
 const WS_URLS=["wss://ws.derivws.com/websockets/v3?app_id=1089","wss://ws.binaryws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
-let heartbeatTimer=null;
+let heartbeatTimer=null, socketOpenedAt=0;
 const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
 
 const $=id=>document.getElementById(id);
@@ -74,12 +74,12 @@ connect();return;}
   ws.onopen=()=>{
     clearTimeout(state.connectTimer);
     resetDeepScannerSubscriptions();
-    state.connected=true; state.reconnectDelay=1000; state.lastError="—";renderSubscribedMarketStatus("switching");
+    state.connected=true; socketOpenedAt=Date.now(); state.reconnectDelay=1000; state.lastError="—";renderSubscribedMarketStatus("switching");
     setStatus("connecting",`Connected — requesting ${state.marketName||state.symbol}`);
     state.lastMessage="WebSocket OPEN";
     request({ping:1,req_id:nextReq()});
     clearInterval(heartbeatTimer);
-    heartbeatTimer=setInterval(()=>{if(state.socket===ws&&ws.readyState===WebSocket.OPEN)request({ping:1,req_id:nextReq()})},30000);
+    heartbeatTimer=setInterval(()=>{if(state.socket===ws&&ws.readyState===WebSocket.OPEN)request({ping:1,req_id:nextReq()})},12000);
     request({active_symbols:"brief",req_id:nextReq()});
     startMarket(true);
   };
@@ -94,9 +94,9 @@ connect();return;}
     clearInterval(heartbeatTimer);heartbeatTimer=null;
     clearTimeout(state.connectTimer);
     state.connected=false;
-    state.lastError=`Close ${e.code}${e.reason?": "+e.reason:""}${e.code===1006?" — abnormal close before a WebSocket close frame":""}`;renderSubscribedMarketStatus("switching");
+    state.lastError=`Close ${e.code}${e.reason?": "+e.reason:""}${e.code===1006?" — abnormal close before a WebSocket close frame":""} | endpoint ${WS_URLS[state.endpointIndex%WS_URLS.length]} | open ${socketOpenedAt?Math.round((Date.now()-socketOpenedAt)/1000)+"s":"never"} | last msg ${state.lastMessage}`;renderSubscribedMarketStatus("switching");
     state.endpointIndex=(state.endpointIndex+1)%WS_URLS.length;
-    setStatus("offline",`Disconnected (${e.code}) — switching endpoint`);
+    setStatus("offline",`Disconnected (${e.code}) — ${WS_URLS[(state.endpointIndex+WS_URLS.length-1)%WS_URLS.length]} — switching endpoint`);
     scheduleReconnect();
   };
 }
