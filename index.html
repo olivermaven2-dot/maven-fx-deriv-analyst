@@ -57,6 +57,13 @@
 
   <section id="engineRoot" class="engine"></section>
 
+  <section class="distribution-card" aria-label="Live digit distribution">
+    <div class="section-title"><span>DIGIT DISTRIBUTION</span><span id="distributionInfo">Waiting for ticks</span></div>
+    <p class="distribution-note">Rolling 1,000-tick window • percentages from the live Deriv tick stream</p>
+    <div id="digitDistribution" class="digit-distribution" aria-live="polite"></div>
+    <div class="distribution-legend"><span><i class="legend-dot most"></i> Most appearing</span><span><i class="legend-dot least"></i> Least appearing</span></div>
+  </section>
+
   <section class="stream-card">
     <div class="section-title"><span>DIGIT STREAM</span><span id="streamInfo">0 digits</span></div>
     <div id="digitStream" class="digit-stream" aria-live="polite"></div>
