@@ -1221,8 +1221,9 @@ function autoTradeHandleMessage(d){
   if(kind==="demo_test_proposal"){
     if(!d.proposal){autoTrade.demoTestActive=false;autoTradeLog("ONE-CONTRACT DEMO TEST FAILED · no quote returned; no purchase sent.");autoTradeRender();return}
     if(!d.proposal.id||d.proposal.ask_price===undefined||d.proposal.ask_price===null){autoTrade.demoTestActive=false;autoTradeLog("DEMO TEST FAILED · quote response omitted its proposal ID or ask price; no purchase sent.");autoTradeRender();return}
-    autoTradeLog("Demo quote received · proposal ID present, ask price "+d.proposal.ask_price+" "+autoTrade.currency+". Sending the single 0.35 demo purchase request.");
-    try{autoTradeReq({buy:String(d.proposal.id),price:Number(d.proposal.ask_price)},"demo_test_buy")}
+    autoTradeLog("Demo quote received · Deriv supplied a proposal ID, but the ID-based buy path previously returned InvalidContractProposal. Using Deriv's documented direct-parameters buy form for this single demo test.");
+    const params={amount:0.35,basis:"stake",contract_type:side==="OVER"?"DIGITOVER":"DIGITUNDER",currency:autoTrade.currency,duration:1,duration_unit:"t",underlying_symbol:state.symbol,barrier:String(digit)};
+    try{autoTradeReq({buy:"1",parameters:params,price:Number(d.proposal.ask_price)},"demo_test_buy")}
     catch(e){autoTrade.demoTestActive=false;autoTradeLog("Demo purchase request could not be sent: "+(e.message||e))}
     autoTradeRender();return;
   }
