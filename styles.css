@@ -297,3 +297,54 @@ button,select,summary{touch-action:manipulation}
  .why-details>summary{min-height:38px;padding:9px 10px;font-size:10px}
  .why-content{padding:0 10px 10px}
 }
+
+
+/* Mobile compact spacing pass — preserves the existing block order */
+@media(max-width:520px){
+  .app{padding-top:4px;padding-bottom:12px}
+  .live-card,.control-card,.engine-panel,.stream-card,.details,.distribution-card{box-shadow:none}
+  .live-card{margin-bottom:0}
+  .market-picker-card{margin-top:5px}
+  .workspace-label{margin-top:5px}
+  .engine-nav{padding-top:4px;padding-bottom:5px}
+  #overUnderControls,#evenOddControls,#riseFallControls{margin-bottom:4px}
+  .ou-controls{padding:6px 7px}
+  .ou-row{gap:3px}
+  .ou-digit,.ou-side{min-height:27px}
+  .engine{gap:5px}
+  .engine-panel{padding:8px}
+  .decision-summary{margin-bottom:6px;padding:8px 9px}
+  .decision-summary .entry{margin-top:5px;padding:6px 8px}
+  .why-details{margin-top:6px}
+  .why-details>summary{min-height:34px;padding:7px 9px}
+  .distribution-card{margin:7px 0 8px;padding:10px;border-radius:13px}
+  .distribution-note{margin:5px 0 8px;font-size:9px}
+  .digit-distribution{gap:7px 5px}
+  .distribution-cell{gap:3px}
+  .distribution-circle{width:clamp(34px,9vw,44px);height:clamp(34px,9vw,44px)}
+  .distribution-circle::before{inset:3px}
+  .distribution-circle span{font-size:13px}
+  .distribution-percent{font-size:10px}
+  .distribution-tag{font-size:7px;min-height:8px}
+  .distribution-legend{gap:10px;margin-top:8px;font-size:9px}
+  .stream-card{margin-top:8px;padding:10px;border-radius:13px}
+  .digit-stream{gap:4px;margin-top:8px;min-height:28px}
+  .digit{width:25px;height:25px;border-radius:6px;font-size:11px}
+  .details{margin-top:8px;padding:0 10px}
+  .details summary{min-height:38px;padding:10px 0}
+}
+@media(max-width:380px){
+  .distribution-card{padding:8px}
+  .digit-distribution{gap:6px 3px}
+  .distribution-circle{width:33px;height:33px}
+  .distribution-circle span{font-size:12px}
+  .distribution-percent{font-size:9px}
+  .distribution-tag{letter-spacing:0}
+  .stream-card{padding:8px}
+  .digit{width:23px;height:23px}
+}
+@media(min-width:521px){
+  .distribution-card{padding:12px}
+  .distribution-note{margin:6px 0 9px}
+  .distribution-legend{margin-top:9px}
+}
