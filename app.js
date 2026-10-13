@@ -1180,6 +1180,7 @@ function autoTradeHandleMessage(d){
     if(kind==="proposal_test")autoTradeLog("PROPOSAL TEST FAILED · quote rejected. No trade was placed.");
     if(kind==="authorize"){autoTrade.authorized=false;autoTrade.account=null;autoTradeStatus("AUTH FAILED")}
     if(kind==="proposal"||kind==="buy")autoTradePause("Deriv rejected a trade request");
+    if(kind==="open_contract")autoTradePause("contract tracking failed after purchase; check Deriv contract history");
     autoTradeRender();return;
   }
   const kind=autoTrade.requests[d.req_id];if(kind)delete autoTrade.requests[d.req_id];
@@ -1206,6 +1207,9 @@ function autoTradeHandleMessage(d){
     catch(e){autoTradePause("buy request failed: "+e.message)}
     return;
   }
+  if(kind==="proposal"&&!d.proposal){autoTradePause("proposal response contained no quote; no buy request was sent");return}
+  if(kind==="buy"&&!d.buy){autoTradePause("buy response contained no contract details; check Deriv contract history");return}
+  if(kind==="open_contract"&&!d.proposal_open_contract){autoTradePause("contract tracking response was not recognized; check Deriv contract history");return}
   if(kind==="buy"&&d.buy){
     const id=String(d.buy.contract_id);autoTrade.activeContracts[id]={symbol:autoTrade.runSymbol,stake:Number(d.buy.buy_price)||autoTrade.nextStake};
     autoTradeLog("Contract purchased · #"+id+" · "+(autoTrade.runRemaining===2?"1st":"2nd")+" contract of run.");
