@@ -685,7 +685,7 @@ function panel(stateText,reason,entry,why,n){
 function entryHtml(e){
   const cards=Array.isArray(e.entries)
     ? '<div class="entry-candidates">'+e.entries.map(x=>'<div class="entry-candidate"><strong>'+esc(x.digit)+'</strong><span>SCORE '+esc(x.score)+'/100</span></div>').join("")+'</div>'
-    : '<div class="entry-main">'+esc(e.main||"NO ENTRY")+'</div>';
+    : '<div class="entry-candidates"><div class="entry-candidate"><strong>'+esc(e.main||"NO ENTRY")+'</strong>'+(Number.isFinite(Number(e.score))&&e.score!==""?'<span>SCORE '+esc(Math.round(Number(e.score)))+'/100</span>':Number.isFinite(Number.parseFloat(e.confidence))&&Number.parseFloat(e.confidence)>0?'<span>SCORE '+esc(Math.round(Number.parseFloat(e.confidence)))+'/100</span>':'')+'</div></div>';
   return '<div class="entry"><div class="entry-head">ENTRY DIGITS</div>'+cards+'</div>';
 }
 function parityStats(d,selectedSide){
