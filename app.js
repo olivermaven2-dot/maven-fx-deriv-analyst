@@ -1161,7 +1161,8 @@ function autoTradePlaceNext(){
   const isRecovery=autoTrade.recoveryPhase>0;
   if(!isRecovery&&(state.selectedSide!==autoTrade.runSide||state.selectedDigit!==autoTrade.runSelectedDigit)){autoTradePause("selected Over/Under setup changed");return}
   if(!state.connected||Date.now()-state.lastTickAt>15000){autoTradePause("live data stale or disconnected");return}
-  if(!isRecovery&&(state.engine!=="overunder"||state.ouSignalSnapshot?.tickCount!==state.digits.length||!state.ouSignalSnapshot?.active||state.ouSignalSnapshot.key!==ouValidationKey())){autoTradePause("Over/Under signal no longer qualifies");return}
+  // Validate the live signal only before run 1. Run 2 belongs to the already-approved entry trigger and must not be cancelled just because the signal changes after run 1 settles.
+  if(!isRecovery&&autoTrade.runSettled===0&&(state.engine!=="overunder"||state.ouSignalSnapshot?.tickCount!==state.digits.length||!state.ouSignalSnapshot?.active||state.ouSignalSnapshot.key!==ouValidationKey())){autoTradePause("Over/Under signal no longer qualifies before the first contract");return}
   if(autoTrade.sessionProfit>=autoTrade.takeProfit){autoTradePause("take-profit limit reached");return}
   if(autoTrade.sessionProfit<=-autoTrade.stopLoss){autoTradePause("stop-loss limit reached");return}
   const stake=Math.max(0.35,Math.min(100,Number(autoTrade.nextStake)||autoTrade.stake));
