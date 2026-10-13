@@ -1052,7 +1052,7 @@ const autoTrade={
   socket:null,authorized:false,account:null,enabled:false,realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,
-  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,logLines:[],demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyParameters:null
+  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,logLines:[],demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
 };
 function autoTradeLog(message){
   const stamp=new Date().toLocaleTimeString();
@@ -1098,7 +1098,7 @@ function autoTradeUpdateLiveFields(){
 }
 function autoTradeMarketChanged(){
   autoTrade.lastDigit=null;
-  if(autoTrade.runSymbol||autoTrade.runRemaining||autoTrade.pendingBuyParameters||Object.keys(autoTrade.activeContracts).length){
+  if(autoTrade.runSymbol||autoTrade.runRemaining||Object.keys(autoTrade.pendingBuyQuotes).length||Object.keys(autoTrade.activeContracts).length){
     autoTradePause("market changed during an entry sequence; no overlapping entry will be started");
     return;
   }
@@ -1145,7 +1145,7 @@ function processAutoTradeTick(digit){
   if(!autoTrade.enabled)return;
   // Lock one entry sequence until its contracts settle and the sequence is explicitly completed.
   // Never let a fresh tick overwrite runSymbol/runSettled while a quote or contract is in flight.
-  if(autoTrade.runSymbol||autoTrade.pendingBuyParameters||Object.keys(autoTrade.activeContracts).length)return;
+  if(autoTrade.runSymbol||Object.keys(autoTrade.pendingBuyQuotes).length||Object.keys(autoTrade.activeContracts).length)return;
   const candidates=state.ouEntrySnapshot?.digits||[];
   if(!candidates.includes(digit)){autoTrade.armed=true;autoTrade.lastDigit=digit;return}
   if(!autoTrade.armed){autoTrade.lastDigit=digit;return}
@@ -1168,7 +1168,7 @@ function autoTradePlaceNext(){
   const side=isRecovery?(autoTrade.recoveryPhase===1?autoTrade.runSide:(autoTrade.runSide==="OVER"?"UNDER":"OVER")):autoTrade.runSide;
   const digit=isRecovery?(autoTrade.recoveryPhase===1?autoTrade.recoveryDigit1:autoTrade.recoveryDigit2):autoTrade.runSelectedDigit;
   const parameters={amount:Number(stake.toFixed(2)),basis:"stake",contract_type:side==="OVER"?"DIGITOVER":"DIGITUNDER",currency:autoTrade.currency,duration:1,duration_unit:"t",underlying_symbol:autoTrade.runSymbol,barrier:String(digit)};
-  try{const reqId=autoTradeReq({proposal:1,...parameters},"proposal");autoTrade.pendingBuyParameters={reqId,parameters};autoTradeLog("Requesting "+(isRecovery?"RECOVERY "+autoTrade.recoveryPhase:"BASE")+" · "+side+" "+digit+" · stake "+stake.toFixed(2)+" "+autoTrade.currency+".")}
+  try{const reqId=autoTradeReq({proposal:1,...parameters},"proposal");autoTrade.pendingBuyQuotes[reqId]=parameters;autoTradeLog("Requesting "+(isRecovery?"RECOVERY "+autoTrade.recoveryPhase:"BASE")+" · "+side+" "+digit+" · stake "+stake.toFixed(2)+" "+autoTrade.currency+".")}
   catch(e){autoTradePause("proposal request failed: "+e.message)}
 }
 function autoTradeRunDemoTradeTest(){
@@ -1206,6 +1206,7 @@ function autoTradeHandleMessage(d){
     if(kind==="demo_test_proposal"){autoTrade.demoTestActive=false;autoTrade.demoTestContractId=null;autoTradeLog("DEMO TEST PROPOSAL FAILED · Deriv rejected the quote request; no buy request was sent.");}
     if(kind==="demo_test_buy"){autoTrade.demoTestActive=false;autoTrade.demoTestContractId=null;autoTradeLog("DEMO TEST BUY FAILED · Deriv rejected the proposal ID at purchase time; no second buy request will be attempted. Check the error code above.");}
     if(kind==="authorize"){autoTrade.authorized=false;autoTrade.account=null;autoTradeStatus("AUTH FAILED")}
+    if(kind==="proposal")delete autoTrade.pendingBuyQuotes[d.req_id];
     if(kind==="proposal"||kind==="buy")autoTradePause("Deriv rejected a trade request");
     if(kind==="open_contract")autoTradePause("contract tracking failed after purchase; check Deriv contract history");
     autoTradeRender();return;
@@ -1239,10 +1240,11 @@ function autoTradeHandleMessage(d){
   }
   if(kind==="proposal"&&d.proposal){
     try{
-      const pending=autoTrade.pendingBuyParameters;
-      if(!pending||pending.reqId!==d.req_id)throw new Error("The matching contract parameters for this quote were not found.");
-      autoTrade.pendingBuyParameters=null;
-      autoTradeReq({buy:"1",parameters:{...pending.parameters},price:Number(d.proposal.ask_price)},"buy");
+      const parameters=autoTrade.pendingBuyQuotes[d.req_id];
+      if(!parameters)throw new Error("The matching contract parameters for this quote were not found.");
+      delete autoTrade.pendingBuyQuotes[d.req_id];
+      if(!autoTrade.enabled||!autoTrade.runSymbol){autoTradeLog("Quote ignored because the bot was paused before the quote arrived; no buy request was sent.");return}
+      autoTradeReq({buy:"1",parameters:{...parameters},price:Number(d.proposal.ask_price)},"buy");
       autoTradeLog("Quote accepted · submitting the documented direct-parameter buy request at the quoted maximum price.");
     }catch(e){autoTradePause("buy request failed: "+e.message)}
     return;
