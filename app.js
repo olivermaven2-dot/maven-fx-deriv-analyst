@@ -1275,31 +1275,47 @@ function autoTradeHandleMessage(d){
       autoTradeRender();return;
     }
     const wasRecovery=autoTrade.recoveryPhase;
+    const settledStake=Number(autoTrade.activeContracts[id]?.stake)||Number(autoTrade.nextStake)||autoTrade.stake;
     if(c.subscription?.id){try{autoTradeReq({forget:c.subscription.id},"forget")}catch{}}
     delete autoTrade.activeContracts[id];
-    autoTrade.runSettled++;
+    let runFinished=false;
     if(profit>=0){
-      autoTrade.wins++;autoTrade.nextStake=autoTrade.stake;autoTrade.recoveryPhase=0;
-      autoTradeLog("SETTLED WIN · "+profit.toFixed(2)+" "+autoTrade.currency+". Recovery sequence reset.");
+      autoTrade.wins++;autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;
+      autoTradeLog("SETTLED WIN · "+profit.toFixed(2)+" "+autoTrade.currency+". Current run's recovery progression reset.");
+      runFinished=true;
     }else{
       autoTrade.losses++;
       if(!autoTrade.recoveryEnabled){autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · recovery OFF, stopping immediately.");autoTradePause("loss — recovery mode is OFF");return}
-      if(autoTrade.runSettled>=2){autoTradeLog("SECOND RUN LOST · this entry's two-contract limit is exhausted.");autoTradePause("second run lost — two-run entry complete");return}
-      if(wasRecovery===1){autoTradeLog("RECOVERY RUN LOST · this entry's two-contract limit is exhausted.");autoTradePause("recovery run lost — two-run entry complete");return}
-      else if(wasRecovery===2){autoTradeLog("SECOND RECOVERY LOST · recovery sequence exhausted.");autoTradePause("second recovery lost");return}
-      else{autoTrade.recoveryPhase=1;autoTrade.nextStake=Number((autoTrade.stake*autoTrade.martingale).toFixed(2));autoTradeLog("BASE TRADE LOST · first recovery stake "+autoTrade.nextStake.toFixed(2)+" "+autoTrade.currency+".")}
+      if(wasRecovery<2){
+        autoTrade.recoveryPhase=wasRecovery+1;
+        autoTrade.nextStake=Number((settledStake*autoTrade.martingale).toFixed(2));
+        autoTradeLog((wasRecovery===0?"BASE ATTEMPT LOST":("RECOVERY "+wasRecovery+" LOST"))+" · next attempt is RECOVERY "+autoTrade.recoveryPhase+" at "+autoTrade.nextStake.toFixed(2)+" "+autoTrade.currency+".");
+      }else{
+        autoTradeLog("RECOVERY 2 LOST · this run's recovery attempts are exhausted.");
+        autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;
+        runFinished=true;
+      }
     }
     if(autoTrade.sessionProfit>=autoTrade.takeProfit){autoTradePause("take-profit limit reached");return}
     if(autoTrade.sessionProfit<=-autoTrade.stopLoss){autoTradePause("stop-loss limit reached");return}
-    autoTrade.runRemaining=0;autoTradeRender();
+    autoTrade.runRemaining=0;
     if(autoTrade.enabled){
-      if(autoTrade.runSettled<2&&(autoTrade.recoveryPhase>0||profit>=0)){
-        if(profit>=0){autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;autoTradeLog("RUN 1 WIN · placing run 2 at the base stake for the same entry trigger.")}
-        autoTrade.runRemaining=1;autoTradePlaceNext();
-      }else{
-        autoTrade.runSymbol="";autoTrade.armed=true;autoTradeLog("Two-run entry complete. Waiting for a fresh analysis-approved entry trigger.");autoTradeRender();
+      if(runFinished){
+        if(autoTrade.runSettled===0){
+          autoTrade.runSettled=1;autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;
+          autoTradeLog("RUN 1 COMPLETE · starting RUN 2 at the base stake for the same entry trigger.");
+        }else{
+          autoTrade.runSettled=2;
+          autoTrade.runSymbol="";autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;autoTrade.armed=true;
+          autoTradeLog("RUN 2 COMPLETE · two-run entry finished. Waiting for a fresh analysis-approved entry trigger.");
+        }
       }
-    }
+      if(autoTrade.runSettled<2){
+        autoTrade.runRemaining=1;autoTradeRender();autoTradePlaceNext();
+      }else{
+        autoTradeRender();
+      }
+    }else{autoTradeRender()}
   }}
 async function autoTradeConnect(){
   const token=$("autoTradeToken").value.trim()||(function(){try{return localStorage.getItem("mavenFxDerivApiToken")||""}catch{return ""}})();
