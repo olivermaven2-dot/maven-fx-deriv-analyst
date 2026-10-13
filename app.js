@@ -1052,7 +1052,7 @@ const autoTrade={
   socket:null,authorized:false,account:null,enabled:false,realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,
-  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,logLines:[],demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:""
+  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,logLines:[],demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyParameters:null
 };
 function autoTradeLog(message){
   const stamp=new Date().toLocaleTimeString();
@@ -1157,8 +1157,8 @@ function autoTradePlaceNext(){
   const stake=Math.max(0.35,Math.min(100,Number(autoTrade.nextStake)||autoTrade.stake));
   const side=isRecovery?(autoTrade.recoveryPhase===1?autoTrade.runSide:(autoTrade.runSide==="OVER"?"UNDER":"OVER")):autoTrade.runSide;
   const digit=isRecovery?(autoTrade.recoveryPhase===1?autoTrade.recoveryDigit1:autoTrade.recoveryDigit2):autoTrade.runSelectedDigit;
-  const req={proposal:1,amount:Number(stake.toFixed(2)),basis:"stake",contract_type:side==="OVER"?"DIGITOVER":"DIGITUNDER",currency:autoTrade.currency,duration:1,duration_unit:"t",underlying_symbol:autoTrade.runSymbol,barrier:String(digit)};
-  try{autoTradeReq(req,"proposal");autoTradeLog("Requesting "+(isRecovery?"RECOVERY "+autoTrade.recoveryPhase:"BASE")+" · "+side+" "+digit+" · stake "+stake.toFixed(2)+" "+autoTrade.currency+".")}
+  const parameters={amount:Number(stake.toFixed(2)),basis:"stake",contract_type:side==="OVER"?"DIGITOVER":"DIGITUNDER",currency:autoTrade.currency,duration:1,duration_unit:"t",underlying_symbol:autoTrade.runSymbol,barrier:String(digit)};
+  try{const reqId=autoTradeReq({proposal:1,...parameters},"proposal");autoTrade.pendingBuyParameters={reqId,parameters};autoTradeLog("Requesting "+(isRecovery?"RECOVERY "+autoTrade.recoveryPhase:"BASE")+" · "+side+" "+digit+" · stake "+stake.toFixed(2)+" "+autoTrade.currency+".")}
   catch(e){autoTradePause("proposal request failed: "+e.message)}
 }
 function autoTradeRunDemoTradeTest(){
@@ -1170,8 +1170,9 @@ function autoTradeRunDemoTradeTest(){
   const selectedDigit=Number(state.selectedDigit);
   const digit=side==="OVER"?Math.max(0,Math.min(8,Number.isInteger(selectedDigit)?selectedDigit:1)):Math.max(1,Math.min(9,Number.isInteger(selectedDigit)?selectedDigit:8));
   autoTrade.demoTestActive=true;autoTrade.demoTestContractId=null;autoTrade.demoTestSide=side;autoTrade.demoTestDigit=digit;autoTrade.demoTestSymbol=state.symbol;
+  autoTrade.demoTestPendingParameters={amount:0.35,basis:"stake",contract_type:side==="OVER"?"DIGITOVER":"DIGITUNDER",currency:autoTrade.currency,duration:1,duration_unit:"t",underlying_symbol:state.symbol,barrier:String(digit)};
   try{
-    autoTradeReq({proposal:1,amount:0.35,basis:"stake",contract_type:side==="OVER"?"DIGITOVER":"DIGITUNDER",currency:autoTrade.currency,duration:1,duration_unit:"t",underlying_symbol:state.symbol,barrier:String(digit)},"demo_test_proposal");
+    autoTradeReq({proposal:1,...autoTrade.demoTestPendingParameters},"demo_test_proposal");
     autoTradeLog("ONE-CONTRACT DEMO TEST · requesting "+side+" "+digit+" on "+state.symbol+" for 0.35 "+autoTrade.currency+". No recovery or repeat trade.");
   }catch(e){autoTrade.demoTestActive=false;autoTradeLog("Demo test request failed: "+(e.message||e))}
 }
@@ -1221,14 +1222,19 @@ function autoTradeHandleMessage(d){
   if(kind==="demo_test_proposal"){
     if(!d.proposal){autoTrade.demoTestActive=false;autoTradeLog("ONE-CONTRACT DEMO TEST FAILED · no quote returned; no purchase sent.");autoTradeRender();return}
     if(!d.proposal.id||d.proposal.ask_price===undefined||d.proposal.ask_price===null){autoTrade.demoTestActive=false;autoTradeLog("DEMO TEST FAILED · quote response omitted its proposal ID or ask price; no purchase sent.");autoTradeRender();return}
-    autoTradeLog("Demo quote received · using the exact proposal ID returned by Deriv for this single purchase.");
-    try{autoTradeReq({buy:d.proposal.id,price:Number(d.proposal.ask_price)},"demo_test_buy")}
+    autoTradeLog("Demo quote received · sending one direct-parameter purchase with Deriv’s quoted maximum price.");
+    try{const parameters=autoTrade.demoTestPendingParameters;if(!parameters)throw new Error("The matching demo-test contract parameters were not saved.");autoTradeReq({buy:"1",parameters:{...parameters,price:Number(d.proposal.ask_price)}},"demo_test_buy")}
     catch(e){autoTrade.demoTestActive=false;autoTradeLog("Demo purchase request could not be sent: "+(e.message||e))}
     autoTradeRender();return;
   }
   if(kind==="proposal"&&d.proposal){
-    try{autoTradeReq({buy:d.proposal.id,price:d.proposal.ask_price},"buy")}
-    catch(e){autoTradePause("buy request failed: "+e.message)}
+    try{
+      const pending=autoTrade.pendingBuyParameters;
+      if(!pending||pending.reqId!==d.req_id)throw new Error("The matching contract parameters for this quote were not found.");
+      autoTrade.pendingBuyParameters=null;
+      autoTradeReq({buy:"1",parameters:{...pending.parameters,price:Number(d.proposal.ask_price)}},"buy");
+      autoTradeLog("Quote accepted · submitting the documented direct-parameter buy request at the quoted maximum price.");
+    }catch(e){autoTradePause("buy request failed: "+e.message)}
     return;
   }
   if(kind==="proposal"&&!d.proposal){autoTradePause("proposal response contained no quote; no buy request was sent");return}
