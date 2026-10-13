@@ -1192,7 +1192,8 @@ function autoTradeHandleMessage(d){
     const kind=autoTrade.requests[d.req_id];delete autoTrade.requests[d.req_id];
     autoTradeLog("Deriv API error"+(d.error.code?" ["+d.error.code+"]":"")+": "+(d.error.message||"Request failed"));
     if(kind==="proposal_test")autoTradeLog("PROPOSAL TEST FAILED · quote rejected. No trade was placed.");
-    if(kind==="demo_test_proposal"||kind==="demo_test_buy"){autoTrade.demoTestActive=false;autoTrade.demoTestContractId=null;autoTradeLog("ONE-CONTRACT DEMO TEST FAILED · Deriv rejected the request. No further order will be attempted.");}
+    if(kind==="demo_test_proposal"){autoTrade.demoTestActive=false;autoTrade.demoTestContractId=null;autoTradeLog("DEMO TEST PROPOSAL FAILED · Deriv rejected the quote request; no buy request was sent.");}
+    if(kind==="demo_test_buy"){autoTrade.demoTestActive=false;autoTrade.demoTestContractId=null;autoTradeLog("DEMO TEST BUY FAILED · Deriv rejected the proposal ID at purchase time; no second buy request will be attempted. Check the error code above.");}
     if(kind==="authorize"){autoTrade.authorized=false;autoTrade.account=null;autoTradeStatus("AUTH FAILED")}
     if(kind==="proposal"||kind==="buy")autoTradePause("Deriv rejected a trade request");
     if(kind==="open_contract")autoTradePause("contract tracking failed after purchase; check Deriv contract history");
@@ -1219,7 +1220,9 @@ function autoTradeHandleMessage(d){
   }
   if(kind==="demo_test_proposal"){
     if(!d.proposal){autoTrade.demoTestActive=false;autoTradeLog("ONE-CONTRACT DEMO TEST FAILED · no quote returned; no purchase sent.");autoTradeRender();return}
-    try{autoTradeReq({buy:d.proposal.id,price:d.proposal.ask_price},"demo_test_buy");autoTradeLog("Demo quote received · sending the single 0.35 demo purchase request.")}
+    if(!d.proposal.id||d.proposal.ask_price===undefined||d.proposal.ask_price===null){autoTrade.demoTestActive=false;autoTradeLog("DEMO TEST FAILED · quote response omitted its proposal ID or ask price; no purchase sent.");autoTradeRender();return}
+    autoTradeLog("Demo quote received · proposal ID present, ask price "+d.proposal.ask_price+" "+autoTrade.currency+". Sending the single 0.35 demo purchase request.");
+    try{autoTradeReq({buy:String(d.proposal.id),price:Number(d.proposal.ask_price)},"demo_test_buy")}
     catch(e){autoTrade.demoTestActive=false;autoTradeLog("Demo purchase request could not be sent: "+(e.message||e))}
     autoTradeRender();return;
   }
