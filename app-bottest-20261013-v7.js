@@ -1243,13 +1243,17 @@ function autoTradeHandleMessage(d){
     const params=autoTrade.tradeParamsByReqId&&autoTrade.tradeParamsByReqId[d.req_id];
     if(!params){autoTradePause("quote received without its saved trade parameters; no purchase sent");return}
     delete autoTrade.tradeParamsByReqId[d.req_id];
-    if(!autoTrade.enabled||!autoTrade.runRemaining||autoTrade.recoveryPhase>0){
-      autoTradeLog("Purchase cancelled · bot is no longer waiting for this base entry; no buy request sent.");autoTradeRender();return;
+    if(!autoTrade.enabled||!autoTrade.runRemaining){
+      autoTradeLog("Purchase cancelled · bot is no longer waiting for this entry; no buy request sent.");autoTradeRender();return;
     }
-    const gate=autoTradeReadyToEnter(autoTrade.runDigit,autoTrade.runCompleted>0);
-    if(!gate.ok){
-      autoTrade.runBusy=false;autoTrade.runRemaining=0;autoTrade.runSymbol="";autoTrade.armed=true;
-      autoTradeLog("Purchase cancelled before buy · "+gate.reason+". No contract was purchased.");autoTradeRender();return;
+    // Recovery proposals are deliberately not checked against the base-entry signal gate.
+    // A settled base loss moves recoveryPhase above zero before requesting its recovery quote.
+    if(autoTrade.recoveryPhase===0){
+      const gate=autoTradeReadyToEnter(autoTrade.runDigit,autoTrade.runCompleted>0);
+      if(!gate.ok){
+        autoTrade.runBusy=false;autoTrade.runRemaining=0;autoTrade.runSymbol="";autoTrade.armed=true;
+        autoTradeLog("Purchase cancelled before buy · "+gate.reason+". No contract was purchased.");autoTradeRender();return;
+      }
     }
     autoTradeLog("Quote received · entry/risk checks passed again; sending the direct-parameters purchase request.");
     try{autoTradeReq({buy:"1",parameters:params,price:Number(d.proposal.ask_price)},"buy")}
