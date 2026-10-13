@@ -1097,14 +1097,22 @@ function autoTradeUpdateLiveFields(){
   if(entries)entries.textContent=state.ouEntrySnapshot?.active&&state.ouEntrySnapshot.digits?.length?state.ouEntrySnapshot.digits.join(" / "):"No valid entry";
 }
 function autoTradeMarketChanged(){
-  autoTrade.armed=true;autoTrade.lastDigit=null;
-  if(autoTrade.runRemaining){autoTradeLog("Market changed. Remaining contracts in the previous run were cancelled; open contracts will still settle.");autoTrade.runRemaining=0;autoTrade.runSymbol="";}
+  autoTrade.lastDigit=null;
+  if(autoTrade.runSymbol||autoTrade.runRemaining||autoTrade.pendingBuyParameters||Object.keys(autoTrade.activeContracts).length){
+    autoTradePause("market changed during an entry sequence; no overlapping entry will be started");
+    return;
+  }
+  autoTrade.armed=true;
   if(autoTrade.enabled)autoTradeLog("Following selected market: new entries will use the new market after fresh signal and entry validation.");
   autoTradeRender();
 }
 function autoTradeSetupChanged(){
-  autoTrade.armed=true;autoTrade.lastDigit=null;
-  if(autoTrade.runRemaining){autoTrade.runRemaining=0;autoTrade.runSymbol="";autoTradeLog("Over/Under setup changed. Remaining contracts in the previous run were cancelled; open contracts will still settle.");}
+  autoTrade.lastDigit=null;
+  if(autoTrade.runSymbol||autoTrade.runRemaining||autoTrade.pendingBuyParameters||Object.keys(autoTrade.activeContracts).length){
+    autoTradePause("Over/Under setup changed during an entry sequence; no overlapping entry will be started");
+    return;
+  }
+  autoTrade.armed=true;
   autoTradeRender();
 }
 function autoTradePause(reason){
@@ -1135,6 +1143,9 @@ function autoTradeReadyToEnter(digit){
 }
 function processAutoTradeTick(digit){
   if(!autoTrade.enabled)return;
+  // Lock one entry sequence until its contracts settle and the sequence is explicitly completed.
+  // Never let a fresh tick overwrite runSymbol/runSettled while a quote or contract is in flight.
+  if(autoTrade.runSymbol||autoTrade.pendingBuyParameters||Object.keys(autoTrade.activeContracts).length)return;
   const candidates=state.ouEntrySnapshot?.digits||[];
   if(!candidates.includes(digit)){autoTrade.armed=true;autoTrade.lastDigit=digit;return}
   if(!autoTrade.armed){autoTrade.lastDigit=digit;return}
