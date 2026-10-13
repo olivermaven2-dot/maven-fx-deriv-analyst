@@ -259,3 +259,41 @@ button,select,summary{touch-action:manipulation}
 .legend-dot.most{background:#22c55e}.legend-dot.least{background:#ef4444}
 .distribution-empty{grid-column:1/-1;color:var(--muted);font-size:12px;padding:14px 0;text-align:center}
 @media(max-width:360px){.digit-distribution{gap:9px 4px}.distribution-circle{width:38px;height:38px}.distribution-circle span{font-size:14px}.distribution-percent{font-size:10px}}
+
+
+/* Compact decision display: keep explanations collapsed until requested */
+.decision-summary .reason,.decision-summary .entry-meta{display:none!important}
+.decision-summary .spike-risk-banner{display:flex;align-items:center;margin-top:7px;padding:6px 9px;border:1px solid #34445c;border-radius:8px;background:#111c2c;color:#cbd5e6;font-size:10px;font-weight:800;letter-spacing:.04em}
+.decision-summary .spike-risk-banner strong{font-size:10px}
+.decision-summary .spike-risk-high{border-color:#a94343;background:#32191e;color:#ffaaaa}
+.decision-summary .spike-risk-moderate{border-color:#9a7133;background:#302516;color:#ffd48a}
+.decision-summary .spike-risk-low{border-color:#26734f;background:#10271f;color:#91f0bd}
+.decision-summary .spike-risk-unknown{border-color:#526078;background:#172133;color:#cbd5e6}
+.decision-summary .entry{margin-top:8px;padding:8px 10px}
+.decision-summary .entry-head{font-size:9px}
+.entry-candidates{display:flex;flex-wrap:wrap;gap:8px;margin-top:5px}
+.entry-candidate{display:flex;align-items:center;gap:9px;min-width:90px;padding:6px 9px;border:1px solid #2a3d55;border-radius:9px;background:#101a2a}
+.entry-candidate strong{font-size:20px;line-height:1.1;color:#eef4ff}
+.entry-candidate span{font-size:10px;font-weight:900;color:#8fe8bd}
+.why-details{margin-top:8px;border:1px solid #293a52;border-radius:11px;background:#0b1422;overflow:hidden}
+.why-details>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 12px;min-height:42px;cursor:pointer;list-style:none;color:#b9d7f7;font-size:11px;font-weight:900}
+.why-details>summary::-webkit-details-marker{display:none}
+.why-details>summary::after{content:"＋";font-size:15px;color:#8eb8e8}
+.why-details[open]>summary::after{content:"−"}
+.why-content{padding:0 12px 12px;border-top:1px solid #1f3046}
+.why-section{margin-top:11px}
+.why-section>strong{display:block;font-size:10px;letter-spacing:.05em;color:#9db4d1;text-transform:uppercase}
+.why-section p{margin:5px 0 0;font-size:11px;line-height:1.5;color:#cbd5e6;overflow-wrap:anywhere}
+.why-content .why{margin-top:13px}
+.why-content .analysis-details{margin-top:12px}
+.why-content .analysis-details summary{padding:8px 0}
+@media(max-width:520px){
+ .decision-summary .spike-risk-banner{margin-top:6px;padding:5px 8px;font-size:9px}
+ .decision-summary .entry{margin-top:6px;padding:7px 8px}
+ .entry-candidates{gap:6px}
+ .entry-candidate{padding:5px 7px;gap:7px}
+ .entry-candidate strong{font-size:18px}
+ .entry-candidate span{font-size:9px}
+ .why-details>summary{min-height:38px;padding:9px 10px;font-size:10px}
+ .why-content{padding:0 10px 10px}
+}
