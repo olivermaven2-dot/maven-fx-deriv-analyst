@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1220">
+<title>Connecting Deriv · Maven FX</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#080d18;color:#eef4ff}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;background:radial-gradient(circle at 50% 0,#17263d,#080d18 65%)}
+main{width:min(100%,460px);border:1px solid #263650;border-radius:20px;padding:26px;background:#101827;box-shadow:0 20px 60px #0005}
+.brand{font-size:12px;letter-spacing:.18em;color:#8f9db3;font-weight:800}h1{font-size:23px;margin:12px 0}p{color:#aab8cc;line-height:1.6;font-size:14px}.status{padding:12px;border-radius:12px;background:#0b1423;border:1px solid #263650;font-size:14px;line-height:1.5}.error{color:#ff9ca6}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}a,button{display:inline-block;padding:11px 15px;border-radius:10px;border:1px solid #2b405e;background:#172941;color:#eef4ff;text-decoration:none;font-weight:700;cursor:pointer}small{display:block;color:#8f9db3;margin-top:18px;line-height:1.5}
+</style>
+</head>
+<body>
+<main>
+<div class="brand">MAVEN FX · DERIV ANALYST</div>
+<h1 id="title">Completing Deriv authorization</h1>
+<div id="status" class="status" role="status" aria-live="polite">Checking the authorization response…</div>
+<p id="detail">This page handles the return from Deriv. It does not ask for or store your Deriv password.</p>
+<div class="actions" id="actions" hidden><a href="../">Return to Maven FX</a></div>
+<small>For your security, only this browser tab receives the account session. Never share authorization URLs, access tokens, or screenshots containing them.</small>
+</main>
+<script>
+(() => {
+  const title = document.getElementById('title');
+  const status = document.getElementById('status');
+  const detail = document.getElementById('detail');
+  const actions = document.getElementById('actions');
+  const params = new URLSearchParams(location.search);
+  const returnedState = params.get('state');
+  const expectedState = sessionStorage.getItem('maven_fx_oauth_state');
+  const oauthError = params.get('error') || params.get('error_description');
+  const fail = (message) => {
+    title.textContent = 'Authorization not completed';
+    status.textContent = message;
+    status.classList.add('error');
+    detail.textContent = 'Return to Maven FX and try again. If the problem continues, check the Deriv application redirect URL.';
+    actions.hidden = false;
+  };
+  if (oauthError) { fail('Deriv did not authorize this connection: ' + oauthError); return; }
+  if (expectedState && returnedState !== expectedState) {
+    sessionStorage.removeItem('maven_fx_oauth_state');
+    fail('The security state did not match. For your protection, this login was cancelled.');
+    return;
+  }
+  const accounts = [];
+  for (let i = 1; i <= 10; i++) {
+    const account = params.get('acct' + i);
+    const token = params.get('token' + i);
+    if (account && token) {
+      accounts.push({
+        account: account,
+        token: token,
+        currency: params.get('cur' + i) || '',
+        type: /^(VRTC|VR)/i.test(account) ? 'demo' : 'real'
+      });
+    }
+  }
+  // Some OAuth responses may provide a single token under alternate names.
+  const singleToken = params.get('token');
+  const singleAccount = params.get('account') || params.get('acct');
+  if (!accounts.length && singleToken && singleAccount) {
+    accounts.push({account:singleAccount,token:singleToken,currency:params.get('currency')||'',type:/^(VRTC|VR)/i.test(singleAccount)?'demo':'real'});
+  }
+  sessionStorage.removeItem('maven_fx_oauth_state');
+  if (!accounts.length) {
+    fail('No Deriv account session was returned. Confirm the registered app and its redirect URL.');
+    return;
+  }
+  sessionStorage.setItem('maven_fx_deriv_accounts', JSON.stringify(accounts));
+  // Remove credentials from the visible URL/history before navigating away.
+  history.replaceState({}, document.title, location.pathname);
+  title.textContent = 'Deriv authorization received';
+  status.textContent = accounts.length + ' account session' + (accounts.length === 1 ? '' : 's') + ' received. Returning to Maven FX…';
+  detail.textContent = 'Choose the intended demo or real account inside Maven FX. Trading permission does not place trades by itself.';
+  location.replace('../?deriv_oauth=success');
+})();
+</script>
+</body>
+</html>
