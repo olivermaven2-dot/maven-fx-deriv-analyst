@@ -1221,8 +1221,8 @@ function autoTradeHandleMessage(d){
   if(kind==="demo_test_proposal"){
     if(!d.proposal){autoTrade.demoTestActive=false;autoTradeLog("ONE-CONTRACT DEMO TEST FAILED · no quote returned; no purchase sent.");autoTradeRender();return}
     if(!d.proposal.id||d.proposal.ask_price===undefined||d.proposal.ask_price===null){autoTrade.demoTestActive=false;autoTradeLog("DEMO TEST FAILED · quote response omitted its proposal ID or ask price; no purchase sent.");autoTradeRender();return}
-    autoTradeLog("Demo quote received · using the exact proposal ID returned by Deriv for this single purchase.");
-    try{autoTradeReq({buy:d.proposal.id,price:Number(d.proposal.ask_price)},"demo_test_buy")}
+    autoTradeLog("Demo quote received · sending the documented direct-parameters buy request for this single purchase.");
+    try{autoTradeReq({buy:"1",parameters:{amount:0.35,basis:"stake",contract_type:autoTrade.demoTestSide==="OVER"?"DIGITOVER":"DIGITUNDER",currency:autoTrade.currency,duration:1,duration_unit:"t",underlying_symbol:autoTrade.demoTestSymbol,barrier:String(autoTrade.demoTestDigit)},price:Number(d.proposal.ask_price)},"demo_test_buy")}
     catch(e){autoTrade.demoTestActive=false;autoTradeLog("Demo purchase request could not be sent: "+(e.message||e))}
     autoTradeRender();return;
   }
