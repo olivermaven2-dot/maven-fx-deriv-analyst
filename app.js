@@ -1072,9 +1072,8 @@ function autoTradeReq(obj,kind){
   const id=++autoTrade.req;autoTrade.requests[id]=kind;obj.req_id=id;autoTrade.socket.send(JSON.stringify(obj));return id;
 }
 function autoTradeCanStart(){
-  if(!autoTrade.authorized||!autoTrade.account)return false;
-  if(autoTrade.account.is_virtual)return true;
-  return $("autoTradeRealCheck")?.checked===true&&$("autoTradeRealPhrase")?.value.trim()==="TRADE REAL";
+  // Maven FX Bot is demo-only; real-account execution remains disabled.
+  return !!autoTrade.authorized&&!!autoTrade.account&&autoTrade.account.is_virtual===true;
 }
 function autoTradeRender(){
   const market=$("autoTradeMarket"),setup=$("autoTradeSetup"),entries=$("autoTradeEntries");
