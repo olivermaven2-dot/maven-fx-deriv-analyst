@@ -1108,7 +1108,7 @@ function autoTradeMarketChanged(){
 }
 function autoTradeSetupChanged(){
   autoTrade.lastDigit=null;
-  if(autoTrade.runSymbol||autoTrade.runRemaining||autoTrade.pendingBuyParameters||Object.keys(autoTrade.activeContracts).length){
+  if(autoTrade.runSymbol||autoTrade.runRemaining||Object.keys(autoTrade.pendingBuyQuotes).length||Object.keys(autoTrade.activeContracts).length){
     autoTradePause("Over/Under setup changed during an entry sequence; no overlapping entry will be started");
     return;
   }
