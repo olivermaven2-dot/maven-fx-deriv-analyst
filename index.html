@@ -110,7 +110,7 @@
 
   <section id="ouValidationCard" class="ou-validation-card" aria-label="Live outcome validation">
     <div class="ou-validation-title"><span>LIVE OUTCOME VALIDATION</span><span class="ou-validation-session">SESSION ONLY</span></div>
-    <label class="ou-validation-note" for="ouPayoutPercent">Assumed profit per winning contract (%)
+    <label id="ouPayoutControl" class="ou-validation-note" for="ouPayoutPercent">Assumed profit per winning contract (%)
       <input id="ouPayoutPercent" type="number" min="1" max="500" step="1" value="95" inputmode="decimal" style="width:88px;margin-left:8px;padding:6px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:var(--text)">
     </label>
     <div id="ouValidationResults" aria-live="polite"><div class="ou-validation-empty">Waiting for qualifying live entry-digit triggers.</div></div>
@@ -166,7 +166,7 @@
     <p class="maven-ai-disclaimer">Statistical guidance only. Signals are not guarantees.</p>
   </section>
 
-<script src="app.js?v=20261015-outcome-validation-2"></script>
+<script src="app.js?v=20261015-multi-engine-validation-1"></script>
 <script src="maven-ai.js?v=20261015-all-engines-1"></script>
 </body>
 </html>
