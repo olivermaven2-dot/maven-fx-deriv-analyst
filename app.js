@@ -735,9 +735,9 @@ function autoTradeEntrySelection(){
   if(firstRaw==null||String(firstRaw).trim()===""||secondRaw==null||String(secondRaw).trim()==="")return [];
   const first=Number(firstRaw),second=Number(secondRaw);
   if(!Number.isInteger(first)||first<0||first>9||!Number.isInteger(second)||second<0||second>9||first===second)return [];
-  // Reuse the Entry Engine's exact qualification rules, but evaluate only the user's two chosen digits.
-  const qualified=overUnderEntry(state.digits,state.selectedDigit,state.selectedSide,[first,second]);
-  if(!qualified?.entries||qualified.entries.length!==2||!qualified.entries.some(x=>x.digit===first)||!qualified.entries.some(x=>x.digit===second))return [];
+  // Manual digits bypass Entry Engine candidate filters; they only need to avoid red (least) and green (most) distribution bars.
+  const bars=distributionBarFlags(state.digits);
+  if(bars.most[first]||bars.least[first]||bars.most[second]||bars.least[second])return [];
   return [first,second];
 }
 function renderParityControls(){
@@ -1348,8 +1348,8 @@ function autoTradeReadyToEnter(digit){
   if(risk.level==="UNKNOWN"||risk.level==="HIGH")return {ok:false,reason:risk.title};
   if(risk.level==="MODERATE"&&state.ouSignalSnapshot.signal!=="STRONG SIGNAL")return {ok:false,reason:"moderate spike risk requires STRONG SIGNAL"};
   const selectedEntries=autoTradeEntrySelection();
-  if(selectedEntries.length!==2||selectedEntries[0]===selectedEntries[1])return {ok:false,reason:$("autoTradeManualEntriesEnabled")?.checked?"manual digits have not both passed the Entry Engine rules":"exactly two distinct validated entry digits are required"};
-  if(!selectedEntries.includes(digit))return {ok:false,reason:$("autoTradeManualEntriesEnabled")?.checked?"digit is not one of the two qualified manual entry digits":"digit is not a current Entry Engine candidate"};
+  if(selectedEntries.length!==2||selectedEntries[0]===selectedEntries[1])return {ok:false,reason:$("autoTradeManualEntriesEnabled")?.checked?"manual digits must be distinct and have neither a red nor green distribution bar":"exactly two distinct validated entry digits are required"};
+  if(!selectedEntries.includes(digit))return {ok:false,reason:$("autoTradeManualEntriesEnabled")?.checked?"digit is not one of the two valid manual digits without red/green bars":"digit is not a current Entry Engine candidate"};
   return {ok:true};
 }
 function processAutoTradeTick(digit){
