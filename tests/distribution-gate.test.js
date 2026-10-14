@@ -496,14 +496,19 @@ test('recovery side selectors default to existing logic and allow independent Ov
 });
 
 
-test('manual entry digits replace automatic candidates but keep Final Signal and shared entry qualification gates', () => {
-  assert.match(appSource, /const manualEntriesEnabled=!!\$\("autoTradeManualEntriesEnabled"\)\?\.checked/);
-  assert.match(appSource, /!manualEntriesEnabled&&!state\.ouEntrySnapshot\?\.active/);
-  assert.match(appSource, /overUnderEntry\(state\.digits,state\.selectedDigit,state\.selectedSide,\[first,second\]\)/);
-  assert.match(appSource, /manual digits have not both passed the Entry Engine rules/);
-  assert.match(appSource, /digit is not one of the two qualified manual entry digits/);
-  assert.match(appSource, /const chosen=autoTradeEntrySelection\(\);entries\.textContent=chosen\.length===2\?chosen\.join\(" \/ "\)/);
+test('manual entry digits bypass Entry Engine filters but must have neither red nor green distribution bars', () => {
+  const start = appSource.indexOf('function autoTradeEntrySelection');
+  const end = appSource.indexOf('\\nfunction ', start + 10);
+  assert.notEqual(start, -1);
+  const source = appSource.slice(start, end);
+  assert.match(source, /distributionBarFlags\\(state\\.digits\\)/);
+  assert.match(source, /bars\\.most\\[first\\]\\|\\|bars\\.least\\[first\\]\\|\\|bars\\.most\\[second\\]\\|\\|bars\\.least\\[second\\]/);
+  assert.doesNotMatch(source, /overUnderEntry/);
+  assert.match(appSource, /manual digits must be distinct and have neither a red nor green distribution bar/);
+  assert.match(appSource, /digit is not one of the two valid manual digits without red\\/green bars/);
+  assert.match(appSource, /!manualEntriesEnabled&&!state\\.ouEntrySnapshot\\?\\.active/);
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.match(html, /Use my manual entry digits instead of the Entry Engine digits/);
-  assert.match(html, /Both manual digits must independently pass the same sample-size, distribution-bar, extreme-digit, transition, reaction, continuation, stability and consistency rules/);
+  assert.match(html, /Each manual digit must only avoid a red \\(least frequent\\) or green \\(most frequent\\) distribution bar/);
+  assert.match(html, /Final Signal, probability comparison, live-data and spike-risk checks still apply/);
 });
