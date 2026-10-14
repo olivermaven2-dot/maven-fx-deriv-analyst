@@ -240,6 +240,8 @@ function receiveScannerTick(t){
   if(r.ticks.length>MAX_TICKS)r.ticks.shift();if(r.digits.length>MAX_TICKS)r.digits.shift();
   r.lastTickAt=Date.now();r.historyReady=r.digits.length>=100;r.error="";
   if(t.subscription?.id){r.subscriptionId=t.subscription.id;r.subscribed=true;state.deepScanner.subscriptions[t.symbol]=t.subscription.id;}
+  // Re-evaluate on incoming live scanner ticks; deepScannerEvaluate throttles full scoring to once per 10 seconds.
+  deepScannerEvaluate(false);
 }
 function scannerRisk(r){
   if(!state.connected||!r.lastTickAt||Date.now()-r.lastTickAt>60000)return {level:"UNKNOWN",reason:"No sufficiently fresh live ticks"};
