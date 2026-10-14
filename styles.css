@@ -40,6 +40,7 @@ footer{text-align:center;color:#68768d;font-size:10px;padding:10px 16px 28px}
 .ou-validation-table{width:100%;overflow-x:auto}
 .ou-validation-row{display:grid;grid-template-columns:48px 58px 70px 82px 82px 58px 66px;gap:6px;align-items:center;min-width:440px;padding:9px 4px;border-bottom:1px solid var(--line);font-size:10px;text-align:center}
 .ou-validation-row>*:first-child{text-align:left}
+.engine-validation-row{grid-template-columns:60px 70px 78px 88px 88px 70px;min-width:480px}
 .ou-validation-head{font-size:8px;color:var(--muted);font-weight:900;letter-spacing:.04em}
 .ou-validation-empty{font-size:11px;color:var(--muted);line-height:1.6;padding:10px 2px}
 @media(max-width:420px){.ou-validation-card{padding:11px}.ou-validation-row{gap:4px}}
