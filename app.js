@@ -22,6 +22,7 @@ function renderOverUnder(root,d,c,last,n){
 }
 const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
+const scannerState={active:false,queue:[],results:[],pending:{},total:0,done:0,best:null};
 const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—"};
 
 const $=id=>document.getElementById(id);
@@ -102,7 +103,7 @@ function handleMessage(d){
   if(d.error){state.lastError=`${d.error.code||"API"}: ${d.error.message||"Deriv data error"}`;if($("diagError"))$("diagError").textContent=state.lastError;console.warn("Deriv API error:",d.error);setStatus("error",d.error.message||"Deriv data error");return}
   if(d.msg_type==="ping"){$("diagSocket").textContent="OPEN • PING OK";return}
   if(d.msg_type==="active_symbols")loadMarkets(d.active_symbols||[]);
-  if(d.msg_type==="history")loadHistory(d.history?.prices||[],d.history?.times||[],d.history?.pip_size??d.pip_size??state.pipSize);
+  if(d.msg_type==="history"){if(scannerState.pending[d.req_id])handleScannerHistory(d);else loadHistory(d.history?.prices||[],d.history?.times||[],d.history?.pip_size??d.pip_size??state.pipSize);}
   if(d.msg_type==="tick")receiveTick(d.tick);
 }
 function normalizeMarket(m){
@@ -483,6 +484,85 @@ document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click"
 document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;renderOUControls();renderEngine()}));
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>b.classList.remove("active"));btn.classList.add("active");state.engine=btn.dataset.engine;renderEngine()}));
 marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true)}});
+
+const toolModal=$("toolModal"),toolModalTitle=$("toolModalTitle"),toolModalEyebrow=$("toolModalEyebrow"),toolModalBody=$("toolModalBody");
+function openTool(kind){
+  toolModal.hidden=false;
+  if(kind==="bot"){
+    toolModalEyebrow.textContent="MAVEN FX • ANALYSIS ONLY";
+    toolModalTitle.textContent="AUTO BOT";
+    toolModalBody.innerHTML='<div class="tool-note"><strong>Bot controls are not connected in this version.</strong><br>This app currently runs live market analysis only. It does not execute trades, connect a trading token, or claim that a bot is connected.</div><div class="tool-actions-row"><button class="tool-secondary" type="button" data-close-modal>Close panel</button></div>';
+  }else{
+    toolModalEyebrow.textContent="LIVE MARKET RESEARCH";
+    toolModalTitle.textContent="Deep Scanner";
+    toolModalBody.innerHTML='<p>Checks the available Volatility and Jump markets against your selected Over/Under digit-distribution rule. It requests historical ticks without switching your active live subscription.</p><div class="tool-note">Current rule: <strong>'+esc(state.selectedSide)+' '+state.selectedDigit+'</strong> · threshold <strong>10.5%</strong> per checked digit. The strongest eligible market will only load when you press its Load button.</div><div class="tool-actions-row"><button id="startDeepScan" class="tool-primary" type="button">Scan markets</button></div><div id="scannerStatus" role="status">Ready to scan. Your current market and live tick stream will remain active.</div><div class="tool-progress"><span id="scannerProgress"></span></div><div id="scannerResults" class="scanner-results"></div>';
+  }
+}
+function closeTool(){toolModal.hidden=true}
+$("botIcon").addEventListener("click",()=>openTool("bot"));
+$("scannerIcon").addEventListener("click",()=>openTool("scanner"));
+$("toolModalClose").addEventListener("click",closeTool);
+toolModal.addEventListener("click",e=>{if(e.target.closest("[data-close-modal]"))closeTool();if(e.target.id==="startDeepScan")startDeepScan()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&!toolModal.hidden)closeTool()});
+function scannerGate(digits){
+  if(!digits.length)return {eligible:false,score:0,reason:"No history"};
+  const freq=Array(10).fill(0);digits.forEach(x=>{if(Number.isInteger(x)&&x>=0&&x<=9)freq[x]++});
+  const pct=freq.map(n=>n/digits.length*100);
+  const checked=state.selectedSide==="OVER"?Array.from({length:state.selectedDigit+1},(_,i)=>i):Array.from({length:10-state.selectedDigit},(_,i)=>state.selectedDigit+i);
+  const violations=checked.filter(i=>pct[i]>=10.5);
+  const eligible=violations.length===0;
+  const mean=checked.reduce((a,i)=>a+pct[i],0)/Math.max(1,checked.length);
+  const spread=checked.reduce((a,i)=>a+Math.abs(pct[i]-mean),0)/Math.max(1,checked.length);
+  const score=eligible?Math.max(0,100-spread*10-Math.abs(mean-7.5)*2):Math.max(0,55-violations.length*8-spread*5);
+  return {eligible,score,reason:eligible?"All checked digits are below 10.5%":violations.length+" checked digit(s) at or above 10.5%",n:digits.length,pct};
+}
+function startDeepScan(){
+  if(!state.connected||state.socket?.readyState!==WebSocket.OPEN){$("scannerStatus").textContent="Deriv data connection is offline. Wait for the live connection, then try again.";return}
+  const candidates=state.markets.filter(m=>/volatility|jump/i.test(m.market+" "+m.name+" "+m.submarket+" "+m.subgroup)||/^R_|^JD|^1HZ/i.test(m.symbol));
+  if(!candidates.length){$("scannerStatus").textContent="No eligible Volatility or Jump markets are currently available from Deriv.";return}
+  scannerState.active=true;scannerState.queue=candidates.filter(m=>m.symbol!==state.symbol);scannerState.results=[];scannerState.pending={};scannerState.total=candidates.length;scannerState.done=0;scannerState.best=null;
+  const current=state.markets.find(m=>m.symbol===state.symbol);
+  if(current){const g=scannerGate(state.digits.slice(-1000));scannerState.results.push({...current,...g,current:true});scannerState.done++}
+  $("scannerStatus").textContent="Scanning market history… "+scannerState.done+" / "+scannerState.total;
+  $("scannerResults").innerHTML="";
+  const progress=$("scannerProgress");if(progress)progress.style.width=(scannerState.done/scannerState.total*100)+"%";
+  scannerNext();
+}
+function scannerNext(){
+  if(!scannerState.active)return;
+  if(!scannerState.queue.length){finishDeepScan();return}
+  const m=scannerState.queue.shift(),req=nextReq();
+  scannerState.pending[req]=m;
+  request({ticks_history:m.symbol,end:"latest",count:1000,style:"ticks",req_id:req});
+  scannerState.currentReq=req;
+  scannerState.timeout=setTimeout(()=>{if(scannerState.pending[req]){delete scannerState.pending[req];scannerState.results.push({...m,eligible:false,score:0,reason:"History request timed out",n:0});scannerState.done++;updateScannerProgress();scannerNext()}},7000);
+}
+function handleScannerHistory(msg){
+  const m=scannerState.pending[msg.req_id];if(!m)return;
+  delete scannerState.pending[msg.req_id];clearTimeout(scannerState.timeout);
+  const prices=msg.history?.prices||[],pip=msg.history?.pip_size??msg.pip_size??m.pipSize;
+  const digits=prices.map(p=>digitFromQuote(p,pip)).filter(Number.isInteger);
+  const g=scannerGate(digits);
+  scannerState.results.push({...m,...g,current:false});
+  scannerState.done++;updateScannerProgress();scannerNext();
+}
+function updateScannerProgress(){
+  const status=$("scannerStatus"),bar=$("scannerProgress");
+  if(status)status.textContent="Scanning market history… "+scannerState.done+" / "+scannerState.total;
+  if(bar)bar.style.width=(scannerState.done/scannerState.total*100)+"%";
+}
+function finishDeepScan(){
+  scannerState.active=false;
+  const ranked=scannerState.results.slice().sort((a,b)=>(Number(b.eligible)-Number(a.eligible))||b.score-a.score);
+  scannerState.best=ranked.find(x=>x.eligible)||null;
+  const status=$("scannerStatus"),host=$("scannerResults"),bar=$("scannerProgress");
+  if(bar)bar.style.width="100%";
+  if(status)status.textContent="Scan complete: "+scannerState.results.length+" markets evaluated. "+(scannerState.best?"An eligible market is available below.":"No market passed the selected distribution rule.");
+  if(!host)return;
+  host.innerHTML=ranked.slice(0,8).map(m=>'<div class="scanner-result"><div><strong>'+esc(m.name||m.symbol)+'</strong><small>'+esc(m.reason||"")+' · '+(m.n||0)+' ticks'+(m.current?" · current market":"")+'</small></div>'+(m.eligible?'<button type="button" data-load-market="'+esc(m.symbol)+'">Load market</button>':'<span style="font-size:10px;color:#f0bd68">Not eligible</span>')+'</div>').join("")||'<div class="tool-note">No scan results returned.</div>';
+  host.querySelectorAll("[data-load-market]").forEach(btn=>btn.addEventListener("click",()=>{const m=state.markets.find(x=>x.symbol===btn.dataset.loadMarket);if(!m)return;state.symbol=m.symbol;state.marketName=m.name;marketSelect.value=m.symbol;$("marketName").textContent=m.name;state.marketStarted=false;startMarket(true);closeTool()}));
+}
+
 let touchX=0,touchY=0;
 document.querySelector(".engine-nav").addEventListener("touchstart",e=>{touchX=e.changedTouches[0].clientX;touchY=e.changedTouches[0].clientY},{passive:true});
 document.querySelector(".engine-nav").addEventListener("touchend",e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)){const names=["overunder","evenodd","risefall"],i=names.indexOf(state.engine),next=names[Math.max(0,Math.min(2,i+(dx<0?1:-1)))];document.querySelector(`[data-engine="${next}"]`).click()}},{passive:true});
