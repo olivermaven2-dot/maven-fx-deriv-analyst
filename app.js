@@ -145,8 +145,9 @@ function handleMessage(d){
       if(scannerSub){if(pending)delete state.deepScanner.subscribeRequests[pending[0]];if(sub?.id){request({forget:sub.id,req_id:nextReq()});delete state.deepScanner.subscriptions[t.symbol];}if(r){r.subscriptionId=null;r.subscribed=false;}return;}
       if(sub?.id){state.primarySubscriptionId=sub.id;state.primarySubscriptionSymbol=t.symbol;}
       if(req!=null&&state.primarySubscribeRequests[req]===t.symbol)delete state.primarySubscribeRequests[req];
+      receiveTick(t);
       if(state.primarySubscriptionSymbol===t.symbol && state.primarySubscriptionId)renderSubscribedMarketStatus("connected");
-      receiveTick(t);syncCurrentIntoScanner(t);
+      syncCurrentIntoScanner(t);
     }else receiveScannerTick(t);
   }
 }
@@ -1270,7 +1271,7 @@ function renderSubscribedMarketStatus(mode="switching"){
   }else if(mode==="stale"){
     symbol.textContent="Subscribed: "+(activeSymbol||"—")+" · No fresh ticks for "+(Number.isFinite(age)?Math.floor(age/1000)+"s":"15s+")+" · Feed may be stalled";
   }else if(mode==="offline"||mode==="error"){
-    symbol.textContent="Feed "+(mode==="error"?"error":"disconnected")+" · Last subscription: "+(activeSymbol||"none")+" · Waiting to reconnect";
+    symbol.textContent="Feed "+(mode==="error"?"error":"disconnected")+" · Selected market: "+(state.symbol||"—")+" · Waiting to reconnect";
   }else{
     symbol.textContent="Selected: "+(state.symbol||"—")+" · Waiting for matching live ticks to confirm subscription";
   }
