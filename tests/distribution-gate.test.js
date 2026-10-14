@@ -482,7 +482,8 @@ test('recovery-OFF UI explains two-run entry cycles and fresh-entry waiting', ()
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.match(html, /OFF = wait for the next valid entry after a loss/);
   assert.match(html, /One valid manual digit is enough to trigger the normal two-run entry cycle/);
-  assert.match(html, /With recovery OFF, a loss ends that entry sequence and the bot waits for a fresh valid entry/);
+  assert.match(html, /current entry still completes its two-run cycle; after run 2 the bot waits for a fresh entry/);
+  assert.match(html, /Only session take-profit or stop-loss pauses the bot/);
 });
 
 
