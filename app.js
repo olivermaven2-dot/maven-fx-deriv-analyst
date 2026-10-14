@@ -2,11 +2,13 @@ function renderOverUnder(root,d,c,last,n){
   const e=overUnderEvidence(d,state.selectedDigit,state.selectedSide);
   const setup=state.selectedSide+" "+state.selectedDigit;
   const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
-  const entry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
+  const rawEntry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
+  const entry=mavenAIReviewEntry("overunder",rawEntry,e.aiDecision);
   state.ouEntrySnapshot={key:ouValidationKey(),active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[]};
   state.ouSignalSnapshot={key:ouValidationKey(),active:activeSignal&&!e.probabilityConflict,signal:e.signal,probabilityConflict:!!e.probabilityConflict,tickCount:state.digits.length};
   autoTradeUpdateLiveFields();
   let reason;
+  if(e.aiDecision)reason=e.aiDecision.reason+" "+(e.probabilityConflict?"Probability Comparison also blocks the entry until complementary evidence aligns.":"");
   if(e.probabilityConflict)reason="WAIT: Probability Comparison conflicts with the selected setup because the complementary setup has stronger observed live frequency. The entry is blocked until evidence aligns.";
   else if(e.windowConflict)reason="WAIT: Recent and longer-window behaviour conflict. The AI is withholding the signal until the windows align more clearly.";
   else if(e.signal==="AVOID")reason="The selected setup does not have enough aligned A-Setup evidence.";
@@ -812,6 +814,27 @@ function mavenAIDecisionLayer(engine,baseSignal,evidence,alignment,conflict,hard
   }
   return {signal:decision,baseSignal,confidence,agreement,validationForecasts:validation.forecasts,validationRate:validation.rate,reason};
 }
+function mavenAIReviewEntry(engine,entry,signalDecision){
+  if(!entry||!signalDecision||!["SIGNAL","STRONG SIGNAL"].includes(signalDecision.signal))return null;
+  let entryStrength=.55;
+  if(Array.isArray(entry.entries)&&entry.entries.length){
+    entryStrength=entry.entries.reduce((sum,x)=>sum+Math.max(0,Math.min(1,(Number(x.score)||0)/100)),0)/entry.entries.length;
+  }else{
+    const conf=Number.parseFloat(String(entry.confidence||"").replace("%",""));
+    if(Number.isFinite(conf))entryStrength=Math.max(0,Math.min(1,conf/100));
+    else if(Number.isFinite(Number(entry.score)))entryStrength=Math.max(0,Math.min(1,Number(entry.score)>10?Number(entry.score)/100:Number(entry.score)/10));
+  }
+  const confidence=Number(signalDecision.confidence)||.5;
+  const combined=entryStrength*.65+confidence*.35;
+  if(entryStrength<.43||combined<.49)return null;
+  const note="Maven AI entry review: "+Math.round(combined*100)+"% combined entry/evidence score; "+Math.round(entryStrength*100)+"% entry strength and "+Math.round(confidence*100)+"% signal confidence.";
+  if(Array.isArray(entry.entries)){
+    entry={...entry,entries:entry.entries.map(x=>({...x,aiScore:Math.round((Number(x.score)||0)*.65+confidence*35)})).sort((a,b)=>b.aiScore-a.aiScore)};
+    entry.main=entry.entries.map(x=>String(x.digit)).join("  •  ");
+    entry.meta=entry.entries.map(x=>"Digit "+x.digit+": AI score "+x.aiScore+"/100").join(" • ");
+  }
+  return {...entry,aiReview:{entryStrength,confidence,combined},reason:(entry.reason?entry.reason+" ":"")+note,evidence:(entry.evidence?entry.evidence+" • ":"")+note};
+}
 function overUnderEvidence(d,selectedDigit,selectedSide){
   const n=d.length;
   const distribution=distributionGate(d,selectedDigit,selectedSide);
@@ -1246,7 +1269,8 @@ function selectParityEntry(d,selectedSide){
 function renderEvenOdd(root,d,last,n){
   const e=parityStats(d,state.selectedParity);
   const entryActive=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
-  const entry=entryActive?selectParityEntry(d,state.selectedParity):null;
+  const rawEntry=entryActive?selectParityEntry(d,state.selectedParity):null;
+  const entry=mavenAIReviewEntry("evenodd",rawEntry,e.aiDecision);
   setOtherValidationForecast("evenodd",state.selectedParity,e.signal,!!entry,n);
   const entryDisplay=entry||{main:entryActive?"NO STRONG ENTRY":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No trigger has enough conditional lift toward the selected Final Signal.":"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."};
   const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
@@ -1383,7 +1407,8 @@ function renderRiseFall(root,last,n){
     root.innerHTML=panel("INSUFFICIENT DATA","Collect at least 30 real price ticks before Rise/Fall analysis.",null,["Uses actual live market prices, not last-digit parity","Selected direction: "+state.selectedRiseFall],n);
     return;
   }
-  const entry=riseFallEntry(prices,a);
+  const rawEntry=riseFallEntry(prices,a);
+  const entry=mavenAIReviewEntry("risefall",rawEntry,a.aiDecision);
   setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,n);
   const entryDisplay=entry||{
     main:a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"?"NO CONFIRMED ENTRY":"NO ACTIVE ENTRY",
