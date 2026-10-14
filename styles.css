@@ -512,3 +512,24 @@ button:focus-visible,select:focus-visible,input:focus-visible,.ou-digit:focus-vi
   .live-card .subscribed-market-status{margin-top:9px;padding:9px 0 0}
   .live-card .price-grid{margin-top:10px}
 }
+/* Compact LIVE MARKET DATA block, especially for mobile screens */
+@media(max-width:520px){
+  .live-card{padding:9px 10px!important;gap:0}
+  .live-card .live-head{gap:7px;margin-bottom:4px}
+  .live-card .live-head h1{font-size:16px;line-height:1.2;margin-top:2px}
+  .live-card > .market-picker-card{grid-template-columns:88px minmax(0,1fr);gap:7px;margin-top:5px;padding-top:6px}
+  .live-card > .market-picker-card label{font-size:8px;letter-spacing:.06em}
+  .live-card > .market-picker-card select{min-height:34px;padding:6px 8px;font-size:12px}
+  .live-card .subscribed-market-status{gap:7px;margin-top:5px;padding:5px 1px 0}
+  .live-card .subscribed-market-indicator{width:7px;height:7px;flex-basis:7px}
+  .live-card .subscribed-market-status>div{gap:1px}
+  .live-card .subscribed-market-label{font-size:7px;line-height:1.2}
+  .live-card .subscribed-market-status strong{font-size:11px;line-height:1.2}
+  .live-card .subscribed-market-status small{font-size:9px;line-height:1.2}
+  .live-card .price-grid{gap:6px;margin-top:7px}
+  .live-card .price-grid>div{padding:7px 9px}
+  .live-card .price-grid>div>span{font-size:8px}
+  .live-card .price-grid strong{font-size:clamp(20px,5vw,26px)}
+  .live-card .price-grid div:last-child strong{font-size:clamp(28px,8vw,36px)}
+  .live-card .live-meta{gap:4px 10px;margin-top:5px;font-size:9px;line-height:1.2}
+}
