@@ -441,3 +441,27 @@ test('Deriv subscription metadata is read from the top-level tick response', () 
   assert.match(appSource, /const raw=d\.tick,sub=d\.subscription\|\|raw\?\.subscription,req=d\.req_id/);
   assert.match(appSource, /state\.primarySubscriptionId=sub\.id/);
 });
+
+
+test('bot keeps running and waits for a fresh entry after a loss when recovery is OFF', () => {
+  const lossBranchStart = appSource.indexOf('if(!autoTrade.recoveryEnabled){', appSource.indexOf('function autoTradeHandleMessage'));
+  assert.notEqual(lossBranchStart, -1, 'recovery-OFF loss handling must exist');
+  const lossBranchEnd = appSource.indexOf('\n      if(wasRecovery<2)', lossBranchStart);
+  assert.notEqual(lossBranchEnd, -1, 'recovery-ON path must follow the recovery-OFF branch');
+  const lossBranch = appSource.slice(lossBranchStart, lossBranchEnd);
+  assert.match(lossBranch, /autoTrade\.sessionProfit<=-autoTrade\.stopLoss/);
+  assert.match(lossBranch, /autoTradePause\("stop-loss limit reached"\)/);
+  assert.match(lossBranch, /autoTrade\.runSymbol=""/);
+  assert.match(lossBranch, /autoTrade\.runRemaining=0/);
+  assert.match(lossBranch, /autoTrade\.runSettled=0/);
+  assert.match(lossBranch, /autoTrade\.nextStake=autoTrade\.stake/);
+  assert.match(lossBranch, /autoTrade\.armed=true/);
+  assert.match(lossBranch, /Bot remains RUNNING and is waiting for the next fully validated entry/);
+  assert.doesNotMatch(lossBranch, /autoTradePause\("loss — recovery mode is OFF"\)/);
+});
+
+test('recovery-OFF UI explains that the bot waits for a fresh valid entry after a loss', () => {
+  const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(html, /OFF = wait for the next valid entry after a loss/);
+  assert.match(html, /With recovery OFF, a loss ends that entry sequence and the bot waits for a fresh valid entry/);
+});
