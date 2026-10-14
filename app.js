@@ -1333,7 +1333,7 @@ function autoTradeStart(){
   const manualEntriesEnabled=$("autoTradeManualEntriesEnabled").checked;
   const manualRaw1=$("autoTradeManualDigit1").value,manualRaw2=$("autoTradeManualDigit2").value;
   const manualDigit1=Number(manualRaw1),manualDigit2=Number(manualRaw2);
-  if(manualEntriesEnabled&&(String(manualRaw1).trim()===""||String(manualRaw2).trim()===""||!Number.isInteger(manualDigit1)||manualDigit1<0||manualDigit1>9||!Number.isInteger(manualDigit2)||manualDigit2<0||manualDigit2>9||manualDigit1===manualDigit2)){autoTradeLog("Manual entry digits must be two different whole numbers from 0 to 9.");return}
+  if(manualEntriesEnabled&&(String(manualRaw1).trim()===""||String(manualRaw2).trim()===""||!Number.isInteger(manualDigit1)||manualDigit1<0||manualDigit1>9||!Number.isInteger(manualDigit2)||manualDigit2<0||manualDigit2>9||manualDigit1===manualDigit2)){autoTradeLog("Enter two different whole-number manual entry digits from 0 to 9. If one has a red/green bar, the other eligible digit can still be used.");return}
   const digit1=Number($("autoTradeRecoveryDigit1").value),digit2=Number($("autoTradeRecoveryDigit2").value);
   const recoverySide1=$("autoTradeRecoverySide1").value,recoverySide2=$("autoTradeRecoverySide2").value;
   if(!Number.isInteger(digit1)||digit1<0||digit1>9||!Number.isInteger(digit2)||digit2<0||digit2>9){autoTradeLog("Recovery digits must be whole numbers from 0 to 9.");return}
@@ -1385,7 +1385,7 @@ function processAutoTradeTick(digit){
   const check=autoTradeReadyToEnter(digit);
   if(!check.ok){autoTradeLog("Entry blocked · "+check.reason);autoTrade.lastDigit=digit;return}
   autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=1;autoTrade.runSettled=0;autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;autoTrade.runSide=state.selectedSide;autoTrade.runSelectedDigit=state.selectedDigit;autoTrade.recoveryPhase=0;
-  autoTradeLog("ENTRY TRIGGER · "+state.symbol+" digit "+digit+" · "+state.selectedSide+" "+state.selectedDigit+" · placing one base contract.");
+  autoTradeLog("ENTRY TRIGGER · "+state.symbol+" digit "+digit+" · "+state.selectedSide+" "+state.selectedDigit+" · starting the two-run entry cycle at base stake.");
   autoTradePlaceNext();
 }
 function autoTradePlaceNext(){
@@ -1519,11 +1519,10 @@ function autoTradeHandleMessage(d){
     }else{
       autoTrade.losses++;
       if(!autoTrade.recoveryEnabled){
-        // A single loss ends this entry sequence, not the bot session. Stop only if the session stop-loss is reached.
-        if(autoTrade.sessionProfit<=-autoTrade.stopLoss){autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · session stop-loss reached.");autoTradePause("stop-loss limit reached");return}
-        autoTrade.runRemaining=0;autoTrade.runSymbol="";autoTrade.runSettled=0;autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;autoTrade.armed=true;autoTrade.lastDigit=null;
-        autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · recovery OFF; entry sequence ended. Bot remains RUNNING and is waiting for the next fully validated entry at base stake.");
-        autoTradeRender();return
+        // Recovery OFF: a loss ends this attempt, but the current entry trigger still receives its second base-stake run.
+        // The bot pauses only when the session take-profit or stop-loss is reached; otherwise it waits for a fresh trigger after run 2.
+        autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;runFinished=true;
+        autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · recovery OFF; this attempt is finished at base stake. Continuing the two-run entry cycle unless a session limit is reached.");
       }
       if(wasRecovery<2){
         autoTrade.recoveryPhase=wasRecovery+1;
