@@ -475,3 +475,19 @@ button:focus-visible,select:focus-visible,input:focus-visible,.ou-digit:focus-vi
 #autoTradePnL.pnl-positive{color:#16a34a!important;font-weight:800}
 #autoTradePnL.pnl-negative{color:#ef4444!important;font-weight:800}
 #autoTradePnL.pnl-neutral{color:var(--muted,#94a3b8)!important;font-weight:700}
+
+/* Select the analysis digit directly from the live distribution block. */
+.distribution-setup{margin:8px 0 10px}
+.distribution-setup .ou-sides{margin-top:0}
+.distribution-engine-controls{margin:8px 0}
+.distribution-digit{
+  appearance:none;-webkit-appearance:none;font:inherit;color:inherit;cursor:pointer;
+  border:1px solid transparent;background:transparent;padding:5px 2px;border-radius:10px;
+  transition:border-color .12s,background-color .12s,transform .12s;
+}
+.distribution-digit:hover{background:rgba(101,169,255,.08)}
+.distribution-digit:focus-visible{outline:2px solid #69c7ff;outline-offset:2px}
+.distribution-digit.active{border-color:#69c7ff;background:rgba(44,116,171,.17);box-shadow:0 0 0 1px rgba(105,199,255,.12)}
+.distribution-digit.active .distribution-circle{border-color:#69c7ff;box-shadow:0 0 0 2px rgba(105,199,255,.2)}
+.distribution-digit .distribution-tag{min-height:10px}
+@media(min-width:1024px){.distribution-setup{margin:6px 0 8px}.distribution-digit{padding:3px 2px}}
