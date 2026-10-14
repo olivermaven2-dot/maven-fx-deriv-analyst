@@ -24,17 +24,16 @@
       <div><span class="eyebrow">LIVE MARKET DATA</span><h1 id="marketName">Loading market…</h1></div>
       <div class="quality-pill" id="qualityPill">BUILDING</div>
     </div>
+    <section class="control-card market-picker-card" aria-label="Market selection">
+      <label for="marketSelect">SELECT MARKET</label>
+      <select id="marketSelect" disabled><option>Loading markets…</option></select>
+    </section>
+    <div id="subscribedMarketStatus" class="subscribed-market-status switching" role="status" aria-live="polite"><span class="subscribed-market-indicator"></span><div><span class="subscribed-market-label">CONFIRMED LIVE DATA FEED</span><strong id="subscribedMarketName">Waiting for market subscription…</strong><small id="subscribedMarketSymbol">No active market yet</small></div></div>
     <div class="price-grid">
       <div><span>LAST PRICE</span><strong id="lastPrice">—</strong></div>
       <div><span>LAST DIGIT</span><strong id="lastDigit">—</strong></div>
     </div>
-    <div id="subscribedMarketStatus" class="subscribed-market-status" role="status" aria-live="polite"><span class="subscribed-market-indicator"></span><div><span class="subscribed-market-label">MAVEN FX DATA EXTRACTION · SUBSCRIBED MARKET</span><strong id="subscribedMarketName">Waiting for market subscription…</strong><small id="subscribedMarketSymbol">No active market yet</small></div></div>
-
-    <section class="control-card market-picker-card" aria-label="Market selection">
-      <label for="marketSelect">ACTIVE MARKET · CHOOSE FEED</label>
-      <select id="marketSelect" disabled><option>Loading markets…</option></select>
-    </section>
-  <div class="live-meta"><span id="tickCount">0 ticks</span><span id="updatedAt">Waiting for data</span></div>
+    <div class="live-meta"><span id="tickCount">0 ticks</span><span id="updatedAt">Waiting for data</span></div>
   </section>
 
 
