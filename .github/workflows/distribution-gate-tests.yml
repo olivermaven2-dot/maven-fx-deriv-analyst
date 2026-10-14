@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, ai-digit-distribution-gate]
+    branches: [main, ai-digit-distribution-gate, maven-local-ai-analyst]
 
 jobs:
   distribution-gate:
@@ -19,4 +19,4 @@ jobs:
       - name: Check JavaScript syntax
         run: node --check app.js && node --check maven-ai.js
       - name: Run distribution gate regression tests
-        run: node --test tests/distribution-gate.test.js
+        run: node --test tests/*.test.js
