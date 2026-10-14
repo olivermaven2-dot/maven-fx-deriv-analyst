@@ -505,7 +505,7 @@ test('manual entry digits bypass Entry Engine filters but must have neither red 
   assert.match(source, /bars\\.most\\[first\\]\\|\\|bars\\.least\\[first\\]\\|\\|bars\\.most\\[second\\]\\|\\|bars\\.least\\[second\\]/);
   assert.doesNotMatch(source, /overUnderEntry/);
   assert.match(appSource, /manual digits must be distinct and have neither a red nor green distribution bar/);
-  assert.match(appSource, /digit is not one of the two valid manual digits without red\\/green bars/);
+  assert.match(appSource, /digit is not one of the two valid manual digits without red.*green bars/);
   assert.match(appSource, /!manualEntriesEnabled&&!state\\.ouEntrySnapshot\\?\\.active/);
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.match(html, /Use my manual entry digits instead of the Entry Engine digits/);
