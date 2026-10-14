@@ -159,3 +159,125 @@ footer{text-align:center;color:#718099;font-size:10px;letter-spacing:.02em;paddi
   .distribution-tag{font-size:6px}
 }
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important}}
+
+
+/* Maven FX Pro Trading Terminal — compact desktop + touch-first mobile */
+:root{
+  --bg:#070b12;--surface:#0c1420;--surface-raised:#111c2c;--surface-soft:#0a111b;
+  --line:#1d2b3e;--line-strong:#344a66;--text:#edf4ff;--muted:#8fa2ba;
+  --blue:#68a8ff;--blue-soft:#142b49;--green:#39d6a0;--amber:#f1bd65;--red:#f27684;
+  --radius:12px;--shadow:0 8px 24px rgba(0,0,0,.17)
+}
+body{background:radial-gradient(ellipse at 12% -20%,rgba(40,82,136,.22),transparent 45%),var(--bg);letter-spacing:.002em}
+.topbar{max-width:1320px;padding:14px 22px 10px}
+.brand{font-size:18px;letter-spacing:.15em}
+.subbrand{font-size:9px;letter-spacing:.25em;margin-top:4px}
+.status{padding:7px 10px;font-size:10px}
+.app{max-width:1320px;padding:4px 22px 18px;gap:10px}
+.live-card,.control-card,.engine-panel,.stream-card,.details,.distribution-card,.ou-controls{border-radius:var(--radius);box-shadow:var(--shadow)}
+.live-card{padding:13px 16px}
+.live-head h1{font-size:clamp(16px,1.5vw,20px);margin-top:4px}
+.eyebrow,.control-card label,.price-grid span,.section-title,.panel-kicker,.entry-head,.why-title{font-size:9px;letter-spacing:.13em}
+.quality-pill{padding:5px 8px;font-size:8px}
+.price-grid{gap:8px;margin-top:10px}
+.price-grid>div{padding:9px 12px;border-radius:9px}
+.price-grid strong{font-size:clamp(22px,2.5vw,31px);margin-top:3px}
+.price-grid div:last-child strong{font-size:clamp(29px,3vw,40px)}
+.live-meta{margin-top:8px;font-size:10px}
+.control-card{padding:10px 12px}
+.control-card label{margin-bottom:6px}
+.control-card select{min-height:39px;padding:8px 11px;border-radius:9px;font-size:12px}
+.engine-nav{gap:6px}
+.engine-tab{padding:10px 8px;border-radius:9px;font-size:9px}
+.ou-controls{padding:11px 13px}
+.ou-label{margin-bottom:8px;font-size:9px}
+.ou-row{gap:5px}
+.ou-digit,.ou-side{min-height:34px;border-radius:8px;font-size:11px}
+.ou-sides{gap:7px;margin-top:7px}
+.engine-panel{padding:15px}
+.panel-kicker{font-size:9px}
+.state{font-size:clamp(27px,3vw,34px);margin-top:7px}
+.reason{font-size:12px;line-height:1.45;margin-top:6px}
+.entry{margin-top:12px;padding:11px 13px;border-radius:10px}
+.entry-head{font-size:9px}
+.entry-main{font-size:clamp(23px,2.5vw,29px);margin:4px 0}
+.entry-meta{font-size:11px;line-height:1.4}
+.why{margin-top:12px}
+.why-title{font-size:9px}
+.why ul{margin-top:7px;gap:4px}
+.why li{font-size:11px;line-height:1.4}
+.analysis-details{margin-top:11px;padding-top:9px}
+.analysis-details summary,.details summary{font-size:11px}
+.stats{gap:6px;margin-top:9px}
+.stat{padding:8px;border-radius:8px}
+.stat span{font-size:9px}
+.stat strong{font-size:12px;margin-top:4px}
+.distribution-card{padding:12px}
+.section-title{font-size:9px}
+.distribution-note{font-size:10px;margin:6px 0 10px}
+.digit-distribution{gap:9px 6px}
+.distribution-circle{width:clamp(35px,3.4vw,44px)}
+.distribution-circle:before{inset:3px}
+.distribution-circle span{font-size:13px}
+.distribution-percent{font-size:10px}
+.distribution-tag{font-size:7px;min-height:8px}
+.distribution-legend{gap:10px;margin-top:9px;padding-top:8px;font-size:9px}
+.stream-card{padding:12px}
+.digit-stream{gap:4px;margin-top:8px}
+.digit{flex-basis:26px;width:26px;height:27px;border-radius:7px;font-size:11px}
+.details{padding:0 12px}
+.details summary{padding:11px 0}
+.diagnostics{gap:6px;padding-bottom:11px}
+.diagnostics div{padding:8px;border-radius:8px}
+.diagnostics span{font-size:9px}
+.diagnostics strong{font-size:11px;margin-top:3px}
+footer{padding:6px 12px 14px;font-size:9px}
+@media(min-width:760px){
+  .app{grid-template-columns:minmax(0,1.03fr) minmax(300px,.97fr);grid-template-areas:"live market" "nav nav" "setup setup" "engine distribution" "engine stream" "details details";gap:10px;align-items:start}
+  .app>.live-card{grid-area:live}.app>.control-card{grid-area:market;align-self:stretch;display:flex;flex-direction:column;justify-content:center}
+  .app>.engine-nav{grid-area:nav}.app>#overUnderControls,.app>#evenOddControls{grid-area:setup}
+  .app>#engineRoot{grid-area:engine}.app>.distribution-card{grid-area:distribution}.app>.stream-card{grid-area:stream}.app>.details{grid-area:details}
+  .digit-distribution{gap:9px 5px}
+}
+@media(min-width:1100px){
+  .app{grid-template-columns:minmax(0,1.08fr) minmax(330px,.92fr)}
+  .app>.live-card{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);column-gap:14px;align-items:center}
+  .app>.live-card .live-head{grid-column:1;grid-row:1}
+  .app>.live-card .price-grid{grid-column:2;grid-row:1;margin:0}
+  .app>.live-card .live-meta{grid-column:1/-1}
+  .digit-distribution{gap:10px 6px}
+}
+@media(max-width:759px){
+  .topbar{padding:12px 12px 8px}
+  .app{padding:3px 10px 14px;gap:8px}
+  .live-card{padding:11px 12px}
+  .live-head{gap:8px}
+  .live-head h1{font-size:16px}
+  .price-grid{margin-top:9px;gap:6px}
+  .price-grid>div{padding:8px 9px}
+  .price-grid strong{font-size:clamp(21px,6vw,28px)}
+  .price-grid div:last-child strong{font-size:clamp(28px,8vw,36px)}
+  .control-card{padding:9px 10px}
+  .engine-nav{position:sticky;top:0;z-index:20;padding:6px 0;background:rgba(7,11,18,.94);backdrop-filter:blur(10px)}
+  .engine-tab{padding:10px 4px;font-size:9px}
+  .ou-controls{padding:10px}
+  .ou-row{gap:4px}
+  .ou-digit,.ou-side{min-height:34px;font-size:10px}
+  .engine-panel{padding:13px}
+  .state{font-size:28px}
+  .why ul{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px 8px}
+  .why li{font-size:10px}
+  .distribution-card,.stream-card{padding:11px}
+  .distribution-circle{width:clamp(34px,9vw,43px)}
+  .distribution-circle span{font-size:12px}
+  .distribution-percent{font-size:9px}
+  .distribution-tag{font-size:6px}
+  .digit{flex-basis:24px;width:24px;height:26px}
+}
+@media(max-width:360px){
+  .topbar{padding-left:8px;padding-right:8px}
+  .app{padding-left:7px;padding-right:7px;gap:7px}
+  .ou-row{grid-template-columns:repeat(5,minmax(0,1fr))}
+  .ou-digit{min-height:32px}
+  .status{font-size:9px;padding:6px 8px}
+}
