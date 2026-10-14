@@ -223,3 +223,12 @@ test('spike-risk protection blocks entry eligibility without overwriting the dir
   assert.doesNotMatch(source, /signal\.textContent\s*=\s*["']ENTRY BLOCKED/);
   assert.doesNotMatch(source, /reason\.textContent\s*=/);
 });
+
+test('spike-risk refresh uses a removable note marker to avoid stacking warnings', () => {
+  const start = appSource.indexOf('function applySpikeRiskProtection');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  assert.match(source, /querySelectorAll\("\.spike-risk-note"\)\.forEach\(node=>node\.remove\(\)\)/);
+  assert.match(source, /className="block spike-risk-note"/);
+  assert.match(source, /className="spike-risk-note"/);
+});
