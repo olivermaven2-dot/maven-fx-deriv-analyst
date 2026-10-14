@@ -250,6 +250,8 @@ function scannerRisk(r){
 function deepScannerSetupKey(){return state.selectedDigit+"|"+state.selectedSide}
 function deepScannerEvaluate(force=false){
   const ds=state.deepScanner;if(!ds.enabled||!state.markets.length)return [];
+  // Keep live tick collection immediate while avoiding repeated full-market analysis on lower-powered phones.
+  if(!force&&ds.lastScanAt&&Date.now()-ds.lastScanAt<10000)return ds.lastScanRows||[];
   syncCurrentIntoScanner();
   const setup=deepScannerSetupKey();
   if(ds.lastSetupKey!==setup){ds.lastSetupKey=setup;ds.autoLoaded=false;ds.manualOverride=false;ds.lastLoadedSymbol="";ds.lastLoadedScore=0;ds.startedAt=Date.now();}
@@ -266,6 +268,7 @@ function deepScannerEvaluate(force=false){
   }
   rows.sort((a,b)=>b.score-a.score||b.evidence-a.evidence||b.sample-a.sample);
   ds.lastScanAt=Date.now();
+  ds.lastScanRows=rows;
   ds.strongestCandidate=rows[0]||null;
   renderDeepScanner(rows);
   return rows;
@@ -1051,7 +1054,7 @@ marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symb
 let touchX=0,touchY=0;
 document.querySelector(".engine-nav").addEventListener("touchstart",e=>{touchX=e.changedTouches[0].clientX;touchY=e.changedTouches[0].clientY},{passive:true});
 document.querySelector(".engine-nav").addEventListener("touchend",e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)){const names=["overunder","evenodd","risefall"],i=names.indexOf(state.engine),next=names[Math.max(0,Math.min(2,i+(dx<0?1:-1)))];document.querySelector(`[data-engine="${next}"]`).click()}},{passive:true});
-setInterval(()=>{if(state.deepScanner.enabled&&Date.now()-state.deepScanner.lastScanAt>4000)deepScannerEvaluate(false);if(state.lastTickAt){$("diagAge").textContent=Math.round((Date.now()-state.lastTickAt)/1000)+"s";if(Date.now()-state.lastTickAt>15000&&state.connected)setStatus("offline","Waiting for data")}const root=$("engineRoot");if(root&&root.querySelector(".engine-panel"))applySpikeRiskProtection(root)},1000);
+setInterval(()=>{if(state.deepScanner.enabled&&Date.now()-state.deepScanner.lastScanAt>10000)deepScannerEvaluate(false);if(state.lastTickAt){$("diagAge").textContent=Math.round((Date.now()-state.lastTickAt)/1000)+"s";if(Date.now()-state.lastTickAt>15000&&state.connected)setStatus("offline","Waiting for data")}const root=$("engineRoot");if(root&&root.querySelector(".engine-panel"))applySpikeRiskProtection(root)},1000);
 connect();
 // Deep Scanner floating popup controls
 (function setupDeepScannerPopup(){
