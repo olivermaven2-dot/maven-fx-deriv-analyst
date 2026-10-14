@@ -683,11 +683,12 @@ function distributionBarFlags(d){
     percentages:freq.map(count=>windowDigits.length?count/windowDigits.length*100:0)
   };
 }
-function overUnderEntry(d,selectedDigit,selectedSide){
+function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
   const candidates=[];
   const entryBars=distributionBarFlags(d);
   const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
   for(let candidate=0;candidate<=9;candidate++){
+    if(Array.isArray(onlyCandidates)&&!onlyCandidates.includes(candidate))continue;
     // Exclude spike-prone extreme entry digits for the selected direction.
     if((selectedSide==="UNDER"&&(candidate===0||candidate===1))||(selectedSide==="OVER"&&(candidate===8||candidate===9)))continue;
     // Never use a red LEAST or green MOST distribution digit as an entry candidate.
@@ -727,6 +728,17 @@ function overUnderEntry(d,selectedDigit,selectedSide){
     return {digit:c.candidate,score,status,reason,evidence:c.total+" historical triggers; "+c.recentTotal+" recent triggers"};
   });
   return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.length===2?"Digit "+entries[0].digit+": score "+entries[0].score+"/100 • Digit "+entries[1].digit+": score "+entries[1].score+"/100":"Digit "+entries[0].digit+": score "+entries[0].score+"/100 • Second digit: no candidate passed validation. Scores rank candidates; they are not win probabilities.",status:entries.length===2?"2 VALID CANDIDATES":"1 VALID CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
+}
+function autoTradeEntrySelection(){
+  if(!$("autoTradeManualEntriesEnabled")?.checked)return state.ouEntrySnapshot?.active&&Array.isArray(state.ouEntrySnapshot.digits)?state.ouEntrySnapshot.digits:[];
+  const firstRaw=$("autoTradeManualDigit1")?.value,secondRaw=$("autoTradeManualDigit2")?.value;
+  if(firstRaw==null||String(firstRaw).trim()===""||secondRaw==null||String(secondRaw).trim()==="")return [];
+  const first=Number(firstRaw),second=Number(secondRaw);
+  if(!Number.isInteger(first)||first<0||first>9||!Number.isInteger(second)||second<0||second>9||first===second)return [];
+  // Reuse the Entry Engine's exact qualification rules, but evaluate only the user's two chosen digits.
+  const qualified=overUnderEntry(state.digits,state.selectedDigit,state.selectedSide,[first,second]);
+  if(!qualified?.entries||qualified.entries.length!==2||!qualified.entries.some(x=>x.digit===first)||!qualified.entries.some(x=>x.digit===second))return [];
+  return [first,second];
 }
 function renderParityControls(){
   document.querySelectorAll(".parity-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.parity===state.selectedParity)); const label=$("paritySetupLabel"); if(label)label.textContent=state.selectedParity;
@@ -1269,7 +1281,7 @@ function autoTradeRender(){
   const market=$("autoTradeMarket"),setup=$("autoTradeSetup"),entries=$("autoTradeEntries");
   if(market)market.textContent=state.symbol+" · "+state.marketName;
   if(setup)setup.textContent=state.selectedSide+" "+state.selectedDigit;
-  if(entries)entries.textContent=state.ouEntrySnapshot?.active&&state.ouEntrySnapshot.digits?.length?state.ouEntrySnapshot.digits.join(" / "):"No valid entry";
+  if(entries){const chosen=autoTradeEntrySelection();entries.textContent=chosen.length===2?chosen.join(" / "):$("autoTradeManualEntriesEnabled")?.checked?"Manual digits not qualified":"No valid entry";}
   if($("autoTradeCurrency"))$("autoTradeCurrency").textContent=autoTrade.currency||"account currency";
   document.querySelectorAll(".autoTradeCurrencyText").forEach(x=>x.textContent=autoTrade.currency||"account currency");
   if($("autoTradeAccount"))$("autoTradeAccount").textContent=autoTrade.account?(autoTrade.account.loginid+" · "+(autoTrade.account.is_virtual?"DEMO":"REAL")+" · "+autoTrade.currency):"No account connected";
@@ -1314,6 +1326,10 @@ function autoTradeStart(){
   const stake=Number($("autoTradeStake").value),mg=Number($("autoTradeMartingale").value),tp=Number($("autoTradeTP").value),sl=Number($("autoTradeSL").value);
   if(!(stake>=0.35&&stake<=100&&mg>=1&&mg<=10&&tp>0&&sl>0)){autoTradeLog("Invalid risk settings. Stake must be 0.35–100, multiplier 1–10, and take-profit/stop-loss must be positive.");return}
   const recoveryEnabled=$("autoTradeRecoveryEnabled").checked;
+  const manualEntriesEnabled=$("autoTradeManualEntriesEnabled").checked;
+  const manualRaw1=$("autoTradeManualDigit1").value,manualRaw2=$("autoTradeManualDigit2").value;
+  const manualDigit1=Number(manualRaw1),manualDigit2=Number(manualRaw2);
+  if(manualEntriesEnabled&&(String(manualRaw1).trim()===""||String(manualRaw2).trim()===""||!Number.isInteger(manualDigit1)||manualDigit1<0||manualDigit1>9||!Number.isInteger(manualDigit2)||manualDigit2<0||manualDigit2>9||manualDigit1===manualDigit2)){autoTradeLog("Manual entry digits must be two different whole numbers from 0 to 9.");return}
   const digit1=Number($("autoTradeRecoveryDigit1").value),digit2=Number($("autoTradeRecoveryDigit2").value);
   const recoverySide1=$("autoTradeRecoverySide1").value,recoverySide2=$("autoTradeRecoverySide2").value;
   if(!Number.isInteger(digit1)||digit1<0||digit1>9||!Number.isInteger(digit2)||digit2<0||digit2>9){autoTradeLog("Recovery digits must be whole numbers from 0 to 9.");return}
@@ -1321,7 +1337,7 @@ function autoTradeStart(){
   autoTrade.stake=stake;autoTrade.martingale=mg;autoTrade.takeProfit=tp;autoTrade.stopLoss=sl;autoTrade.nextStake=stake;
   autoTrade.recoveryEnabled=recoveryEnabled;autoTrade.recoveryPhase=0;autoTrade.recoveryDigit1=digit1;autoTrade.recoveryDigit2=digit2;autoTrade.recoverySide1=recoverySide1;autoTrade.recoverySide2=recoverySide2;
   autoTrade.sessionProfit=0;autoTrade.wins=0;autoTrade.losses=0;autoTrade.settled=new Set();autoTrade.enabled=true;autoTrade.armed=true;autoTrade.lastDigit=null;autoTrade.startedAt=Date.now();
-  autoTradeLog("Bot started on "+state.symbol+" · "+state.selectedSide+" "+state.selectedDigit+" · stake "+stake+" "+autoTrade.currency+" · recovery "+(recoveryEnabled?"ON":"OFF")+".");
+  autoTradeLog("Bot started on "+state.symbol+" · "+state.selectedSide+" "+state.selectedDigit+" · entry digits "+(manualEntriesEnabled?"MANUAL":"AUTOMATIC")+" · stake "+stake+" "+autoTrade.currency+" · recovery "+(recoveryEnabled?"ON":"OFF")+".");
   autoTradeRender();
 }
 function autoTradeReadyToEnter(digit){
@@ -1330,8 +1346,9 @@ function autoTradeReadyToEnter(digit){
   const risk=spikeRiskAssessment();
   if(risk.level==="UNKNOWN"||risk.level==="HIGH")return {ok:false,reason:risk.title};
   if(risk.level==="MODERATE"&&state.ouSignalSnapshot.signal!=="STRONG SIGNAL")return {ok:false,reason:"moderate spike risk requires STRONG SIGNAL"};
-  if(!Array.isArray(state.ouEntrySnapshot?.digits)||state.ouEntrySnapshot.digits.length!==2||state.ouEntrySnapshot.digits[0]===state.ouEntrySnapshot.digits[1])return {ok:false,reason:"exactly two distinct validated entry digits are required"};
-  if(!state.ouEntrySnapshot.digits.includes(digit))return {ok:false,reason:"digit is not a current Entry Engine candidate"};
+  const selectedEntries=autoTradeEntrySelection();
+  if(selectedEntries.length!==2||selectedEntries[0]===selectedEntries[1])return {ok:false,reason:$("autoTradeManualEntriesEnabled")?.checked?"manual digits have not both passed the Entry Engine rules":"exactly two distinct validated entry digits are required"};
+  if(!selectedEntries.includes(digit))return {ok:false,reason:$("autoTradeManualEntriesEnabled")?.checked?"digit is not one of the two qualified manual entry digits":"digit is not a current Entry Engine candidate"};
   return {ok:true};
 }
 function processAutoTradeTick(digit){
@@ -1346,7 +1363,7 @@ function processAutoTradeTick(digit){
   // Lock one entry sequence until its contracts settle and the sequence is explicitly completed.
   // Never let a fresh tick overwrite runSymbol/runSettled while a quote or contract is in flight.
   if(autoTrade.runSymbol||Object.keys(autoTrade.pendingBuyQuotes).length||Object.keys(autoTrade.activeContracts).length)return;
-  const candidates=state.ouEntrySnapshot?.digits||[];
+  const candidates=autoTradeEntrySelection();
   if(!candidates.includes(digit)){autoTrade.armed=true;autoTrade.lastDigit=digit;return}
   if(!autoTrade.armed){autoTrade.lastDigit=digit;return}
   const check=autoTradeReadyToEnter(digit);
@@ -1611,6 +1628,8 @@ function autoTradeDisconnect(){
   if(savedToken){$("autoTradeToken").value=savedToken;$("autoTradeRemember").checked=true}
   $("autoTradeRemember").addEventListener("change",()=>{if(!$("autoTradeRemember").checked){try{localStorage.removeItem("mavenFxDerivApiToken")}catch{}}});
   $("autoTradeRecoveryEnabled").addEventListener("change",()=>{$("autoTradeRecoveryFields").hidden=!$("autoTradeRecoveryEnabled").checked});
+  $("autoTradeManualEntriesEnabled").addEventListener("change",()=>{$("autoTradeManualEntryFields").hidden=!$("autoTradeManualEntriesEnabled").checked;autoTradeRender()});
+  ["autoTradeManualDigit1","autoTradeManualDigit2"].forEach(id=>$(id).addEventListener("input",()=>autoTradeRender()));
   $("autoTradeRecoveryDigit1").value=String(state.selectedDigit);
   $("autoTradeRecoveryDigit1").addEventListener("focus",()=>{if(!$("autoTradeRecoveryDigit1").dataset.edited)$("autoTradeRecoveryDigit1").value=String(state.selectedDigit)});
   $("autoTradeRecoveryDigit1").addEventListener("input",()=>{$("autoTradeRecoveryDigit1").dataset.edited="1"});
