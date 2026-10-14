@@ -310,7 +310,7 @@ function startDeepScan(){
     if(Object.values(ds.historyRequests).includes(m.symbol))continue;
     const req=nextReq();
     ds.historyRequests[req]=m.symbol;
-    request({ticks_history:m.symbol,end:"latest",count:500,style:"ticks",req_id:req});
+    request({ticks_history:m.symbol,end:"latest",count:1000,style:"ticks",req_id:req});
   }
   renderDeepScanner();
   const winner=$("scannerWinner");
