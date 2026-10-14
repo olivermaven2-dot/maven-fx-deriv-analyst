@@ -785,6 +785,33 @@ function distributionGate(d,selectedDigit,selectedSide){
     reason:failures.length?"Distribution gate blocked: every digit in the selected-side group must be below 10.5% and have neither the most-appearing nor least-appearing highlight.":"Distribution gate passed: all required digits are below 10.5% with no most-appearing or least-appearing highlight."};
 }
 
+function mavenAIDecisionLayer(engine,baseSignal,evidence,alignment,conflict,hardGate,sample){
+  const factors=(Array.isArray(alignment)?alignment:[]).filter(Number.isFinite);
+  const agreement=factors.length?factors.filter(x=>x>=.55).length/factors.length:.5;
+  const validation=getValidationReliability(engine);
+  let confidence=Math.max(0,Math.min(1,(Number(evidence)||0)*.75+agreement*.25));
+  if(validation.forecasts>=30&&Number.isFinite(validation.rate)){
+    if(validation.rate<.40)confidence=Math.max(0,confidence-.06);
+    else if(validation.rate>=.60)confidence=Math.min(1,confidence+.02);
+  }
+  let decision=baseSignal,reason="AI evidence review agrees with the rule-based result.";
+  if(hardGate){reason="AI review preserved a mandatory data/distribution gate; the AI layer cannot override it.";}
+  else if(conflict){decision="WAIT";reason="AI review detected conflicting evidence and withheld a directional decision.";}
+  else if(validation.forecasts>=30&&validation.rate<.40){
+    if(decision==="STRONG SIGNAL")decision="SIGNAL";
+    else if(decision==="SIGNAL")decision="WAIT";
+    reason="AI review reduced confidence because the setup's saved walk-forward outcomes are weak ("+Math.round(validation.rate*100)+"% across "+validation.forecasts+" scored outcomes).";
+  }else if(decision==="STRONG SIGNAL"&&(confidence<.58||agreement<.45)){
+    decision="SIGNAL";reason="AI review downgraded the signal because the evidence factors do not agree strongly enough.";
+  }else if(decision==="SIGNAL"&&(confidence<.47||agreement<.30)){
+    decision="WAIT";reason="AI review withheld the signal because too few independent evidence factors support it.";
+  }else if(decision==="SIGNAL"&&confidence>=.76&&agreement>=.78&&sample>=200){
+    decision="STRONG SIGNAL";reason="AI review upgraded the signal after strong factor agreement and a sufficiently large live sample.";
+  }else{
+    reason="AI review combined evidence strength, cross-factor agreement, sample size and available walk-forward outcomes.";
+  }
+  return {signal:decision,baseSignal,confidence,agreement,validationForecasts:validation.forecasts,validationRate:validation.rate,reason};
+}
 function overUnderEvidence(d,selectedDigit,selectedSide){
   const n=d.length;
   const distribution=distributionGate(d,selectedDigit,selectedSide);
@@ -815,7 +842,8 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   else if(evidence>=.68&&selectedRate>=baseline-.03&&selected.weightedTransitionRate>=Math.max(.48,baseline-.05)&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
   else if(evidence>=.54&&selectedRate>=baseline-.07&&consistency>=.45)signal="SIGNAL";
   else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
-  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,windowConflict,evidenceConflict,distribution,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
+  const aiDecision=mavenAIDecisionLayer("overunder",signal,evidence,[probability,momentumScore,trendScore,transition,selected.cluster,reaction,recency,consistency,historical,context],evidenceConflict,n<100||!distribution.ready||!distribution.pass,n);signal=aiDecision.signal;
+  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,windowConflict,evidenceConflict,distribution,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
 }
 function distributionBarFlags(d){
   const windowDigits=d.slice(-1000);
@@ -1090,7 +1118,8 @@ function parityStats(d,selectedSide){
   else if(evidence>=.68&&recent>=.53&&recentTransitionRate>=.50&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
   else if(evidence>=.54&&recent>=.50&&consistency>=.45)signal="SIGNAL";
   else if(evidence<.38||recent<.44)signal="AVOID";
-  return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,probability,momentumScore,trendScore,transition,historical,recency,context,evidence,conflict,signal,target,other};
+  const aiDecision=mavenAIDecisionLayer("evenodd",signal,evidence,[probability,momentumScore,trendScore,transition,clustering,recency,consistency,historical,context],conflict,n<100,n);signal=aiDecision.signal;
+  return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,probability,momentumScore,trendScore,transition,historical,recency,context,evidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,target,other};
 }
 function parityEntryCandidates(d,selectedSide){
   const key=x=>x%2===0?"E":"O";
@@ -1283,7 +1312,8 @@ function riseFallAnalysis(prices){
   else if(evidence>=.67&&recentTarget>=.57&&shortTarget>=.54&&midTarget>=.51&&persistence>=.53&&clean.length>=200)signal="STRONG SIGNAL";
   else if(evidence>=.55&&recentTarget>=.51&&shortTarget>=.49&&persistence>=.45)signal="SIGNAL";
   else if(evidence<.43)signal="AVOID";
-  return {selected:state.selectedRiseFall,stats,recentRate,recentMove,trendRate,momentum,persistence,streak,reversalPressure,evidence,conflict,signal,recentTarget,shortTarget,midTarget,longTarget};
+  const aiDecision=mavenAIDecisionLayer("risefall",signal,evidence,[recentTarget,shortTarget,midTarget,longTarget,persistence,1-reversalPressure,recentMove,trendRate,momentum],conflict,clean.length<100||recentDirectional.length<15||stats.some(x=>x.size<=100&&x.directional<10),clean.length);signal=aiDecision.signal;
+  return {selected:state.selectedRiseFall,stats,recentRate,recentMove,trendRate,momentum,persistence,streak,reversalPressure,evidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentTarget,shortTarget,midTarget,longTarget};
 }
 
 function riseFallEntry(prices,analysis){
