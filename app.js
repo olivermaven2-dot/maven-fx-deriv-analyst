@@ -864,10 +864,22 @@ window.mavenAIGetContext=function(){
   const context={market:state.marketName||state.symbol||"Unknown",symbol:state.symbol||"Unknown",connected:!!state.connected,tickCount:digits.length,lastDigit:digits.length?digits[digits.length-1]:null,engine:state.engine,selectedDigit:state.selectedDigit,selectedSide:state.selectedSide,selectedParity:state.selectedParity,selectedRiseFall:state.selectedRiseFall};
   const bars=distributionBarFlags(digits);
   context.distribution={total:bars.total,percentages:bars.percentages,most:bars.most.map((v,i)=>v?i:null).filter(v=>v!==null),least:bars.least.map((v,i)=>v?i:null).filter(v=>v!==null)};
+  // Compute all three engine summaries only when the user asks Maven AI; never on every incoming tick.
+  context.engines={};
+  if(digits.length>=30){
+    const ou=overUnderEvidence(digits,state.selectedDigit,state.selectedSide);
+    context.engines.overunder={value:ou.signal,evidence:ou.evidence,reason:ou.probabilityConflict?"Complementary probability is stronger":ou.windowConflict?"Recent and longer-window evidence conflict":ou.distribution.ready&&!ou.distribution.pass?"Distribution gate blocked":ou.signal==="WAIT"?"Evidence is still building":ou.signal==="AVOID"?"Evidence is weak":"Evidence checks passed",probabilityConflict:ou.probabilityConflict,windowConflict:ou.windowConflict,distributionReady:ou.distribution.ready,distributionPass:ou.distribution.pass};
+    const parity=parityStats(digits,state.selectedParity);
+    context.engines.evenodd={value:parity.signal,evidence:parity.evidence,reason:parity.conflict?"Recent and longer-window parity evidence conflict":parity.signal==="WAIT"?"Evidence is still building":parity.signal==="AVOID"?"Evidence is weak":"Parity evidence checks passed",conflict:parity.conflict};
+    const rf=riseFallAnalysis(state.ticks.map(t=>t.quote));
+    if(rf)context.engines.risefall={value:rf.signal,evidence:rf.evidence,reason:rf.conflict?"Recent and longer-term direction conflict":rf.signal==="WAIT"?"Evidence is still building":rf.signal==="AVOID"?"Directional evidence is weak":"Directional evidence checks passed",conflict:rf.conflict};
+  }else{
+    context.engines={overunder:{value:"WAIT",reason:"At least 30 live digits required"},evenodd:{value:"WAIT",reason:"At least 30 live digits required"},risefall:{value:"WAIT",reason:"At least 30 live price ticks required"}};
+  }
   if(state.engine==="overunder"&&digits.length>=30){
     const evidence=overUnderEvidence(digits,state.selectedDigit,state.selectedSide);
     const entry=(evidence.signal==="SIGNAL"||evidence.signal==="STRONG SIGNAL")&&!evidence.probabilityConflict?overUnderEntry(digits,state.selectedDigit,state.selectedSide):null;
-    context.signal={value:evidence.signal,reason:evidence.distribution.reason,distributionReady:evidence.distribution.ready,distributionPass:evidence.distribution.pass,failures:evidence.distribution.failures||[],selectedRate:evidence.selectedRate,oppositeRate:evidence.oppositeRate,probabilityConflict:evidence.probabilityConflict,evidence:evidence.evidence,entries:entry?entry.entries.map(x=>({digit:x.digit,score:x.score,status:x.status})):[]};
+    context.signal={value:evidence.signal,reason:evidence.distribution.reason,distributionReady:evidence.distribution.ready,distributionPass:evidence.distribution.pass,failures:evidence.distribution.failures||[],selectedRate:evidence.selectedRate,oppositeRate:evidence.oppositeRate,probabilityConflict:evidence.probabilityConflict,windowConflict:evidence.windowConflict,evidence:evidence.evidence,entries:entry?entry.entries.map(x=>({digit:x.digit,score:x.score,status:x.status})):[]};
   }else if(state.engine==="overunder"){
     context.signal={value:"WAIT",reason:"At least 30 live digits are needed before the engine can analyze this setup.",distributionReady:bars.total===1000,distributionPass:false,failures:[],entries:[]};
   }
