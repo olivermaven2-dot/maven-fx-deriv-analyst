@@ -1483,7 +1483,13 @@ function autoTradeHandleMessage(d){
       runFinished=true;
     }else{
       autoTrade.losses++;
-      if(!autoTrade.recoveryEnabled){autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · recovery OFF, stopping immediately.");autoTradePause("loss — recovery mode is OFF");return}
+      if(!autoTrade.recoveryEnabled){
+        // A single loss ends this entry sequence, not the bot session. Stop only if the session stop-loss is reached.
+        if(autoTrade.sessionProfit<=-autoTrade.stopLoss){autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · session stop-loss reached.");autoTradePause("stop-loss limit reached");return}
+        autoTrade.runRemaining=0;autoTrade.runSymbol="";autoTrade.runSettled=0;autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;autoTrade.armed=true;autoTrade.lastDigit=null;
+        autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · recovery OFF; entry sequence ended. Bot remains RUNNING and is waiting for the next fully validated entry at base stake.");
+        autoTradeRender();return
+      }
       if(wasRecovery<2){
         autoTrade.recoveryPhase=wasRecovery+1;
         autoTrade.nextStake=Number((settledStake*autoTrade.martingale).toFixed(2));
