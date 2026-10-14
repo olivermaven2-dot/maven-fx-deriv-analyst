@@ -950,7 +950,7 @@ function renderEngine(){
   if(ou)ou.style.display=state.engine==="overunder"?"":"none";
   if(parity)parity.style.display=state.engine==="evenodd"?"":"none";
   const rf=$("riseFallControls");if(rf)rf.style.display=state.engine==="risefall"?"":"none";
-  if(n<30){state.ouSignalSnapshot={key:ouValidationKey(),active:false,signal:"WAIT",probabilityConflict:false,tickCount:n};state.ouEntrySnapshot={key:ouValidationKey(),active:false,digits:[]};root.innerHTML=panel("INSUFFICIENT DATA","Collecting more validated market data before analysis.",null,["At least 30 recent digits are required","Live data stream is active when ticks are arriving"],n);return}
+  if(n<30){state.ouSignalSnapshot={key:ouValidationKey(),active:false,signal:"WAIT",probabilityConflict:false,tickCount:n};state.ouEntrySnapshot={key:ouValidationKey(),active:false,digits:[]};state.otherValidation.snapshot=null;root.innerHTML=panel("INSUFFICIENT DATA","Collecting more validated market data before analysis.",null,["At least 30 recent digits are required","Live data stream is active when ticks are arriving"],n);renderOUValidationPanel();return}
   if(state.engine==="overunder")renderOverUnder(root,d,c,last,n);
   if(state.engine==="evenodd")renderEvenOdd(root,d,last,n);
   if(state.engine==="risefall")renderRiseFall(root,last,n);
