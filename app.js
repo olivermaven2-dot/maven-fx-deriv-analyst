@@ -37,7 +37,7 @@ function shouldRenderEngineForCurrentTick(){
   lastMobileEngineRenderAt=now;
   return true;
 }
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],lastTickSignature:"",engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],lastTickSignature:"",primarySubscriptionId:null,primarySubscriptionSymbol:"",primaryHistoryRequests:{},primarySubscribeRequests:{},lastPongAt:0,engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
 
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
@@ -83,7 +83,7 @@ connect();return;}
   ws.onopen=()=>{
     clearTimeout(state.connectTimer);
     resetDeepScannerSubscriptions();
-    state.connected=true; state.reconnectDelay=1000; state.lastError="—";renderSubscribedMarketStatus("switching");
+    state.connected=true; state.reconnectDelay=1000; state.lastPongAt=Date.now();state.primarySubscriptionId=null;state.primarySubscriptionSymbol="";state.primaryHistoryRequests={};state.primarySubscribeRequests={};state.lastError="—";renderSubscribedMarketStatus("switching");
     setStatus("connecting",`Connected — requesting ${state.marketName||state.symbol}`);
     state.lastMessage="WebSocket OPEN";
     request({ping:1,req_id:nextReq()});
@@ -99,7 +99,7 @@ connect();return;}
   };
   ws.onclose=e=>{
     clearTimeout(state.connectTimer);
-    state.connected=false;
+    state.connected=false;state.primarySubscriptionId=null;state.primarySubscriptionSymbol="";state.primaryHistoryRequests={};state.primarySubscribeRequests={};
     state.lastError=`Close ${e.code}${e.reason?": "+e.reason:""}${e.code===1006?" — abnormal close before a WebSocket close frame":""}`;renderSubscribedMarketStatus("switching");
     state.endpointIndex=(state.endpointIndex+1)%WS_URLS.length;
     setStatus("offline",`Disconnected (${e.code}) — switching endpoint`);
@@ -121,12 +121,17 @@ function handleMessage(d){
     if(req!=null&&state.deepScanner.subscribeRequests[req]){const sym=state.deepScanner.subscribeRequests[req];delete state.deepScanner.subscribeRequests[req];const rec=state.deepScanner.data[sym];if(rec)rec.error=d.error.message||"Subscription unavailable";renderDeepScanner();return}
     state.lastError=`${d.error.code||"API"}: ${d.error.message||"Deriv data error"}`;if($("diagError"))$("diagError").textContent=state.lastError;console.warn("Deriv API error:",d.error);setStatus("error",d.error.message||"Deriv data error");return
   }
-  if(d.msg_type==="ping"){$("diagSocket").textContent="OPEN • PING OK";return}
+  if(d.msg_type==="ping"){state.lastPongAt=Date.now();$("diagSocket").textContent="OPEN • PING OK";return}
   if(d.msg_type==="active_symbols")loadMarkets(d.active_symbols||[]);
   if(d.msg_type==="history"){
     const req=d.req_id, sym=req!=null?state.deepScanner.historyRequests[req]:null;
     if(sym){delete state.deepScanner.historyRequests[req];const rec=state.deepScanner.data[sym];if(rec){const prices=d.history?.prices||[],times=d.history?.times||[],pip=d.history?.pip_size??d.pip_size??rec.pipSize;rec.pipSize=pip;rec.ticks=prices.map((p,i)=>({quote:Number(p),epoch:times[i]||0})).filter(x=>Number.isFinite(x.quote)).slice(-MAX_TICKS);rec.digits=rec.ticks.map(x=>digitFromQuote(x.quote,rec.pipSize)).filter(Number.isInteger);rec.historyReady=true;rec.lastHistoryAt=Date.now();}renderDeepScanner();deepScannerEvaluate(false);return}
-    loadHistory(d.history?.prices||[],d.history?.times||[],d.history?.pip_size??d.pip_size??state.pipSize);return
+    if(req!=null&&Object.prototype.hasOwnProperty.call(state.primaryHistoryRequests,req)){
+      const requestedSymbol=state.primaryHistoryRequests[req];delete state.primaryHistoryRequests[req];
+      if(requestedSymbol!==state.symbol)return; // Ignore delayed history for a market that is no longer selected.
+      loadHistory(d.history?.prices||[],d.history?.times||[],d.history?.pip_size??d.pip_size??state.pipSize);return;
+    }
+    return;
   }
   if(d.msg_type==="tick"){
     const t=d.tick;
@@ -136,6 +141,8 @@ function handleMessage(d){
       const pending=Object.entries(state.deepScanner.subscribeRequests).find(([,sym])=>sym===t.symbol);
       const scannerSub=!!(r?.subscriptionId&&t.subscription?.id===r.subscriptionId)||(!!pending&&String(t.req_id)===String(pending[0]));
       if(scannerSub){if(pending)delete state.deepScanner.subscribeRequests[pending[0]];if(t.subscription?.id){request({forget:t.subscription.id,req_id:nextReq()});delete state.deepScanner.subscriptions[t.symbol];}if(r){r.subscriptionId=null;r.subscribed=false;}return;}
+      if(t.subscription?.id){state.primarySubscriptionId=t.subscription.id;state.primarySubscriptionSymbol=t.symbol;}
+      if(t.req_id!=null&&state.primarySubscribeRequests[t.req_id]===t.symbol)delete state.primarySubscribeRequests[t.req_id];
       receiveTick(t);syncCurrentIntoScanner(t);
     }else receiveScannerTick(t);
   }
@@ -160,10 +167,15 @@ function loadMarkets(raw){
 function startMarket(force=false){
   if(!force && state.marketStarted && state.symbol==="R_100")return;
   state.marketStarted=true;
+  // Replace the previous primary tick subscription instead of leaving stale subscriptions running.
+  if(state.primarySubscriptionId&&state.socket?.readyState===WebSocket.OPEN){request({forget:state.primarySubscriptionId,req_id:nextReq()});}
+  state.primarySubscriptionId=null;state.primarySubscriptionSymbol="";
   const selected=state.markets.find(m=>m.symbol===state.symbol);if(selected?.pipSize!=null)state.pipSize=selected.pipSize;
   state.ticks=[];state.digits=[];state.lastTickSignature="";state.lastTickAt=0;renderSubscribedMarketStatus("switching");$("lastPrice").textContent="—";$("lastDigit").textContent="—";renderStream();renderEngine();
-  request({ticks_history:state.symbol,end:"latest",count:1000,style:"ticks",req_id:nextReq()});
-  request({ticks:state.symbol,subscribe:1,req_id:nextReq()});
+  const historyReq=nextReq();state.primaryHistoryRequests[historyReq]=state.symbol;
+  request({ticks_history:state.symbol,end:"latest",count:1000,style:"ticks",req_id:historyReq});
+  const subscribeReq=nextReq();state.primarySubscribeRequests[subscribeReq]=state.symbol;
+  request({ticks:state.symbol,subscribe:1,req_id:subscribeReq});
   if($("diagSubscription"))$("diagSubscription").textContent=`Requested ${state.symbol}`;
   syncDeepScannerSubscriptions();
 }
@@ -1189,6 +1201,12 @@ let touchX=0,touchY=0;
 document.querySelector(".engine-nav").addEventListener("touchstart",e=>{touchX=e.changedTouches[0].clientX;touchY=e.changedTouches[0].clientY},{passive:true});
 document.querySelector(".engine-nav").addEventListener("touchend",e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)){const names=["overunder","evenodd","risefall"],i=names.indexOf(state.engine),next=names[Math.max(0,Math.min(2,i+(dx<0?1:-1)))];document.querySelector(`[data-engine="${next}"]`).click()}},{passive:true});
 setInterval(()=>{if(state.deepScanner.enabled&&Date.now()-state.deepScanner.lastScanAt>10000)deepScannerEvaluate(false);if(state.lastTickAt){$("diagAge").textContent=Math.round((Date.now()-state.lastTickAt)/1000)+"s";if(Date.now()-state.lastTickAt>15000&&state.connected)setStatus("offline","Waiting for data")}const root=$("engineRoot");if(root&&root.querySelector(".engine-panel"))applySpikeRiskProtection(root)},1000);
+// Keep the WebSocket alive with Deriv protocol pings and recover if its heartbeat stops.
+setInterval(()=>{
+  const ws=state.socket;if(!ws||ws.readyState!==WebSocket.OPEN||!state.connected)return;
+  if(state.lastPongAt&&Date.now()-state.lastPongAt>45000){state.lastError="Deriv heartbeat timed out";if($("diagError"))$("diagError").textContent=state.lastError;try{ws.close()}catch{}return;}
+  request({ping:1,req_id:nextReq()});
+},15000);
 connect();
 // Deep Scanner floating popup controls
 (function setupDeepScannerPopup(){
