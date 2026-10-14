@@ -494,3 +494,16 @@ test('recovery side selectors default to existing logic and allow independent Ov
   assert.equal((html.match(/<option value="UNDER">Under<\/option>/g) || []).length, 2);
   assert.match(html, /Defaults preserve the existing logic/);
 });
+
+
+test('manual entry digits replace automatic candidates but keep Final Signal and shared entry qualification gates', () => {
+  assert.match(appSource, /const manualEntriesEnabled=!!\$\("autoTradeManualEntriesEnabled"\)\?\.checked/);
+  assert.match(appSource, /!manualEntriesEnabled&&!state\.ouEntrySnapshot\?\.active/);
+  assert.match(appSource, /overUnderEntry\(state\.digits,state\.selectedDigit,state\.selectedSide,\[first,second\]\)/);
+  assert.match(appSource, /manual digits have not both passed the Entry Engine rules/);
+  assert.match(appSource, /digit is not one of the two qualified manual entry digits/);
+  assert.match(appSource, /const chosen=autoTradeEntrySelection\(\);entries\.textContent=chosen\.length===2\?chosen\.join\(" \/ "\)/);
+  const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(html, /Use my manual entry digits instead of the Entry Engine digits/);
+  assert.match(html, /Both manual digits must independently pass the same sample-size, distribution-bar, extreme-digit, transition, reaction, continuation, stability and consistency rules/);
+});

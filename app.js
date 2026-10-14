@@ -1296,7 +1296,7 @@ function autoTradeUpdateLiveFields(){
   const market=$("autoTradeMarket"),setup=$("autoTradeSetup"),entries=$("autoTradeEntries");
   if(market)market.textContent=state.symbol+" · "+state.marketName;
   if(setup)setup.textContent=state.selectedSide+" "+state.selectedDigit;
-  if(entries)entries.textContent=state.ouEntrySnapshot?.active&&state.ouEntrySnapshot.digits?.length?state.ouEntrySnapshot.digits.join(" / "):"No valid entry";
+  if(entries){const chosen=autoTradeEntrySelection();entries.textContent=chosen.length===2?chosen.join(" / "):$("autoTradeManualEntriesEnabled")?.checked?"Manual digits not qualified":state.ouEntrySnapshot?.active&&state.ouEntrySnapshot.digits?.length?state.ouEntrySnapshot.digits.join(" / "):"No valid entry";}
 }
 function autoTradeMarketChanged(){
   autoTrade.lastDigit=null;
@@ -1342,7 +1342,8 @@ function autoTradeStart(){
 }
 function autoTradeReadyToEnter(digit){
   if(!autoTrade.enabled||!autoTrade.authorized||!state.connected||!state.lastTickAt||Date.now()-state.lastTickAt>15000)return {ok:false,reason:"live data disconnected or stale"};
-  if(state.engine!=="overunder"||state.ouSignalSnapshot?.tickCount!==state.digits.length||state.symbol!==state.ouEntrySnapshot?.key?.split("|")[0]||state.ouSignalSnapshot?.key!==ouValidationKey()||!state.ouSignalSnapshot?.active||!state.ouEntrySnapshot?.active)return {ok:false,reason:"Final Signal or Entry Engine is not valid"};
+  const manualEntriesEnabled=!!$("autoTradeManualEntriesEnabled")?.checked;
+  if(state.engine!=="overunder"||state.ouSignalSnapshot?.tickCount!==state.digits.length||state.symbol!==state.ouEntrySnapshot?.key?.split("|")[0]||state.ouSignalSnapshot?.key!==ouValidationKey()||!state.ouSignalSnapshot?.active||(!manualEntriesEnabled&&!state.ouEntrySnapshot?.active))return {ok:false,reason:"Final Signal or required entry validation is not valid"};
   const risk=spikeRiskAssessment();
   if(risk.level==="UNKNOWN"||risk.level==="HIGH")return {ok:false,reason:risk.title};
   if(risk.level==="MODERATE"&&state.ouSignalSnapshot.signal!=="STRONG SIGNAL")return {ok:false,reason:"moderate spike risk requires STRONG SIGNAL"};
