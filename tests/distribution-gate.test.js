@@ -146,3 +146,18 @@ test('local Maven AI module contains no network APIs or remote model calls', () 
   assert.doesNotMatch(source, /\bfetch\s*\(|XMLHttpRequest|WebSocket|https?:\/\//i);
   assert.match(source, /mavenAIGetContext/);
 });
+
+test('one qualified Over/Under entry candidate is visibly marked incomplete without changing Final Signal logic', () => {
+  const start = appSource.indexOf('function entryHtml');
+  assert.notEqual(start, -1, 'entryHtml must exist');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  assert.match(source, /e\.status==="1 VALID CANDIDATE"&&e\.entries\.length===1/);
+  assert.match(source, /SECOND DIGIT NOT QUALIFIED/);
+  assert.match(source, /entry-pending/);
+  // Entry candidates are displayed separately; this UI clarification does not gate the Final Signal.
+  const evidenceStart = appSource.indexOf('function overUnderEvidence');
+  const evidenceEnd = appSource.indexOf('\nfunction ', evidenceStart + 10);
+  const evidenceSource = appSource.slice(evidenceStart, evidenceEnd);
+  assert.doesNotMatch(evidenceSource, /overUnderEntry/);
+});
