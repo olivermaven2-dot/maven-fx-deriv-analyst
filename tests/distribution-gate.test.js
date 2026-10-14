@@ -507,8 +507,8 @@ test('manual entry digits bypass Entry Engine filters but must have neither red 
   assert.ok(source.includes('distributionBarFlags(state.digits)'));
   assert.ok(source.includes('bars.most[digit]||bars.least[digit]'));
   assert.doesNotMatch(source, /overUnderEntry/);
-  assert.ok(appSource.includes('manual digits must be distinct and have neither a red nor green distribution bar'));
-  assert.ok(appSource.includes('digit is not one of the two valid manual digits without red/green bars'));
+  assert.ok(appSource.includes('neither manual digit currently passes the red/green distribution-bar rule'));
+  assert.ok(appSource.includes('digit is not an eligible manual entry digit'));
   assert.ok(appSource.includes('automaticEntryIsCurrent=manualEntriesEnabled||'));
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(html.includes('Use my manual entry digits instead of the Entry Engine digits'));
@@ -523,6 +523,8 @@ test('manual entry mode does not depend on the automatic Entry Engine snapshot a
   assert.match(selectionSource, /Manual digits bypass every Entry Engine candidate filter/);
   assert.match(selectionSource, /distributionBarFlags\(state\.digits\)/);
   assert.match(selectionSource, /autoTrade\.lastManualBlockReason/);
+  assert.match(selectionSource, /const valid=\[first,second\]\.filter\(digit=>!bars\.most\[digit\]&&!bars\.least\[digit\]\)/);
+  assert.match(selectionSource, /Using the remaining eligible manual digit/);
 
   const readyStart = appSource.indexOf('function autoTradeReadyToEnter');
   const readyEnd = appSource.indexOf('\nfunction ', readyStart + 10);
