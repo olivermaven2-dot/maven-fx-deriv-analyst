@@ -715,6 +715,8 @@ function applySpikeRiskProtection(root){
   const kicker=panelRoot.querySelector(".panel-kicker");
   if(kicker)kicker.insertAdjacentElement("afterend",banner);else panelRoot.prepend(banner);
   const why=panelRoot.querySelector(".why ul");
+  // This runs on a one-second refresh; keep risk notes idempotent rather than stacking duplicates.
+  panelRoot.querySelectorAll(".spike-risk-note").forEach(node=>node.remove());
   if(r.level==="HIGH"||r.level==="UNKNOWN"){
     // Spike risk blocks entry eligibility only. Preserve the engine's independent Final Signal and reason.
     let entry=panelRoot.querySelector(".entry");
@@ -725,9 +727,9 @@ function applySpikeRiskProtection(root){
       if(summary)summary.appendChild(entry);else panelRoot.prepend(entry);
     }
     entry.innerHTML='<div class="entry-head">ENTRY DIGITS</div><div class="entry-main">NO ENTRY — SPIKE RISK</div>';
-    if(why){const li=document.createElement("li");li.className="block";li.textContent="× Shared spike-risk protection blocked entry eligibility; Final Signal remains the engine analysis.";why.prepend(li)}
+    if(why){const li=document.createElement("li");li.className="block spike-risk-note";li.textContent="× Shared spike-risk protection blocked entry eligibility; Final Signal remains the engine analysis.";why.prepend(li)}
   }else if(r.level==="MODERATE"){
-    if(why){const li=document.createElement("li");li.textContent="! Moderate spike risk: confidence is reduced; wait for conditions to normalize.";why.prepend(li)}
+    if(why){const li=document.createElement("li");li.className="spike-risk-note";li.textContent="! Moderate spike risk: treat signals cautiously and wait for conditions to normalize.";why.prepend(li)}
   }
 }
 
