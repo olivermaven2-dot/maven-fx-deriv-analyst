@@ -23,6 +23,7 @@ function renderOverUnder(root,d,c,last,n){
     "A-Setup alignment: probability "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentum*100)+" • trend "+Math.round(e.trend*100)+" • transitions "+Math.round(e.transition*100),
     "Reaction "+Math.round(e.reaction*100)+" • clustering "+Math.round(e.cluster*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
     "Historical "+Math.round(e.historical*100)+" • current context "+Math.round(e.context*100)+" • evidence "+Math.round(e.evidence*100),
+    "Maven AI decision: "+e.aiDecision.baseSignal+" → "+e.aiDecision.signal+" • confidence "+Math.round(e.aiDecision.confidence*100)+"% • "+e.aiDecision.reason,
     e.probabilityConflict?"× Complementary probability conflict — waiting for stronger agreement":e.windowConflict?"× Recent and long-window evidence conflict — waiting for alignment":entry?"✓ Entry candidates "+entry.main+" passed historical reaction filters":"× Entry candidates remain inactive or did not pass validation",
     ouValidationSummary()
   ],n);
@@ -577,7 +578,7 @@ function validationReliabilityNote(engine){
   const v=getValidationReliability(engine);
   if(v.forecasts<10)return "AI feedback: too little outcome data ("+v.forecasts+" scored 1-tick outcomes). Do not treat this setup as historically validated.";
   if(v.forecasts<30)return "AI feedback: early sample ("+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate). Keep confidence provisional; this is not a profitability guarantee.";
-  return "AI feedback: "+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate. Historical sample available; it remains session-only and does not guarantee future results.";
+  return "AI feedback: "+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate. Historical sample available; it remains stored in this browser and does not guarantee future results.";
 }
 function renderOUValidationPanel(){
   const card=$("ouValidationCard"),out=$("ouValidationResults"),payoutControl=$("ouPayoutControl");
@@ -589,7 +590,7 @@ function renderOUValidationPanel(){
     const key=otherValidationKey(engine,target),rec=state.otherValidation.book[key];
     const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"—";
     const label=engine==="evenodd"?"EVEN/ODD":"RISE/FALL";
-    out.innerHTML='<div class="ou-validation-note">Session-only walk-forward validation • '+label+' forecasts count only when Final Signal and Entry Engine both qualify. Outcomes use future live ticks; this is a prediction hit rate, not proof of profitability.</div><div class="ou-validation-breakeven">'+esc(validationReliabilityNote(engine))+'</div>'+
+    out.innerHTML='<div class="ou-validation-note">Saved walk-forward validation • '+label+' forecasts count only when Final Signal and Entry Engine both qualify. Outcomes use future live ticks; this is a prediction hit rate, not proof of profitability.</div><div class="ou-validation-breakeven">'+esc(validationReliabilityNote(engine))+'</div>'+
       (rec?'<div class="ou-validation-table"><div class="ou-validation-row engine-validation-row ou-validation-head"><span>SETUP</span><span>FORECASTS</span><span>1 TICK</span><span>2 IN A ROW</span><span>3 IN A ROW</span><span>MAX FAILS</span></div><div class="ou-validation-row engine-validation-row"><strong>'+esc(target)+'</strong><span>'+rec.triggers+'</span><span>'+fmt(rec[1])+'</span><span>'+fmt(rec[2])+'</span><span>'+fmt(rec[3])+'</span><span>'+Math.max(rec[1].maxFailureStreak||0,rec[2].maxFailureStreak||0,rec[3].maxFailureStreak||0)+'</span></div></div><div class="ou-validation-note">Even/Odd checks the next digit parity. Rise/Fall checks the next real quote movement; unchanged prices count as misses. A 2- or 3-tick success requires every consecutive outcome in that horizon to match.</div>':
       '<div class="ou-validation-empty">No qualifying '+label+' forecasts recorded for '+esc(state.symbol)+' · '+esc(target)+' yet. Keep the live stream running and leave this engine selected while valid signals and entries appear.</div>');
     return;
@@ -1039,11 +1040,11 @@ window.mavenAIGetContext=function(){
   context.engines={};
   if(digits.length>=30){
     const ou=overUnderEvidence(digits,state.selectedDigit,state.selectedSide);
-    context.engines.overunder={value:ou.signal,evidence:ou.evidence,reason:ou.probabilityConflict?"Complementary probability is stronger":ou.windowConflict?"Recent and longer-window evidence conflict":ou.distribution.ready&&!ou.distribution.pass?"Distribution gate blocked":ou.signal==="WAIT"?"Evidence is still building":ou.signal==="AVOID"?"Evidence is weak":"Evidence checks passed",probabilityConflict:ou.probabilityConflict,windowConflict:ou.windowConflict,distributionReady:ou.distribution.ready,distributionPass:ou.distribution.pass};
+    context.engines.overunder={value:ou.signal,evidence:ou.evidence,aiDecision:ou.aiDecision,reason:ou.probabilityConflict?"Complementary probability is stronger":ou.windowConflict?"Recent and longer-window evidence conflict":ou.distribution.ready&&!ou.distribution.pass?"Distribution gate blocked":ou.signal==="WAIT"?"Evidence is still building":ou.signal==="AVOID"?"Evidence is weak":"Evidence checks passed",probabilityConflict:ou.probabilityConflict,windowConflict:ou.windowConflict,distributionReady:ou.distribution.ready,distributionPass:ou.distribution.pass};
     const parity=parityStats(digits,state.selectedParity);
-    context.engines.evenodd={value:parity.signal,evidence:parity.evidence,reason:parity.conflict?"Recent and longer-window parity evidence conflict":parity.signal==="WAIT"?"Evidence is still building":parity.signal==="AVOID"?"Evidence is weak":"Parity evidence checks passed",conflict:parity.conflict};
+    context.engines.evenodd={value:parity.signal,evidence:parity.evidence,aiDecision:parity.aiDecision,reason:parity.conflict?"Recent and longer-window parity evidence conflict":parity.signal==="WAIT"?"Evidence is still building":parity.signal==="AVOID"?"Evidence is weak":"Parity evidence checks passed",conflict:parity.conflict};
     const rf=riseFallAnalysis(state.ticks.map(t=>t.quote));
-    if(rf)context.engines.risefall={value:rf.signal,evidence:rf.evidence,reason:rf.conflict?"Recent and longer-term direction conflict":rf.signal==="WAIT"?"Evidence is still building":rf.signal==="AVOID"?"Directional evidence is weak":"Directional evidence checks passed",conflict:rf.conflict};
+    if(rf)context.engines.risefall={value:rf.signal,evidence:rf.evidence,aiDecision:rf.aiDecision,reason:rf.conflict?"Recent and longer-term direction conflict":rf.signal==="WAIT"?"Evidence is still building":rf.signal==="AVOID"?"Directional evidence is weak":"Directional evidence checks passed",conflict:rf.conflict};
   }else{
     context.engines={overunder:{value:"WAIT",reason:"At least 30 live digits required"},evenodd:{value:"WAIT",reason:"At least 30 live digits required"},risefall:{value:"WAIT",reason:"At least 30 live price ticks required"}};
   }
@@ -1054,6 +1055,7 @@ window.mavenAIGetContext=function(){
   }else if(state.engine==="overunder"){
     context.signal={value:"WAIT",reason:"At least 30 live digits are needed before the engine can analyze this setup.",distributionReady:bars.total===1000,distributionPass:false,failures:[],entries:[]};
   }
+  context.aiDecision=context.engines[state.engine]?.aiDecision||null;
   context.validation=getValidationReliability(state.engine);
   context.validation.note=validationReliabilityNote(state.engine);
   return context;
@@ -1282,6 +1284,7 @@ function renderEvenOdd(root,d,last,n){
     "Probability "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentumScore*100)+" • trend "+Math.round(e.trendScore*100)+" • transitions "+Math.round(e.transition*100),
     "Clustering "+Math.round(e.clustering*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
     "Streak "+e.streak+" • evidence "+Math.round(e.evidence*100),
+    "Maven AI decision: "+e.aiDecision.baseSignal+" → "+e.aiDecision.signal+" • confidence "+Math.round(e.aiDecision.confidence*100)+"% • "+e.aiDecision.reason,
     entry?"✓ STRONG ENTRY: trigger has measurable lift toward the Final Signal":"× No strong trigger passed conditional validation"
   ],n);
 }
@@ -1436,6 +1439,7 @@ function renderRiseFall(root,last,n){
     "Selected-direction support: "+Math.round(a.recentTarget*100)+"% • movement-weighted rise: "+Math.round(a.recentMove*100)+"%",
     "Momentum "+Math.round(a.momentum*100)+" • persistence "+Math.round(a.persistence*100)+" • target streak "+a.streak,
     "Reversal pressure "+Math.round(a.reversalPressure*100)+" • evidence "+Math.round(a.evidence*100)+"%",
+    "Maven AI decision: "+a.aiDecision.baseSignal+" → "+a.aiDecision.signal+" • confidence "+Math.round(a.aiDecision.confidence*100)+"% • "+a.aiDecision.reason,
     a.conflict?"× Directional windows conflict — waiting for stronger agreement":"✓ Directional conflict check passed",
     entry?"✓ Confirmed entry: historical trigger matched the live stream with qualified follow-through toward "+a.selected:"× No entry confirmed yet; historical patterns alone cannot trigger an entry"
   ],n);
