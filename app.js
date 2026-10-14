@@ -146,7 +146,7 @@ function handleMessage(d){
       if(sub?.id){state.primarySubscriptionId=sub.id;state.primarySubscriptionSymbol=t.symbol;}
       if(req!=null&&state.primarySubscribeRequests[req]===t.symbol)delete state.primarySubscribeRequests[req];
       receiveTick(t);
-      if(state.primarySubscriptionSymbol===t.symbol && state.primarySubscriptionId)renderSubscribedMarketStatus("connected");
+      if(state.primarySubscriptionSymbol===t.symbol && state.primarySubscriptionId && !$("subscribedMarketStatus")?.classList.contains("connected"))renderSubscribedMarketStatus("connected");
       syncCurrentIntoScanner(t);
     }else receiveScannerTick(t);
   }
@@ -213,9 +213,27 @@ function syncCurrentIntoScanner(t=null){
   if(!state.symbol)return;
   const m=state.markets.find(x=>x.symbol===state.symbol);if(!m)return;
   const r=scannerRecord(m);
-  if(state.ticks.length){r.ticks=state.ticks.slice(-MAX_TICKS);r.digits=state.digits.slice(-MAX_TICKS);r.pipSize=state.pipSize;r.historyReady=r.digits.length>=100;}
-  if(t&&t.symbol===state.symbol){const sig=String(t.epoch||"")+":"+String(t.quote);r.lastSeen=sig;r.lastTickAt=Date.now();}
-  else if(state.lastTickAt)r.lastTickAt=state.lastTickAt;
+  r.pipSize=state.pipSize;
+  if(t&&t.symbol===state.symbol){
+    const sig=String(t.epoch||"")+":"+String(t.quote);
+    const last=r.ticks.at(-1);
+    const lastSig=last?String(last.epoch||"")+":"+String(last.quote):"";
+    if(sig!==r.lastSeen&&sig!==lastSig){
+      const quote=Number(t.quote),digit=digitFromQuote(quote,r.pipSize);
+      if(Number.isFinite(quote)&&Number.isInteger(digit)){
+        r.ticks.push({quote,epoch:t.epoch||0});
+        r.digits.push(digit);
+        if(r.ticks.length>MAX_TICKS)r.ticks.shift();
+        if(r.digits.length>MAX_TICKS)r.digits.shift();
+      }
+    }
+    r.lastSeen=sig;
+    r.lastTickAt=Date.now();
+    r.historyReady=r.digits.length>=100;
+  }else{
+    if(state.ticks.length){r.ticks=state.ticks.slice(-MAX_TICKS);r.digits=state.digits.slice(-MAX_TICKS);r.historyReady=r.digits.length>=100;}
+    if(state.lastTickAt)r.lastTickAt=state.lastTickAt;
+  }
 }
 function isMobileDevice(){return !!(window.matchMedia&&window.matchMedia("(max-width: 600px)").matches)}
 function isDeepScannerOpen(){const modal=$("deepScannerModal");return !!(modal&&modal.classList.contains("open"))}
