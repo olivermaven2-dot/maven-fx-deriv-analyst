@@ -201,8 +201,17 @@ function syncCurrentIntoScanner(t=null){
   if(t&&t.symbol===state.symbol){const sig=String(t.epoch||"")+":"+String(t.quote);r.lastSeen=sig;r.lastTickAt=Date.now();}
   else if(state.lastTickAt)r.lastTickAt=state.lastTickAt;
 }
+function isMobileDevice(){return !!(window.matchMedia&&window.matchMedia("(max-width: 600px)").matches)}
+function isDeepScannerOpen(){const modal=$("deepScannerModal");return !!(modal&&modal.classList.contains("open"))}
+function pauseDeepScannerSubscriptions(){
+  const ds=state.deepScanner;
+  for(const [symbol,id] of Object.entries(ds.subscriptions)){if(id)request({forget:id,req_id:nextReq()});const r=ds.data[symbol];if(r){r.subscriptionId=null;r.subscribed=false;}}
+  ds.subscriptions={};ds.subscribeRequests={};
+}
 function syncDeepScannerSubscriptions(){
   const ds=state.deepScanner;if(!ds.enabled||!state.markets.length||!state.connected)return;
+  // On phones, scan other markets only while the scanner popup is open; keep the primary live feed uninterrupted.
+  if(isMobileDevice()&&!isDeepScannerOpen())return;
   for(const m of state.markets){
     const r=scannerRecord(m);
     if(m.symbol===state.symbol){
@@ -219,6 +228,7 @@ function syncDeepScannerSubscriptions(){
 }
 function receiveScannerTick(t){
   if(!t||!t.symbol||t.symbol===state.symbol)return;
+  if(isMobileDevice()&&!isDeepScannerOpen()){if(t.subscription?.id)request({forget:t.subscription.id,req_id:nextReq()});const rec=state.deepScanner.data[t.symbol];if(rec){rec.subscriptionId=null;rec.subscribed=false;}delete state.deepScanner.subscriptions[t.symbol];return;}
   for(const [req,sym] of Object.entries(state.deepScanner.subscribeRequests))if(sym===t.symbol)delete state.deepScanner.subscribeRequests[req];
   const r=state.deepScanner.data[t.symbol];if(!r)return;
   const quote=Number(t.quote);if(!Number.isFinite(quote))return;
@@ -250,6 +260,7 @@ function scannerRisk(r){
 function deepScannerSetupKey(){return state.selectedDigit+"|"+state.selectedSide}
 function deepScannerEvaluate(force=false){
   const ds=state.deepScanner;if(!ds.enabled||!state.markets.length)return [];
+  if(isMobileDevice()&&!isDeepScannerOpen())return ds.lastScanRows||[];
   // Keep live tick collection immediate while avoiding repeated full-market analysis on lower-powered phones.
   if(!force&&ds.lastScanAt&&Date.now()-ds.lastScanAt<10000)return ds.lastScanRows||[];
   syncCurrentIntoScanner();
@@ -1060,8 +1071,8 @@ connect();
 (function setupDeepScannerPopup(){
   const fab=document.getElementById("deepScannerFab"),modal=document.getElementById("deepScannerModal"),close=document.getElementById("closeDeepScanner"),dot=document.getElementById("deepScannerFabDot");
   if(!fab||!modal||!close)return;
-  const open=()=>{modal.classList.add("open");modal.setAttribute("aria-hidden","false");fab.setAttribute("aria-expanded","true");document.body.style.overflow="hidden";close.focus();};
-  const shut=()=>{modal.classList.remove("open");modal.setAttribute("aria-hidden","true");fab.setAttribute("aria-expanded","false");document.body.style.overflow="";fab.focus();};
+  const open=()=>{modal.classList.add("open");modal.setAttribute("aria-hidden","false");fab.setAttribute("aria-expanded","true");document.body.style.overflow="hidden";syncDeepScannerSubscriptions();deepScannerEvaluate(true);close.focus();};
+  const shut=()=>{modal.classList.remove("open");modal.setAttribute("aria-hidden","true");fab.setAttribute("aria-expanded","false");document.body.style.overflow="";if(isMobileDevice())pauseDeepScannerSubscriptions();fab.focus();};
   fab.addEventListener("click",open);close.addEventListener("click",shut);
   modal.querySelectorAll("[data-close-scanner]").forEach(el=>el.addEventListener("click",shut));
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&modal.classList.contains("open"))shut();});
