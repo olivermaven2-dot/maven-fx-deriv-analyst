@@ -27,7 +27,8 @@
 
     const rows = counts.map((count, digit) => {
       const isGreen = total > 0 && count === maxCount;
-      const isRed = total > 0 && count === minCount;
+      // Match the live UI precedence: green/MOST wins when every digit is tied.
+      const isRed = total > 0 && count === minCount && !isGreen;
       return {
         digit,
         count,
