@@ -2,11 +2,9 @@ function renderOverUnder(root,d,c,last,n){
   const e=overUnderEvidence(d,state.selectedDigit,state.selectedSide);
   const setup=state.selectedSide+" "+state.selectedDigit;
   const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
-  const entry=activeSignal&&e.distribution.ready&&e.distribution.pass&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
+  const entry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
   let reason;
-  if(!e.distribution.ready)reason="AI is waiting for a complete 1,000-tick digit-distribution window before evaluating the selected setup.";
-  else if(!e.distribution.pass)reason="AI distribution gate blocked this setup: "+e.distribution.failures.map(x=>x.digit+" ("+x.percent.toFixed(1)+"%"+(x.most?", most appearing":"")+(x.least?", least appearing":"")+")").join(", ")+". Every required digit must be below 10.5% with no red/green highlight.";
-  else if(e.probabilityConflict)reason="Probability Comparison is blocking the selected setup because the complementary setup has stronger live probability evidence.";
+  if(e.probabilityConflict)reason="Probability Comparison is blocking the selected setup because the complementary setup has stronger live probability evidence.";
   else if(e.signal==="AVOID")reason="The selected setup does not have enough aligned A-Setup evidence.";
   else if(e.signal==="WAIT")reason="The selected setup is still building enough independent evidence across the required analysis windows.";
   else if(e.signal==="STRONG SIGNAL")reason="Probability, momentum, trend, transitions, reaction behavior, recency, consistency and context are aligned for "+setup+".";
@@ -14,7 +12,6 @@ function renderOverUnder(root,d,c,last,n){
   const entryDisplay=activeSignal?(entry||{main:"NO VALID ENTRY",confidence:"—",status:"NO ENTRY",reason:"No candidate digit passed the required sample-size, transition, reaction and consistency checks.",evidence:"Candidate evaluation completed"}):{main:"NO ACTIVE ENTRY",confidence:"—",status:"INACTIVE",reason:"Entry Engine activates only when the selected Final Signal is SIGNAL or STRONG SIGNAL.",evidence:"Waiting for an active signal"};
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
     "Selected setup: "+setup,
-    "AI distribution gate: "+(e.distribution.ready?(e.distribution.pass?"PASS":"BLOCKED"):"WAITING FOR 1,000 TICKS")+" • "+e.distribution.checks.map(x=>x.digit+":"+x.percent.toFixed(1)+"%"+(x.most?" GREEN/MOST":x.least?" RED/LEAST":"")).join(" / "),
     "Probability Comparison: "+Math.round(e.selectedRate*100)+"% vs complement "+Math.round(e.oppositeRate*100)+"% • baseline "+Math.round(e.baseline*100)+"%",
     "Windows 20/50/100/250/500: "+[e.recentRate,e.short50,e.mediumRate,e.mid250,e.longRate].map(x=>Math.round(x*100)+"%").join(" / "),
     "A-Setup alignment: probability "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentum*100)+" • trend "+Math.round(e.trend*100)+" • transitions "+Math.round(e.transition*100),
@@ -288,27 +285,8 @@ function ouStats(d,digit,side){
   const trans=ouTransitionStats(d,digit,digit,side);
   return {rates,recent,short50,medium,mid250,long,momentum,trend,cluster,streak:run.last,transitions:trans.total,favorable:trans.favorable,transitionRate:trans.rate,weightedTransitionRate:trans.weightedRate};
 }
-function distributionGate(d,selectedDigit,selectedSide){
-  const windowDigits=d.slice(-1000);
-  if(windowDigits.length<1000)return {ready:false,pass:false,reason:"Distribution gate requires a complete 1,000-tick window.",checks:[],total:windowDigits.length};
-  const freq=Array(10).fill(0);
-  for(const digit of windowDigits)if(Number.isInteger(digit)&&digit>=0&&digit<=9)freq[digit]++;
-  const pct=freq.map(count=>count/windowDigits.length*100);
-  const max=Math.max(...freq),min=Math.min(...freq);
-  const most=freq.map((count,digit)=>count===max?digit:null).filter(x=>x!==null);
-  const least=freq.map((count,digit)=>count===min?digit:null).filter(x=>x!==null);
-  const relevant=[];
-  for(let digit=0;digit<=9;digit++){
-    const included=selectedSide==="OVER"?digit<=selectedDigit:digit>=selectedDigit;
-    if(included)relevant.push({digit,percent:pct[digit],most:most.includes(digit),least:least.includes(digit)});
-  }
-  const failures=relevant.filter(x=>x.percent>=10.5||x.most||x.least);
-  return {ready:true,pass:failures.length===0,total:windowDigits.length,checks:relevant,failures,
-    reason:failures.length?"Distribution gate blocked: every digit in the selected-side group must be below 10.5% and have neither the most-appearing nor least-appearing highlight.":"Distribution gate passed: all required digits are below 10.5% with no most-appearing or least-appearing highlight."};
-}
 function overUnderEvidence(d,selectedDigit,selectedSide){
   const n=d.length;
-  const distribution=distributionGate(d,selectedDigit,selectedSide);
   const oppositeDigit=9-selectedDigit;
   const selected=ouStats(d,selectedDigit,selectedSide);
   const opposite=ouStats(d,oppositeDigit,selectedSide==="OVER"?"UNDER":"OVER");
@@ -328,13 +306,11 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   const evidence=probability*.20+momentumScore*.10+trendScore*.08+transition*.14+selected.cluster*.08+reaction*.10+recency*.10+consistency*.08+historical*.07+context*.05;
   let signal="WAIT";
   if(n<100)signal="WAIT";
-  else if(!distribution.ready)signal="WAIT";
-  else if(!distribution.pass)signal="AVOID";
   else if(probabilityConflict)signal="AVOID";
   else if(evidence>=.68&&selectedRate>=baseline-.03&&selected.weightedTransitionRate>=Math.max(.48,baseline-.05)&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
   else if(evidence>=.54&&selectedRate>=baseline-.07&&consistency>=.45)signal="SIGNAL";
   else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
-  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,distribution,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
+  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
 }
 function overUnderEntry(d,selectedDigit,selectedSide){
   const candidates=[];
@@ -392,31 +368,10 @@ function renderEngine(){
   const ou=$("overUnderControls"),parity=$("evenOddControls");
   if(ou)ou.style.display=state.engine==="overunder"?"":"none";
   if(parity)parity.style.display=state.engine==="evenodd"?"":"none";
-  if(n<30){root.innerHTML=panel("INSUFFICIENT DATA","Collecting more validated market data before analysis.",null,["At least 30 recent digits are required","Live data stream is active when ticks are arriving"],n);renderAiAnalyst(d,n);return}
+  if(n<30){root.innerHTML=panel("INSUFFICIENT DATA","Collecting more validated market data before analysis.",null,["At least 30 recent digits are required","Live data stream is active when ticks are arriving"],n);return}
   if(state.engine==="overunder")renderOverUnder(root,d,c,last,n);
   if(state.engine==="evenodd")renderEvenOdd(root,d,last,n);
   if(state.engine==="risefall")renderRiseFall(root,d,last,n);
-  renderAiAnalyst(d,n);
-}
-function renderAiAnalyst(d,n){
-  const status=$("aiStatus"),verdict=$("aiVerdict"),summary=$("aiSummary"),windowEl=$("aiWindow"),distCheck=$("aiDistributionCheck"),setup=$("aiSetup"),reasoning=$("aiReasoning");
-  if(!status||!verdict||!summary||!windowEl||!distCheck||!setup||!reasoning)return;
-  windowEl.textContent=Math.min(n,1000)+" / 1,000 ticks";
-  if(state.engine==="overunder"){
-    const e=overUnderEvidence(d,state.selectedDigit,state.selectedSide);
-    const group=e.distribution.checks.map(x=>x.digit+":"+x.percent.toFixed(1)+"%"+(x.most?" MOST":x.least?" LEAST":"")).join(" • ");
-    setup.textContent=state.selectedSide+" "+state.selectedDigit;
-    distCheck.textContent=!e.distribution.ready?"WAITING":e.distribution.pass?"PASS":"BLOCKED";
-    if(!e.distribution.ready){status.textContent="COLLECTING";verdict.textContent="Waiting for 1,000 ticks";summary.textContent="The distribution gate cannot pass until the complete rolling 1,000-tick window is available.";reasoning.textContent="The selected "+state.selectedSide+" "+state.selectedDigit+" setup requires every checked digit below 10.5%, with no green MOST or red LEAST highlight. "+group;}
-    else if(!e.distribution.pass){status.textContent="BLOCKED";verdict.textContent="Setup blocked by distribution";summary.textContent="At least one required digit failed the 10.5% and highlight rules. No Over/Under entry should be considered.";reasoning.textContent=e.distribution.failures.map(x=>"Digit "+x.digit+" is "+x.percent.toFixed(1)+"%"+(x.most?", marked MOST appearing":"")+(x.least?", marked LEAST appearing":"")).join(". ")+ ".";}
-    else if(e.probabilityConflict){status.textContent="BLOCKED";verdict.textContent="Probability conflict";summary.textContent="The complementary setup has stronger probability evidence, so the selected setup remains blocked.";reasoning.textContent=e.distribution.reason+" Probability comparison also favors the complementary setup.";}
-    else{status.textContent=e.signal==="STRONG SIGNAL"?"STRONG":e.signal==="SIGNAL"?"SIGNAL":e.signal==="AVOID"?"CAUTION":"WAIT";verdict.textContent=e.signal;summary.textContent=e.signal==="STRONG SIGNAL"?"Multiple evidence layers align; verify the entry engine before acting.":e.signal==="SIGNAL"?"Evidence supports the selected setup, but it is not at strong-signal level.":e.signal==="AVOID"?"Current evidence is unfavorable or conflicting.":"Live evidence is still developing; do not force an entry.";reasoning.textContent=e.distribution.reason+" Evidence score "+Math.round(e.evidence*100)+"/100; selected probability "+Math.round(e.selectedRate*100)+"%, complementary probability "+Math.round(e.oppositeRate*100)+"%.";}
-  }else if(state.engine==="evenodd"){
-    const e=parityStats(d,state.selectedParity);setup.textContent=state.selectedParity;distCheck.textContent="OVER/UNDER ONLY";status.textContent=e.signal==="STRONG SIGNAL"?"STRONG":e.signal;verdict.textContent=e.signal;summary.textContent="Parity review uses live even/odd frequencies, transitions, momentum, consistency and recent behavior.";reasoning.textContent="Selected "+state.selectedParity+" • evidence "+Math.round(e.evidence*100)+"/100 • recent pattern "+d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ")+". The 10.5% digit-group gate applies to Over/Under setups only.";
-  }else{
-    const recent=d.slice(-100);let rise=0,fall=0;for(let i=1;i<recent.length;i++){if(recent[i]>recent[i-1])rise++;else if(recent[i]<recent[i-1])fall++;}const total=rise+fall,share=total?Math.max(rise,fall)/total:0,side=rise>=fall?"RISE":"FALL",signal=total>=80&&share>=.68?"STRONG SIGNAL":total>=30&&share>=.62?"SIGNAL":"WAIT";setup.textContent=side;distCheck.textContent="OVER/UNDER ONLY";status.textContent=signal==="STRONG SIGNAL"?"STRONG":signal;verdict.textContent=signal;summary.textContent="Directional review of the latest "+total+" non-flat price transitions.";reasoning.textContent="Rise "+rise+" • Fall "+fall+" • dominant direction "+side+" at "+Math.round(share*100)+"% of non-flat transitions. This is a historical directional measure, not a guarantee of the next tick.";
-  }
-  status.className="ai-status "+(status.textContent==="BLOCKED"?"blocked":status.textContent==="STRONG"||status.textContent==="SIGNAL"?"positive":"");
 }
 function panel(stateText,reason,entry,why,n){
   const cls=stateText==="STRONG SIGNAL"?"strong":stateText==="SIGNAL"?"signal":stateText==="NO SIGNAL"||stateText==="NO ENTRY"?"none":"wait";
