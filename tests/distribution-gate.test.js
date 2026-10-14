@@ -354,10 +354,10 @@ test('shared spike-risk protection blocks entry display without replacing any en
 test('Deep Scanner re-evaluates candidates when live scanner ticks arrive', () => {
   const start = appSource.indexOf('function receiveScannerTick');
   assert.notEqual(start, -1, 'receiveScannerTick must exist');
-  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
   assert.match(source, /r\.lastTickAt=Date\.now\(\)/);
   assert.match(source, /deepScannerEvaluate\(false\)/,
     'live scanner ticks must trigger the throttled candidate evaluation');
-  assert.ok(source.indexOf('r\.lastTickAt') < source.indexOf('deepScannerEvaluate(false)'));
+  assert.ok(source.indexOf('r.lastTickAt=Date.now()') < source.indexOf('deepScannerEvaluate(false)'));
 });
