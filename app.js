@@ -549,8 +549,28 @@ function ouStats(d,digit,side){
   const trans=ouTransitionStats(d,digit,digit,side);
   return {rates,recent,short50,medium,mid250,long,momentum,trend,cluster,streak:run.last,transitions:trans.total,favorable:trans.favorable,transitionRate:trans.rate,weightedTransitionRate:trans.weightedRate};
 }
+function distributionGate(d,selectedDigit,selectedSide){
+  const windowDigits=d.slice(-1000);
+  if(windowDigits.length<1000)return {ready:false,pass:false,reason:"Distribution gate requires a complete 1,000-tick window.",checks:[],total:windowDigits.length};
+  const freq=Array(10).fill(0);
+  for(const digit of windowDigits)if(Number.isInteger(digit)&&digit>=0&&digit<=9)freq[digit]++;
+  const pct=freq.map(count=>count/windowDigits.length*100);
+  const max=Math.max(...freq),min=Math.min(...freq);
+  const most=freq.map((count,digit)=>count===max?digit:null).filter(x=>x!==null);
+  const least=freq.map((count,digit)=>count===min?digit:null).filter(x=>x!==null);
+  const relevant=[];
+  for(let digit=0;digit<=9;digit++){
+    const included=selectedSide==="OVER"?digit<=selectedDigit:digit>=selectedDigit;
+    if(included)relevant.push({digit,percent:pct[digit],most:most.includes(digit),least:least.includes(digit)});
+  }
+  const failures=relevant.filter(x=>x.percent>=10.5||x.most||x.least);
+  return {ready:true,pass:failures.length===0,total:windowDigits.length,checks:relevant,failures,
+    reason:failures.length?"Distribution gate blocked: every digit in the selected-side group must be below 10.5% and have neither the most-appearing nor least-appearing highlight.":"Distribution gate passed: all required digits are below 10.5% with no most-appearing or least-appearing highlight."};
+}
+
 function overUnderEvidence(d,selectedDigit,selectedSide){
   const n=d.length;
+  const distribution=distributionGate(d,selectedDigit,selectedSide);
   const oppositeDigit=9-selectedDigit;
   const selected=ouStats(d,selectedDigit,selectedSide);
   const opposite=ouStats(d,oppositeDigit,selectedSide==="OVER"?"UNDER":"OVER");
@@ -570,11 +590,13 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   const evidence=probability*.20+momentumScore*.10+trendScore*.08+transition*.14+selected.cluster*.08+reaction*.10+recency*.10+consistency*.08+historical*.07+context*.05;
   let signal="WAIT";
   if(n<100)signal="WAIT";
+  else if(!distribution.ready)signal="WAIT";
+  else if(!distribution.pass)signal="AVOID";
   else if(probabilityConflict)signal="AVOID";
   else if(evidence>=.68&&selectedRate>=baseline-.03&&selected.weightedTransitionRate>=Math.max(.48,baseline-.05)&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
   else if(evidence>=.54&&selectedRate>=baseline-.07&&consistency>=.45)signal="SIGNAL";
   else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
-  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
+  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,distribution,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
 }
 function overUnderEntry(d,selectedDigit,selectedSide){
   const candidates=[];
