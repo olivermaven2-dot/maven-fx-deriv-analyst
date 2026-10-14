@@ -80,7 +80,7 @@ test('manual bot entry digits replace automatic digits and only require unbarred
   const selectionEnd = appSource.indexOf('function renderParityControls', selectionStart);
   const selection = appSource.slice(selectionStart, selectionEnd);
   assert.ok(selection.includes('distributionBarFlags(state.digits)'));
-  assert.ok(selection.includes('bars.most[first]||bars.least[first]||bars.most[second]||bars.least[second]'));
+  assert.ok(selection.includes('bars.most[digit]||bars.least[digit]'));
   assert.ok(!selection.includes('overUnderEntry'));
   assert.ok(appSource.includes('const candidates=autoTradeEntrySelection()'));
   const page = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
@@ -505,13 +505,35 @@ test('manual entry digits bypass Entry Engine filters but must have neither red 
   assert.notEqual(start, -1);
   const source = appSource.slice(start, end);
   assert.ok(source.includes('distributionBarFlags(state.digits)'));
-  assert.ok(source.includes('bars.most[first]||bars.least[first]||bars.most[second]||bars.least[second]'));
+  assert.ok(source.includes('bars.most[digit]||bars.least[digit]'));
   assert.doesNotMatch(source, /overUnderEntry/);
   assert.ok(appSource.includes('manual digits must be distinct and have neither a red nor green distribution bar'));
   assert.ok(appSource.includes('digit is not one of the two valid manual digits without red/green bars'));
-  assert.ok(appSource.includes('!manualEntriesEnabled&&!state.ouEntrySnapshot?.active'));
+  assert.ok(appSource.includes('automaticEntryIsCurrent=manualEntriesEnabled||'));
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(html.includes('Use my manual entry digits instead of the Entry Engine digits'));
   assert.ok(html.includes('Each manual digit must only avoid a red (least frequent) or green (most frequent) distribution bar'));
   assert.ok(html.includes('Final Signal, probability comparison, live-data and spike-risk checks still apply'));
+});
+
+test('manual entry mode does not depend on the automatic Entry Engine snapshot and reports red/green-bar blocks', () => {
+  const start = appSource.indexOf('function autoTradeEntrySelection');
+  const end = appSource.indexOf('function renderParityControls', start);
+  const selectionSource = appSource.slice(start, end);
+  assert.match(selectionSource, /Manual digits bypass every Entry Engine candidate filter/);
+  assert.match(selectionSource, /distributionBarFlags\(state\.digits\)/);
+  assert.match(selectionSource, /autoTrade\.lastManualBlockReason/);
+
+  const readyStart = appSource.indexOf('function autoTradeReadyToEnter');
+  const readyEnd = appSource.indexOf('\nfunction ', readyStart + 10);
+  const readySource = appSource.slice(readyStart, readyEnd);
+  assert.match(readySource, /const automaticEntryIsCurrent=manualEntriesEnabled\|\|/);
+  assert.match(readySource, /if\(!signalIsCurrent\|\|!automaticEntryIsCurrent\)/);
+  assert.match(readySource, /Manual digits use the same live Final Signal and risk gates/);
+
+  const tickStart = appSource.indexOf('function processAutoTradeTick');
+  const tickEnd = appSource.indexOf('\nfunction autoTradePlaceNext', tickStart);
+  const tickSource = appSource.slice(tickStart, tickEnd);
+  assert.match(tickSource, /Manual entry waiting/);
+  assert.match(tickSource, /lastManualLoggedReason!==reason/);
 });

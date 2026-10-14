@@ -730,14 +730,20 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
   return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.length===2?"Digit "+entries[0].digit+": score "+entries[0].score+"/100 • Digit "+entries[1].digit+": score "+entries[1].score+"/100":"Digit "+entries[0].digit+": score "+entries[0].score+"/100 • Second digit: no candidate passed validation. Scores rank candidates; they are not win probabilities.",status:entries.length===2?"2 VALID CANDIDATES":"1 VALID CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
 }
 function autoTradeEntrySelection(){
-  if(!$("autoTradeManualEntriesEnabled")?.checked)return state.ouEntrySnapshot?.active&&Array.isArray(state.ouEntrySnapshot.digits)?state.ouEntrySnapshot.digits:[];
+  if(!$("autoTradeManualEntriesEnabled")?.checked){autoTrade.lastManualBlockReason="";return state.ouEntrySnapshot?.active&&Array.isArray(state.ouEntrySnapshot.digits)?state.ouEntrySnapshot.digits:[];}
   const firstRaw=$("autoTradeManualDigit1")?.value,secondRaw=$("autoTradeManualDigit2")?.value;
-  if(firstRaw==null||String(firstRaw).trim()===""||secondRaw==null||String(secondRaw).trim()==="")return [];
+  if(firstRaw==null||String(firstRaw).trim()===""||secondRaw==null||String(secondRaw).trim()===""){autoTrade.lastManualBlockReason="Enter both manual entry digits.";return [];}
   const first=Number(firstRaw),second=Number(secondRaw);
-  if(!Number.isInteger(first)||first<0||first>9||!Number.isInteger(second)||second<0||second>9||first===second)return [];
-  // Manual digits bypass Entry Engine candidate filters; they only need to avoid red (least) and green (most) distribution bars.
+  if(!Number.isInteger(first)||first<0||first>9||!Number.isInteger(second)||second<0||second>9){autoTrade.lastManualBlockReason="Manual entry digits must be whole numbers from 0 to 9.";return [];}
+  if(first===second){autoTrade.lastManualBlockReason="Manual entry digits must be different.";return [];}
+  // Manual digits bypass every Entry Engine candidate filter. The only manual-digit filter is the visible red/green distribution-bar rule.
   const bars=distributionBarFlags(state.digits);
-  if(bars.most[first]||bars.least[first]||bars.most[second]||bars.least[second])return [];
+  const blocked=[];
+  for(const digit of [first,second]){
+    if(bars.most[digit]||bars.least[digit])blocked.push("digit "+digit+(bars.most[digit]&&bars.least[digit]?" has a red and green distribution bar":bars.most[digit]?" has a green distribution bar":" has a red distribution bar"));
+  }
+  if(blocked.length){autoTrade.lastManualBlockReason=blocked.join("; ")+". Waiting until both manual digits have neither bar.";return [];}
+  autoTrade.lastManualBlockReason="";
   return [first,second];
 }
 function renderParityControls(){
@@ -1254,7 +1260,7 @@ const autoTrade={
   socket:null,authorized:false,account:null,enabled:false,realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,recoverySide1:"DEFAULT",recoverySide2:"DEFAULT",
-  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,logLines:[],demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
+  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,logLines:[],lastManualBlockReason:"",lastManualLoggedReason:"",demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
 };
 function autoTradeLog(message){
   const stamp=new Date().toLocaleTimeString();
@@ -1281,7 +1287,7 @@ function autoTradeRender(){
   const market=$("autoTradeMarket"),setup=$("autoTradeSetup"),entries=$("autoTradeEntries");
   if(market)market.textContent=state.symbol+" · "+state.marketName;
   if(setup)setup.textContent=state.selectedSide+" "+state.selectedDigit;
-  if(entries){const chosen=autoTradeEntrySelection();entries.textContent=chosen.length===2?chosen.join(" / "):$("autoTradeManualEntriesEnabled")?.checked?"Manual digits not qualified":"No valid entry";}
+  if(entries){const chosen=autoTradeEntrySelection();entries.textContent=chosen.length===2?chosen.join(" / "):$("autoTradeManualEntriesEnabled")?.checked?(autoTrade.lastManualBlockReason||"Manual digits not qualified"):"No valid entry";}
   if($("autoTradeCurrency"))$("autoTradeCurrency").textContent=autoTrade.currency||"account currency";
   document.querySelectorAll(".autoTradeCurrencyText").forEach(x=>x.textContent=autoTrade.currency||"account currency");
   if($("autoTradeAccount"))$("autoTradeAccount").textContent=autoTrade.account?(autoTrade.account.loginid+" · "+(autoTrade.account.is_virtual?"DEMO":"REAL")+" · "+autoTrade.currency):"No account connected";
@@ -1296,7 +1302,7 @@ function autoTradeUpdateLiveFields(){
   const market=$("autoTradeMarket"),setup=$("autoTradeSetup"),entries=$("autoTradeEntries");
   if(market)market.textContent=state.symbol+" · "+state.marketName;
   if(setup)setup.textContent=state.selectedSide+" "+state.selectedDigit;
-  if(entries){const chosen=autoTradeEntrySelection();entries.textContent=chosen.length===2?chosen.join(" / "):$("autoTradeManualEntriesEnabled")?.checked?"Manual digits not qualified":state.ouEntrySnapshot?.active&&state.ouEntrySnapshot.digits?.length?state.ouEntrySnapshot.digits.join(" / "):"No valid entry";}
+  if(entries){const chosen=autoTradeEntrySelection();entries.textContent=chosen.length===2?chosen.join(" / "):$("autoTradeManualEntriesEnabled")?.checked?(autoTrade.lastManualBlockReason||"Manual digits not qualified"):state.ouEntrySnapshot?.active&&state.ouEntrySnapshot.digits?.length?state.ouEntrySnapshot.digits.join(" / "):"No valid entry";}
 }
 function autoTradeMarketChanged(){
   autoTrade.lastDigit=null;
@@ -1343,7 +1349,10 @@ function autoTradeStart(){
 function autoTradeReadyToEnter(digit){
   if(!autoTrade.enabled||!autoTrade.authorized||!state.connected||!state.lastTickAt||Date.now()-state.lastTickAt>15000)return {ok:false,reason:"live data disconnected or stale"};
   const manualEntriesEnabled=!!$("autoTradeManualEntriesEnabled")?.checked;
-  if(state.engine!=="overunder"||state.ouSignalSnapshot?.tickCount!==state.digits.length||state.symbol!==state.ouEntrySnapshot?.key?.split("|")[0]||state.ouSignalSnapshot?.key!==ouValidationKey()||!state.ouSignalSnapshot?.active||(!manualEntriesEnabled&&!state.ouEntrySnapshot?.active))return {ok:false,reason:"Final Signal or required entry validation is not valid"};
+  const signalIsCurrent=state.engine==="overunder"&&state.ouSignalSnapshot?.tickCount===state.digits.length&&state.ouSignalSnapshot?.key===ouValidationKey()&&!!state.ouSignalSnapshot?.active;
+  const automaticEntryIsCurrent=manualEntriesEnabled||(state.symbol===state.ouEntrySnapshot?.key?.split("|")[0]&&!!state.ouEntrySnapshot?.active);
+  // Manual digits use the same live Final Signal and risk gates, but must not depend on the automatic Entry Engine snapshot.
+  if(!signalIsCurrent||!automaticEntryIsCurrent)return {ok:false,reason:"Final Signal or required entry validation is not valid"};
   const risk=spikeRiskAssessment();
   if(risk.level==="UNKNOWN"||risk.level==="HIGH")return {ok:false,reason:risk.title};
   if(risk.level==="MODERATE"&&state.ouSignalSnapshot.signal!=="STRONG SIGNAL")return {ok:false,reason:"moderate spike risk requires STRONG SIGNAL"};
@@ -1364,8 +1373,16 @@ function processAutoTradeTick(digit){
   // Lock one entry sequence until its contracts settle and the sequence is explicitly completed.
   // Never let a fresh tick overwrite runSymbol/runSettled while a quote or contract is in flight.
   if(autoTrade.runSymbol||Object.keys(autoTrade.pendingBuyQuotes).length||Object.keys(autoTrade.activeContracts).length)return;
+  const manualEntriesEnabled=!!$("autoTradeManualEntriesEnabled")?.checked;
   const candidates=autoTradeEntrySelection();
-  if(!candidates.includes(digit)){autoTrade.armed=true;autoTrade.lastDigit=digit;return}
+  if(!candidates.includes(digit)){
+    if(manualEntriesEnabled&&[$("autoTradeManualDigit1")?.value,$("autoTradeManualDigit2")?.value].some(raw=>String(raw??"").trim()!==""&&Number(raw)===digit)){
+      const reason=autoTrade.lastManualBlockReason||"manual digits are not currently eligible under the red/green distribution-bar rule";
+      if(autoTrade.lastManualLoggedReason!==reason){autoTradeLog("Manual entry waiting · "+reason);autoTrade.lastManualLoggedReason=reason;}
+    }else if(manualEntriesEnabled&&candidates.length===2){autoTrade.lastManualLoggedReason="";}
+    autoTrade.armed=true;autoTrade.lastDigit=digit;return
+  }
+  autoTrade.lastManualLoggedReason="";
   if(!autoTrade.armed){autoTrade.lastDigit=digit;return}
   const check=autoTradeReadyToEnter(digit);
   if(!check.ok){autoTradeLog("Entry blocked · "+check.reason);autoTrade.lastDigit=digit;return}
