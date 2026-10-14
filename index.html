@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="description" content="Maven FX Deriv Analyst — live market analysis">
 <title>Maven FX Deriv Analyst</title>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=20261014-compact-ui">
 </head>
 <body>
 <header class="topbar">
@@ -55,14 +55,14 @@
     </div>
   </section>
 
+  <section id="engineRoot" class="engine"></section>
+
   <section class="distribution-card" aria-label="Live digit distribution">
     <div class="section-title"><span>DIGIT DISTRIBUTION</span><span id="distributionInfo">Waiting for ticks</span></div>
     <p class="distribution-note">Rolling 1,000-tick window • percentages from the live Deriv tick stream</p>
     <div id="digitDistribution" class="digit-distribution" aria-live="polite"></div>
     <div class="distribution-legend"><span><i class="legend-dot most"></i> Most appearing</span><span><i class="legend-dot least"></i> Least appearing</span></div>
   </section>
-
-  <section id="engineRoot" class="engine"></section>
 
   <section class="stream-card">
     <div class="section-title"><span>DIGIT STREAM</span><span id="streamInfo">0 digits</span></div>
@@ -82,6 +82,6 @@
 </main>
 
 <footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261013-2"></script>
+<script src="app.js?v=20261014-compact-ui"></script>
 </body>
 </html>
