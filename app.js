@@ -499,9 +499,12 @@ function receiveTick(t){
   state.ticks.push({quote:Number(quote),epoch});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
   state.lastTickAt=Date.now();
+  // Score previously registered entry triggers only against this newly received live tick.
+  processOUValidationTick(digit);
+  recordOUValidationTrigger(digit);
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
-  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream(true);if(shouldRenderEngineForCurrentTick())renderEngine();if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);
+  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream(true);if(shouldRenderEngineForCurrentTick())renderEngine();else renderOUValidationPanel();if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);
 }
 function updateQuality(){
   const n=state.digits.length,pill=$("qualityPill");
@@ -898,6 +901,7 @@ function renderEngine(){
   if(state.engine==="evenodd")renderEvenOdd(root,d,last,n);
   if(state.engine==="risefall")renderRiseFall(root,last,n);
   applySpikeRiskProtection(root);
+  renderOUValidationPanel();
 }
 function panel(stateText,reason,entry,why,n){
   const cls=stateText==="STRONG SIGNAL"?"strong":stateText==="SIGNAL"?"signal":stateText==="NO SIGNAL"||stateText==="NO ENTRY"?"none":"wait";
