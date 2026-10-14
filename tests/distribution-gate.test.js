@@ -304,7 +304,7 @@ test('Even/Odd renderer only activates entry validation for SIGNAL or STRONG SIG
   assert.notEqual(start, -1);
   const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
-  assert.match(source, /e\.signal===\"SIGNAL\"\|\|e\.signal===\"STRONG SIGNAL\"/);
+  assert.ok(source.includes('e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL"'));
   assert.match(source, /entryActive\?selectParityEntry/);
 });
 
@@ -337,7 +337,7 @@ test('Rise/Fall renderer only activates entry validation for SIGNAL or STRONG SI
   const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
   assert.match(source, /const entry=riseFallEntry\(prices,a\)/);
-  assert.match(source, /a\.signal===\"SIGNAL\"\|\|a\.signal===\"STRONG SIGNAL\"/);
+  assert.ok(source.includes('a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"'));
 });
 
 test('shared spike-risk protection blocks entry display without replacing any engine Final Signal', () => {
