@@ -1,0 +1,22 @@
+name: AI distribution gate tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [ai-digit-distribution-gate]
+
+jobs:
+  distribution-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Check JavaScript syntax
+        run: node --check app.js
+      - name: Run distribution gate regression tests
+        run: node --test tests/distribution-gate.test.js
