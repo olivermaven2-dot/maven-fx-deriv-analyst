@@ -29,14 +29,14 @@ test('OVER checks the selected digit and every digit below it', () => {
   const result = distributionGate(overPassTicks, 2, 'OVER');
   assert.equal(result.ready, true);
   assert.equal(result.pass, true);
-  assert.deepEqual(result.checks.map(x => x.digit), [0,1,2]);
+  assert.equal(Array.from(result.checks, x => x.digit).join(','), '0,1,2');
 });
 
 test('UNDER checks the selected digit and every digit above it', () => {
   const result = distributionGate(underPassTicks, 7, 'UNDER');
   assert.equal(result.ready, true);
   assert.equal(result.pass, true);
-  assert.deepEqual(result.checks.map(x => x.digit), [7,8,9]);
+  assert.equal(Array.from(result.checks, x => x.digit).join(','), '7,8,9');
 });
 
 test('blocks a required digit at exactly 10.5%, even without a highlight', () => {
