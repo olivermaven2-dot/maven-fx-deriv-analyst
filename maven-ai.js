@@ -1,4 +1,4 @@
-/* Maven FX local rule-based analyst. No network access or external AI provider. */
+/* Maven FX local statistical decision layer and explainer. No external AI provider or network calls. */
 (function(){
   "use strict";
   const $=id=>document.getElementById(id);
@@ -17,7 +17,7 @@
     if(/privacy|private|network|internet|send data|online|api key/.test(q))return "Maven AI runs locally in this page using deterministic rules and the live context already available in your browser. The AI feature makes no external requests and sends no tick history or signal data to an AI provider. Your existing Deriv connection and optional Auto Trade connection remain separate.";
     if(!c)return "The local analyst panel is ready, but the live analysis context is not available yet. Wait for the page to finish loading, then ask again.";
     const engine=String(c.engine||"").toUpperCase();
-    if(/help|what can|commands|ask/.test(q))return "I can explain signals across Over/Under, Even/Odd, and Rise/Fall; describe the Over/Under 1,000-tick distribution gate and entry-digit exclusions; explain conflicting evidence and local privacy, and report whether the current setup has enough session validation outcomes to assess its historical hit rate. I am a local rule-based/statistical analyst, not a remote generative model.";
+    if(/help|what can|commands|ask/.test(q))return "I help decide signals across Over/Under, Even/Odd, and Rise/Fall by reviewing evidence strength, agreement between factors, sample size and saved walk-forward validation. I also review entry candidates after the signal qualifies. Mandatory distribution, probability-conflict and data-quality gates cannot be overridden. I can explain the 1,000-tick distribution gate, entry-digit exclusions and validation reliability. I am a local statistical decision layer, not a remote generative model. I now review evidence agreement, sample size and available saved validation outcomes; mandatory distribution and conflict gates still take priority.";
     if(/distribution|10\.5|red|green|bar|highlight|most|least/.test(q)){
       const d=c.distribution||{},signal=c.signal;
       if(!d.total)return "No digits have arrived yet, so there is no distribution to inspect.";
@@ -51,5 +51,5 @@
   panel.querySelectorAll("[data-maven-ai-question]").forEach(btn=>btn.addEventListener("click",()=>{const q=btn.getAttribute("data-maven-ai-question")||"";addMessage(q,"user");addMessage(explain(q),"assistant")}));
   form.addEventListener("submit",event=>{event.preventDefault();const q=input.value.trim();if(!q)return;addMessage(q,"user");addMessage(explain(q),"assistant");input.value="";input.focus()});
   document.addEventListener("keydown",event=>{if(event.key==="Escape"&&panel.classList.contains("open"))shut()});
-  addMessage("I’m Maven AI Analyst, a local rule-based assistant. I can explain the current Over/Under gate and eligible entry digits. I do not use an external AI service.","assistant");
+  addMessage("I’m Maven AI Analyst. My local statistical decision layer now reviews signal strength and entry candidates using live data and saved validation outcomes. I do not use an external AI service; mandatory safety gates remain in control.","assistant");
 })();
