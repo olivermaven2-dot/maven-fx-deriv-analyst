@@ -7,7 +7,7 @@
 <meta name="description" content="Maven FX Deriv Analyst — live market analysis">
 <title>Maven FX Deriv Analyst</title>
 <link rel="stylesheet" href="styles.css?v=20261014-glass-layered-3">
-<link rel="stylesheet" href="desktop-layout.css?v=20261015-compact-layout-1">
+<link rel="stylesheet" href="desktop-layout.css?v=20261015-distribution-controls-1">
 </head>
 <body>
 <header class="topbar">
@@ -110,34 +110,21 @@
 
   <section id="engineRoot" class="engine" aria-label="Selected analysis engine"></section>
 
-<section id="overUnderControls" class="ou-controls" aria-label="Over Under setup">
-  <div class="ou-label"><span>SELECTED SETUP</span><span id="ouSetupLabel" class="ou-selected-name">OVER 2</span></div>
-  <div class="ou-row"><button class="ou-digit " data-digit="0" type="button">0</button><button class="ou-digit " data-digit="1" type="button">1</button><button class="ou-digit active" data-digit="2" type="button">2</button><button class="ou-digit " data-digit="3" type="button">3</button><button class="ou-digit " data-digit="4" type="button">4</button><button class="ou-digit " data-digit="5" type="button">5</button><button class="ou-digit " data-digit="6" type="button">6</button><button class="ou-digit " data-digit="7" type="button">7</button><button class="ou-digit " data-digit="8" type="button">8</button><button class="ou-digit " data-digit="9" type="button">9</button></div>
-  <div class="ou-row ou-sides"><button class="ou-side active over" data-side="OVER" type="button">▲ OVER</button><button class="ou-side under" data-side="UNDER" type="button">▼ UNDER</button></div>
-</section>
-
-  <section id="evenOddControls" class="ou-controls" aria-label="Even Odd setup" style="display:none">
-    <div class="ou-label"><span>SELECTED PARITY</span><span id="paritySetupLabel" class="ou-selected-name">EVEN</span></div>
-    <div class="ou-row ou-sides">
-      <button class="ou-side parity-side active over" data-parity="EVEN" type="button">● EVEN</button>
-      <button class="ou-side parity-side under" data-parity="ODD" type="button">● ODD</button>
-    </div>
-  </section>
-
-  <section id="riseFallControls" class="ou-controls" aria-label="Rise Fall direction" style="display:none">
-    <div class="ou-label"><span>SELECT DIRECTION TO ANALYSE</span><span id="riseFallSetupLabel" class="ou-selected-name">RISE</span></div>
-    <div class="ou-row ou-sides">
-      <button class="ou-side rise-fall-side active over" data-direction="RISE" type="button">▲ RISE</button>
-      <button class="ou-side rise-fall-side under" data-direction="FALL" type="button">▼ FALL</button>
-    </div>
-  </section>
-
-
-
-  
-  <section class="distribution-card" aria-label="Live digit distribution">
+<section class="distribution-card" aria-label="Live digit distribution">
     <div class="section-title"><span>DIGIT DISTRIBUTION</span><span id="distributionInfo">Waiting for ticks</span></div>
-    <p class="distribution-note">Rolling 1,000-tick window • percentages from the live Deriv tick stream</p>
+    <p class="distribution-note">Select a digit below, then choose OVER or UNDER to analyse it. Percentages use the live Deriv tick stream.</p>
+    <div id="overUnderControls" class="distribution-setup" aria-label="Over Under direction">
+      <div class="ou-row ou-sides">
+        <button class="ou-side active over" data-side="OVER" type="button" aria-pressed="true">▲ OVER</button>
+        <button class="ou-side under" data-side="UNDER" type="button" aria-pressed="false">▼ UNDER</button>
+      </div>
+    </div>
+    <section id="evenOddControls" class="distribution-engine-controls" aria-label="Even Odd setup" style="display:none">
+      <div class="ou-row ou-sides"><button class="ou-side parity-side active over" data-parity="EVEN" type="button">● EVEN</button><button class="ou-side parity-side under" data-parity="ODD" type="button">● ODD</button></div>
+    </section>
+    <section id="riseFallControls" class="distribution-engine-controls" aria-label="Rise Fall direction" style="display:none">
+      <div class="ou-row ou-sides"><button class="ou-side rise-fall-side active over" data-direction="RISE" type="button">▲ RISE</button><button class="ou-side rise-fall-side under" data-direction="FALL" type="button">▼ FALL</button></div>
+    </section>
     <div id="digitDistribution" class="digit-distribution" aria-live="polite"></div>
     <div class="distribution-legend"><span><i class="legend-dot most"></i> Most appearing</span><span><i class="legend-dot least"></i> Least appearing</span></div>
   </section>
