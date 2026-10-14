@@ -408,6 +408,8 @@ function receiveTick(t){
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
   $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream(true);if(shouldRenderEngineForCurrentTick())renderEngine();if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);
+  // Shadow AI receives a bounded snapshot at most every 2 seconds; production signal and Auto Trade paths remain unchanged.
+  const aiNow=Date.now();if(aiNow-(state.lastAIShadowDispatchAt||0)>=2000){state.lastAIShadowDispatchAt=aiNow;window.dispatchEvent(new CustomEvent("mavenfx:shadow-tick",{detail:{digits:state.digits.slice(-1000),selectedDigit:state.selectedDigit,side:state.selectedSide,engine:state.engine}}));}
 }
 function updateQuality(){
   const n=state.digits.length,pill=$("qualityPill");
