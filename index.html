@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#070b13">
+<meta name="theme-color" content="#0b1220">
 <meta name="description" content="Maven FX Deriv Analyst — live market analysis">
 <title>Maven FX Deriv Analyst</title>
-<link rel="stylesheet" href="styles.css?v=20261014-glass-layered-1">
+<link rel="stylesheet" href="styles.css?v=20261014-compact-spacing">
 </head>
 <body>
 <header class="topbar">
@@ -14,21 +14,8 @@
     <div class="brand">MAVEN FX</div>
     <div class="subbrand">DERIV ANALYST</div>
   </div>
-  <div class="topbar-right">
-    <div id="statusBadge" class="status connecting"><span class="dot"></span><span id="statusText">Connecting</span></div>
-    <div class="quick-actions" aria-label="Tools">
-      <button id="botIcon" class="quick-action" type="button" aria-label="Open AUTO BOT panel" title="AUTO BOT"><span aria-hidden="true">🤖</span><small>BOT</small></button>
-      <button id="scannerIcon" class="quick-action scanner-action" type="button" aria-label="Open Deep Scanner" title="Deep Scanner"><span aria-hidden="true">⌕</span><small>SCAN</small></button>
-    </div>
-  </div>
+  <div id="statusBadge" class="status connecting"><span class="dot"></span><span id="statusText">Connecting</span></div>
 </header>
-<div id="toolModal" class="tool-modal" hidden role="dialog" aria-modal="true" aria-labelledby="toolModalTitle">
-  <div class="tool-backdrop" data-close-modal></div>
-  <section class="tool-dialog">
-    <div class="tool-dialog-head"><div><span class="eyebrow" id="toolModalEyebrow">MAVEN FX TOOLS</span><h2 id="toolModalTitle">Deep Scanner</h2></div><button type="button" id="toolModalClose" class="tool-close" aria-label="Close">×</button></div>
-    <div id="toolModalBody" class="tool-modal-body"></div>
-  </section>
-</div>
 
 <main class="app">
   <section class="live-card" aria-label="Live market data">
@@ -40,14 +27,72 @@
       <div><span>LAST PRICE</span><strong id="lastPrice">—</strong></div>
       <div><span>LAST DIGIT</span><strong id="lastDigit">—</strong></div>
     </div>
-    <div class="live-meta"><span id="tickCount">0 ticks</span><span id="updatedAt">Waiting for data</span></div>
+    <div id="subscribedMarketStatus" class="subscribed-market-status" role="status" aria-live="polite"><span class="subscribed-market-indicator"></span><div><span class="subscribed-market-label">MAVEN FX DATA EXTRACTION · SUBSCRIBED MARKET</span><strong id="subscribedMarketName">Waiting for market subscription…</strong><small id="subscribedMarketSymbol">No active market yet</small></div></div>
+  <div class="live-meta"><span id="tickCount">0 ticks</span><span id="updatedAt">Waiting for data</span></div>
   </section>
 
-  <section class="control-card">
-    <label for="marketSelect">MARKET</label>
+
+  <button id="deepScannerFab" class="deep-scanner-fab" type="button" aria-label="Open Deep Market Scanner" aria-controls="deepScannerModal" aria-expanded="false"><span class="scanner-fab-icon" aria-hidden="true">⌕</span><span class="scanner-fab-label">SCANNER</span><span id="deepScannerFabDot" class="scanner-fab-dot" aria-hidden="true"></span></button>
+  <div id="deepScannerModal" class="deep-scanner-modal" aria-hidden="true">
+    <div class="deep-scanner-modal-backdrop" data-close-scanner></div>
+    <section class="deep-scanner-dialog" role="dialog" aria-modal="true" aria-labelledby="deepScannerDialogTitle">
+      <div class="deep-scanner-dialog-top"><span>MARKET INTELLIGENCE</span><button id="closeDeepScanner" class="deep-scanner-close" type="button" aria-label="Close Deep Market Scanner">×</button></div>
+  <section id="deepScannerCard" class="deep-scanner-card deep-scanner-card-modal" aria-label="Deep market scanner">
+    <div class="deep-scanner-head">
+      <div><span class="eyebrow">MAVEN FX • MARKET INTELLIGENCE</span><h2 id="deepScannerDialogTitle">DEEP MARKET SCANNER</h2></div>
+      <span id="deepScannerStatus" class="scanner-status">INITIALIZING</span>
+    </div>
+    <p class="deep-scanner-intro">Quietly scans available Volatility and Jump Indices against your selected Over/Under digit and direction. Your active market is never changed automatically.</p>
+    <div class="scanner-selected">
+      <span>SCANNING SETUP</span><strong id="scannerSetup">OVER 2</strong>
+      <span id="scannerProgress">Preparing independent market histories…</span>
+    </div>
+    <div id="scannerWinner" class="scanner-winner"><strong>SCANNING FOR A STRONG MARKET</strong><span>No market changes until you press the load button.</span></div>
+    <div class="scanner-actions"><button id="scanNowBtn" type="button">SCAN NOW</button><button id="loadStrongestBtn" type="button" disabled>NO STRONG MARKET READY</button></div>
+    <p class="scanner-footnote">Individual scanned markets and ranked results are kept off this panel. Only the strongest eligible setup is summarized. Scores rank evidence quality, not win probability. Analysis only — no contracts are placed.</p>
+  </section>
+    </section>
+  </div>
+
+
+  <button id="autoTradeFab" class="auto-trade-fab" type="button" aria-label="Open Auto Trade" aria-controls="autoTradeModal" aria-expanded="false"><span aria-hidden="true">⇄</span><small>AUTO</small><i id="autoTradeDot"></i></button>
+  <div id="autoTradeModal" class="deep-scanner-modal auto-trade-modal" aria-hidden="true">
+    <div class="deep-scanner-modal-backdrop" data-close-trade></div>
+    <section class="deep-scanner-dialog auto-trade-dialog" role="dialog" aria-modal="true" aria-labelledby="autoTradeTitle">
+      <div class="deep-scanner-dialog-top"><span>MAVEN FX · EXECUTION ENGINE</span><button id="closeAutoTrade" class="deep-scanner-close" type="button" aria-label="Close Auto Trade">×</button></div>
+      <div class="auto-trade-head"><div><span class="eyebrow">AUTOMATED OVER / UNDER</span><h2 id="autoTradeTitle">AUTO TRADE</h2></div><span id="autoTradeStatus" class="auto-trade-status">DISCONNECTED</span></div>
+      <p class="auto-trade-note">Uses the current Over/Under setup and the existing Entry Engine. It only considers entries when the Final Signal is SIGNAL or STRONG SIGNAL, probability comparison passes, and live data is fresh.</p>
+      <div class="auto-trade-current"><div><span>ACTIVE MARKET</span><strong id="autoTradeMarket">R_100</strong></div><div><span>SETUP</span><strong id="autoTradeSetup">OVER 2</strong></div><div><span>ENTRY DIGITS</span><strong id="autoTradeEntries">Waiting</strong></div></div>
+      <div class="auto-trade-fields">
+        <label class="auto-trade-wide">Deriv API token <input id="autoTradeToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste a token with trade permission"><small>Remembering stores the token in this browser on this device. Anyone with access to this browser profile may be able to use it. Never enable on a shared device.</small></label>
+        <label class="auto-trade-wide"><input id="autoTradeRemember" type="checkbox"> Remember my API token on this device</label>
+        <div class="auto-trade-actions"><button id="autoTradeConnect" type="button">CONNECT ACCOUNT</button><button id="autoTradeDisconnect" type="button" class="secondary" disabled>DISCONNECT</button></div>
+        <label>Stake (<span id="autoTradeCurrency">account currency</span>)<input id="autoTradeStake" type="number" min="0.35" max="100" step="0.01" value="0.35" inputmode="decimal"></label>
+        <label>Martingale multiplier<input id="autoTradeMartingale" type="number" min="1" max="10" step="0.1" value="2" inputmode="decimal"></label>
+        <label>Take profit (<span class="autoTradeCurrencyText">account currency</span>)<input id="autoTradeTP" type="number" min="0.01" step="0.01" value="2" inputmode="decimal"></label>
+        <label>Stop loss (<span class="autoTradeCurrencyText">account currency</span>)<input id="autoTradeSL" type="number" min="0.01" step="0.01" value="3" inputmode="decimal"></label>
+        <label class="auto-trade-wide"><input id="autoTradeRecoveryEnabled" type="checkbox"> Enable recovery mode (OFF = stop immediately on any loss)</label>
+        <div id="autoTradeRecoveryFields" class="auto-trade-wide" hidden>
+          <label>First recovery digit (defaults to selected setup digit)<input id="autoTradeRecoveryDigit1" type="number" min="0" max="9" step="1" value="2" inputmode="numeric"></label>
+          <label>Second recovery digit<input id="autoTradeRecoveryDigit2" type="number" min="0" max="9" step="1" value="5" inputmode="numeric"></label>
+          <small>OVER setup: recovery 1 is OVER, recovery 2 is UNDER. UNDER setup: recovery 1 is UNDER, recovery 2 is OVER. Recovery trades bypass analysis and use your manual digits.</small>
+        </div>
+      </div>
+      <div id="autoTradeRealGate" class="auto-trade-real-gate" hidden><label><input id="autoTradeRealCheck" type="checkbox"> I understand real-money trades can lose money.</label><input id="autoTradeRealPhrase" type="text" autocomplete="off" placeholder="Type TRADE REAL to unlock real account trading"></div>
+      <div class="auto-trade-account"><span id="autoTradeAccount">No account connected</span><span id="autoTradePnL">Session P/L: 0.00</span></div>
+      <div class="auto-trade-run"><div><span>RUN RULE</span><strong>2 contracts per entry trigger</strong></div><div><span>NEXT STAKE</span><strong id="autoTradeNextStake">0.35</strong></div><div><span>RUN PROGRESS</span><strong id="autoTradeRunProgress">Idle</strong></div></div>
+      <div class="auto-trade-actions main-actions"><button id="autoTradeStart" type="button" disabled>START AUTO TRADE</button><button id="autoTradeStop" type="button" class="secondary" disabled>PAUSE BOT</button></div>
+      <div id="autoTradeLog" class="auto-trade-log" role="log" aria-live="polite"><div>Waiting for account connection. Demo account recommended.</div></div>
+      <p class="scanner-footnote">Risk controls pause new entries at take-profit/stop-loss limits, on disconnect, stale data, high/unknown spike risk, or invalid signal. A qualifying trigger starts up to two sequential one-tick contracts, then the bot waits for a fresh entry-digit trigger. Automation cannot guarantee profit.</p>
+    </section>
+  </div>
+
+  <section class="control-card market-picker-card" aria-label="Market selection">
+    <label for="marketSelect">ACTIVE MARKET · CHOOSE FEED</label>
     <select id="marketSelect" disabled><option>Loading markets…</option></select>
   </section>
 
+  <div class="workspace-label"><span class="workspace-label-dot"></span> ANALYSIS WORKSPACE <span class="workspace-current" id="workspaceCurrent">OVER/UNDER</span></div>
   <nav class="engine-nav" aria-label="Analysis engines" role="tablist">
     <button class="engine-tab active" data-engine="overunder" role="tab">OVER/UNDER</button>
     <button class="engine-tab" data-engine="evenodd" role="tab">EVEN/ODD</button>
@@ -68,8 +113,17 @@
     </div>
   </section>
 
-  <section id="engineRoot" class="engine"></section>
+  <section id="riseFallControls" class="ou-controls" aria-label="Rise Fall direction" style="display:none">
+    <div class="ou-label"><span>SELECT DIRECTION TO ANALYSE</span><span id="riseFallSetupLabel" class="ou-selected-name">RISE</span></div>
+    <div class="ou-row ou-sides">
+      <button class="ou-side rise-fall-side active over" data-direction="RISE" type="button">▲ RISE</button>
+      <button class="ou-side rise-fall-side under" data-direction="FALL" type="button">▼ FALL</button>
+    </div>
+  </section>
 
+
+  <section id="engineRoot" class="engine" aria-label="Selected analysis engine"></section>
+  
   <section class="distribution-card" aria-label="Live digit distribution">
     <div class="section-title"><span>DIGIT DISTRIBUTION</span><span id="distributionInfo">Waiting for ticks</span></div>
     <p class="distribution-note">Rolling 1,000-tick window • percentages from the live Deriv tick stream</p>
@@ -77,13 +131,16 @@
     <div class="distribution-legend"><span><i class="legend-dot most"></i> Most appearing</span><span><i class="legend-dot least"></i> Least appearing</span></div>
   </section>
 
-  <section class="stream-card">
-    <div class="section-title"><span>DIGIT STREAM</span><span id="streamInfo">0 digits</span></div>
+
+
+
+  <section class="stream-card" aria-label="Recent live digit history">
+    <div class="section-title"><span>LIVE DIGIT HISTORY</span><span id="streamInfo">0 digits</span></div>
     <div id="digitStream" class="digit-stream" aria-live="polite"></div>
   </section>
 
   <details class="details">
-    <summary>Diagnostics</summary>
+    <summary>SYSTEM HEALTH &amp; DIAGNOSTICS</summary>
     <div class="diagnostics">
       <div><span>Connection</span><strong id="diagConnection">—</strong></div>
       <div><span>Ticks received</span><strong id="diagTicks">0</strong></div>
@@ -94,7 +151,7 @@
   </details>
 </main>
 
-<footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261014-tools-1"></script>
+<footer>Live analysis • Auto Trade is optional and requires your Deriv account authorization</footer>
+<script src="app.js?v=20261014-mobile-scan-pause"></script>
 </body>
 </html>
