@@ -291,6 +291,34 @@ function deepScannerEvaluate(force=false){
   renderDeepScanner(rows);
   return rows;
 }
+function startDeepScan(){
+  const ds=state.deepScanner;
+  if(!ds.enabled||!state.connected||!state.markets.length){
+    renderDeepScanner();
+    const progress=$("scannerProgress");
+    if(progress)progress.textContent=!state.connected?"Waiting for the live Deriv connection…":"No eligible markets are available yet.";
+    return;
+  }
+  // Explicit Scan Now starts a fresh history pass across every other available market.
+  ds.lastScanAt=0;
+  ds.strongestCandidate=null;
+  ds.lastScanRows=[];
+  ds.scanRequestedAt=Date.now();
+  syncDeepScannerSubscriptions();
+  for(const m of state.markets){
+    if(m.symbol===state.symbol)continue;
+    if(Object.values(ds.historyRequests).includes(m.symbol))continue;
+    const req=nextReq();
+    ds.historyRequests[req]=m.symbol;
+    request({ticks_history:m.symbol,end:"latest",count:500,style:"ticks",req_id:req});
+  }
+  renderDeepScanner();
+  const winner=$("scannerWinner");
+  if(winner)winner.innerHTML="<strong>SCANNING MARKETS NOW</strong><span>Refreshing live Deriv histories and evaluating your selected "+esc(state.selectedSide)+" "+state.selectedDigit+" setup. Your active market will not change automatically.</span>";
+  const btn=$("loadStrongestBtn");
+  if(btn){btn.disabled=true;btn.textContent="SCANNING MARKETS…";}
+  deepScannerEvaluate(true);
+}
 function loadStrongestScannerMarket(){
   const ds=state.deepScanner;
   const best=ds.strongestCandidate;
@@ -1132,7 +1160,7 @@ document.querySelectorAll(".rise-fall-side").forEach(btn=>btn.addEventListener("
 document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);autoTradeSetupChanged();state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.strongestCandidate=null;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
 document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;autoTradeSetupChanged();state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.strongestCandidate=null;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>{b.classList.remove("active");b.setAttribute("aria-selected","false")});btn.classList.add("active");btn.setAttribute("aria-selected","true");state.engine=btn.dataset.engine;const current=document.getElementById("workspaceCurrent");if(current)current.textContent=btn.textContent.trim();renderEngine()}));
-const scanNowBtn=$("scanNowBtn");if(scanNowBtn)scanNowBtn.addEventListener("click",()=>{deepScannerEvaluate(true)});const loadStrongestBtn=$("loadStrongestBtn");if(loadStrongestBtn)loadStrongestBtn.addEventListener("click",loadStrongestScannerMarket);
+const scanNowBtn=$("scanNowBtn");if(scanNowBtn)scanNowBtn.addEventListener("click",startDeepScan);const loadStrongestBtn=$("loadStrongestBtn");if(loadStrongestBtn)loadStrongestBtn.addEventListener("click",loadStrongestScannerMarket);
 const payoutInput=$("ouPayoutPercent");if(payoutInput)payoutInput.addEventListener("input",()=>{state.ouPayoutPercent=Math.max(1,Math.min(500,Number(payoutInput.value)||95));renderOUValidationPanel()});
 marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){autoTradeMarketChanged();state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;renderSubscribedMarketStatus("switching");state.marketStarted=false;startMarket(true);syncDeepScannerSubscriptions();renderDeepScanner();}});
 let touchX=0,touchY=0;
