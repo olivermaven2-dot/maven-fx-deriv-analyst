@@ -1281,6 +1281,15 @@ function autoTradeCanStart(){
   // Maven FX Bot is demo-only; real-account execution remains disabled.
   return !!autoTrade.authorized&&!!autoTrade.account&&autoTrade.account.is_virtual===true;
 }
+function autoTradeRenderPnL(){
+  const el=$("autoTradePnL");if(!el)return;
+  const pnl=Number(autoTrade.sessionProfit)||0;
+  el.textContent="Session P/L: "+pnl.toFixed(2)+" "+(autoTrade.currency||"");
+  el.classList.toggle("pnl-positive",pnl>0);
+  el.classList.toggle("pnl-negative",pnl<0);
+  el.classList.toggle("pnl-neutral",pnl===0);
+  el.setAttribute("aria-label",(pnl>0?"Profit":pnl<0?"Loss":"No profit or loss")+", session P/L "+pnl.toFixed(2)+" "+(autoTrade.currency||""));
+}
 function autoTradeRender(){
   const market=$("autoTradeMarket"),setup=$("autoTradeSetup"),entries=$("autoTradeEntries");
   if(market)market.textContent=state.symbol+" · "+state.marketName;
@@ -1289,7 +1298,7 @@ function autoTradeRender(){
   if($("autoTradeCurrency"))$("autoTradeCurrency").textContent=autoTrade.currency||"account currency";
   document.querySelectorAll(".autoTradeCurrencyText").forEach(x=>x.textContent=autoTrade.currency||"account currency");
   if($("autoTradeAccount"))$("autoTradeAccount").textContent=autoTrade.account?(autoTrade.account.loginid+" · "+(autoTrade.account.is_virtual?"DEMO":"REAL")+" · "+autoTrade.currency):"No account connected";
-  if($("autoTradePnL"))$("autoTradePnL").textContent="Session P/L: "+autoTrade.sessionProfit.toFixed(2)+" "+(autoTrade.currency||"");
+  autoTradeRenderPnL();
   if($("autoTradeNextStake"))$("autoTradeNextStake").textContent=autoTrade.nextStake.toFixed(2)+" "+(autoTrade.currency||"");
   if($("autoTradeRunProgress"))$("autoTradeRunProgress").textContent=autoTrade.runSymbol?(autoTrade.runSettled+"/2 settled"):autoTrade.enabled?"Waiting for entry":"Idle";
   const gate=$("autoTradeRealGate");if(gate)gate.hidden=!autoTrade.account||autoTrade.account.is_virtual;
