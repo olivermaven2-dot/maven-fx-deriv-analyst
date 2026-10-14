@@ -415,3 +415,29 @@ test('Deep Scanner reports aggregate rejection reasons without exposing individu
   assert.match(renderer, /had no qualified entry digit/);
   assert.match(renderer, /results\.hidden=true/);
 });
+
+
+test('primary Deriv feed sends heartbeat pings and detects a stale connection', () => {
+  assert.match(appSource, /state\.lastPongAt=Date\.now\(\)/);
+  assert.match(appSource, /request\(\{ping:1,req_id:nextReq\(\)\}\)/);
+  assert.match(appSource, /Date\.now\(\)-state\.lastPongAt>45000/);
+  assert.match(appSource, /Deriv heartbeat timed out/);
+});
+
+test('market changes forget the previous primary tick subscription', () => {
+  const start = appSource.indexOf('function startMarket(force=false)');
+  const end = appSource.indexOf('\\nfunction loadHistory', start + 10);
+  const source = appSource.slice(start, end);
+  assert.match(source, /state\.primarySubscriptionId&&state\.socket\?\.readyState===WebSocket\.OPEN/);
+  assert.match(source, /request\(\{forget:state\.primarySubscriptionId/);
+  assert.match(source, /state\.primaryHistoryRequests\[historyReq\]=state\.symbol/);
+});
+
+test('delayed history responses from a previously selected market are ignored', () => {
+  assert.match(appSource, /requestedSymbol!==state\.symbol\)return; \/\/ Ignore delayed history for a market that is no longer selected\./);
+});
+
+test('Deriv subscription metadata is read from the top-level tick response', () => {
+  assert.match(appSource, /const raw=d\.tick,sub=d\.subscription\|\|raw\?\.subscription,req=d\.req_id/);
+  assert.match(appSource, /state\.primarySubscriptionId=sub\.id/);
+});
