@@ -77,3 +77,47 @@ test('app.js remains syntactically valid', () => {
   // Node's parser check is run by the workflow with: node --check app.js
   assert.match(appSource, /function distributionGate/);
 });
+
+test('distribution failure forces Final Signal to AVOID in the existing evidence pipeline', () => {
+  const evidenceStart = appSource.indexOf('function overUnderEvidence');
+  assert.notEqual(evidenceStart, -1, 'overUnderEvidence must exist in app.js');
+  const evidenceEnd = appSource.indexOf('\\nfunction ', evidenceStart + 10);
+  const evidenceSource = appSource.slice(evidenceStart, evidenceEnd);
+  const harness = `
+    const ouStats = () => ({
+      momentum: 0, trend: 0, weightedTransitionRate: .6, long: .5,
+      recent: .5, short50: .5, mid250: .5, medium: .5,
+      cluster: .5, streak: 2, transitions: 10, transitionRate: .6
+    });
+    const ouRate = () => .5;
+    ${gateSource}
+    ${evidenceSource}
+    overUnderEvidence
+  `;
+  const runEvidence = vm.runInNewContext(harness);
+  const blocked = runEvidence(overPassTicks, 3, 'OVER');
+  assert.equal(blocked.distribution.pass, false);
+  assert.equal(blocked.signal, 'AVOID');
+});
+
+test('complementary probability conflict still blocks a distribution-passing setup', () => {
+  const evidenceStart = appSource.indexOf('function overUnderEvidence');
+  const evidenceEnd = appSource.indexOf('\\nfunction ', evidenceStart + 10);
+  const evidenceSource = appSource.slice(evidenceStart, evidenceEnd);
+  const harness = `
+    const ouStats = () => ({
+      momentum: 0, trend: 0, weightedTransitionRate: .6, long: .5,
+      recent: .5, short50: .5, mid250: .5, medium: .5,
+      cluster: .5, streak: 2, transitions: 10, transitionRate: .6
+    });
+    const ouRate = (d, digit, side) => digit === 7 && side === 'UNDER' ? .7 : .5;
+    ${gateSource}
+    ${evidenceSource}
+    overUnderEvidence
+  `;
+  const runEvidence = vm.runInNewContext(harness);
+  const result = runEvidence(overPassTicks, 2, 'OVER');
+  assert.equal(result.distribution.pass, true);
+  assert.equal(result.probabilityConflict, true);
+  assert.equal(result.signal, 'AVOID');
+});
