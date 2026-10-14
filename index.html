@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="description" content="Maven FX Deriv Analyst — live market analysis">
 <title>Maven FX Deriv Analyst</title>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=20261014-ai-live">
 </head>
 <body>
 <header class="topbar">
@@ -28,6 +28,17 @@
       <div><span>LAST DIGIT</span><strong id="lastDigit">—</strong></div>
     </div>
     <div class="live-meta"><span id="tickCount">0 ticks</span><span id="updatedAt">Waiting for data</span></div>
+  </section>
+
+  <section id="aiAnalyst" class="ai-analyst" aria-live="polite" aria-label="Maven AI analyst">
+    <div class="ai-head"><div class="ai-orb"><span>AI</span></div><div class="ai-heading"><div class="ai-eyebrow">MAVEN FX INTELLIGENCE</div><h2>AI Analyst</h2><p>Live evidence review • Rule-based analysis</p></div><span id="aiStatus" class="ai-status">ANALYSING</span></div>
+    <div class="ai-verdict"><span id="aiVerdictLabel">CURRENT ASSESSMENT</span><strong id="aiVerdict">Collecting live data</strong><p id="aiSummary">The analyst will evaluate incoming digits and the selected setup as live ticks arrive.</p></div>
+    <div class="ai-checks">
+      <div><span>Data window</span><strong id="aiWindow">0 / 1,000 ticks</strong></div>
+      <div><span>Distribution rule</span><strong id="aiDistributionCheck">Waiting</strong></div>
+      <div><span>Selected setup</span><strong id="aiSetup">OVER 2</strong></div>
+    </div>
+    <div class="ai-reason"><span>AI REASONING</span><p id="aiReasoning">Waiting for live evidence.</p></div>
   </section>
 
   <section class="control-card">
@@ -55,16 +66,7 @@
     </div>
   </section>
 
-  <section id="aiAnalyst" class="ai-analyst" aria-live="polite" aria-label="Maven AI analyst">
-    <div class="ai-head"><div class="ai-orb"><span>AI</span></div><div class="ai-heading"><div class="ai-eyebrow">MAVEN FX INTELLIGENCE</div><h2>AI Analyst</h2><p>Live evidence review • Rule-based analysis</p></div><span id="aiStatus" class="ai-status">ANALYSING</span></div>
-    <div class="ai-verdict"><span id="aiVerdictLabel">CURRENT ASSESSMENT</span><strong id="aiVerdict">Collecting live data</strong><p id="aiSummary">The analyst will evaluate incoming digits and the selected setup as live ticks arrive.</p></div>
-    <div class="ai-checks">
-      <div><span>Data window</span><strong id="aiWindow">0 / 1,000 ticks</strong></div>
-      <div><span>Distribution rule</span><strong id="aiDistributionCheck">Waiting</strong></div>
-      <div><span>Selected setup</span><strong id="aiSetup">OVER 2</strong></div>
-    </div>
-    <div class="ai-reason"><span>AI REASONING</span><p id="aiReasoning">Waiting for live evidence.</p></div>
-  </section>
+
 
   <section class="distribution-card" aria-label="Live digit distribution">
     <div class="section-title"><span>DIGIT DISTRIBUTION</span><span id="distributionInfo">Waiting for ticks</span></div>
@@ -95,6 +97,6 @@
 </main>
 
 <footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261014-ai-visible"></script>
+<script src="app.js?v=20261014-ai-live"></script>
 </body>
 </html>
