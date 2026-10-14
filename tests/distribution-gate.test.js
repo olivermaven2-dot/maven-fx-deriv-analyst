@@ -332,7 +332,7 @@ test('Rise/Fall entry rejects inactive signals and requires current pattern foll
 });
 
 test('Rise/Fall renderer only activates entry validation for SIGNAL or STRONG SIGNAL', () => {
-  const start = appSource.indexOf('function renderRiseFall');
+  const start = appSource.indexOf('function renderRiseFall(root');
   assert.notEqual(start, -1);
   const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
