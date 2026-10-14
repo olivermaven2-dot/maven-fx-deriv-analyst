@@ -75,7 +75,7 @@
         <div id="autoTradeManualEntryFields" class="auto-trade-wide" hidden>
           <label>Manual entry digit 1<input id="autoTradeManualDigit1" type="number" min="0" max="9" step="1" value="" placeholder="0–9" inputmode="numeric"></label>
           <label>Manual entry digit 2<input id="autoTradeManualDigit2" type="number" min="0" max="9" step="1" value="" placeholder="0–9" inputmode="numeric"></label>
-          <small>When enabled, these replace the automatically selected entry digits. Both manual digits must independently pass the same sample-size, distribution-bar, extreme-digit, transition, reaction, continuation, stability and consistency rules. If either fails, no new entry is placed. Final Signal, probability comparison, live-data and spike-risk checks still apply.</small>
+          <small>When enabled, these replace the automatically selected entry digits. Manual digits replace the Entry Engine digits and do not need to pass its sample-size, extreme-digit, transition, reaction, continuation, stability or consistency checks. Each manual digit must only avoid a red (least frequent) or green (most frequent) distribution bar. Final Signal, probability comparison, live-data and spike-risk checks still apply.</small>
         </div>
         <label class="auto-trade-wide"><input id="autoTradeRecoveryEnabled" type="checkbox"> Enable recovery mode (OFF = wait for the next valid entry after a loss)</label>
         <div id="autoTradeRecoveryFields" class="auto-trade-wide" hidden>
