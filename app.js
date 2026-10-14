@@ -4,7 +4,7 @@ function renderOverUnder(root,d,c,last,n){
   const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const rawEntry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
   const entry=mavenAIReviewEntry("overunder",rawEntry,e.aiDecision);
-  state.ouEntrySnapshot={key:ouValidationKey(),active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[]};
+  state.ouEntrySnapshot={key:ouValidationKey(),active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[],confidence:Number(e.aiDecision?.confidence)};
   state.ouSignalSnapshot={key:ouValidationKey(),active:activeSignal&&!e.probabilityConflict,signal:e.signal,probabilityConflict:!!e.probabilityConflict,tickCount:state.digits.length};
   autoTradeUpdateLiveFields();
   let reason;
@@ -55,6 +55,8 @@ function cleanValidationBook(value,kind){
     if(kind==="ou"){rec.selectedDigit=Number(r.selectedDigit);rec.side=r.side;rec.candidate=Number(r.candidate);}
     else{rec.engine=r.engine;rec.target=r.target;}
     rec.triggers=Math.max(0,Math.floor(Number(r.triggers)||0));
+    rec.confidenceSum=Math.max(0,Number(r.confidenceSum)||0);
+    rec.confidenceN=Math.max(0,Math.floor(Number(r.confidenceN)||0));
     for(const h of [1,2,3]){
       const x=r[h]&&typeof r[h]==="object"?r[h]:{};
       rec[h]={n:Math.max(0,Math.floor(Number(x.n)||0)),hits:Math.max(0,Math.min(Math.floor(Number(x.n)||0),Math.floor(Number(x.hits)||0))),failureStreak:Math.max(0,Math.floor(Number(x.failureStreak)||0)),maxFailureStreak:Math.max(0,Math.floor(Number(x.maxFailureStreak)||0))};
@@ -482,6 +484,7 @@ function processOUValidationTick(digit){
         if(p.steps===horizon){
           const won=p.hits.slice(0,horizon).every(Boolean);
           rec[horizon].n++;
+          if(horizon===1&&Number.isFinite(p.confidence)){rec.confidenceSum=(Number(rec.confidenceSum)||0)+Math.max(0,Math.min(1,p.confidence));rec.confidenceN=(Number(rec.confidenceN)||0)+1;}
           if(won){rec[horizon].hits++;rec[horizon].failureStreak=0;}
           else{rec[horizon].failureStreak=(rec[horizon].failureStreak||0)+1;rec[horizon].maxFailureStreak=Math.max(rec[horizon].maxFailureStreak||0,rec[horizon].failureStreak);}
         }
@@ -506,16 +509,16 @@ function recordOUValidationTrigger(digit){
   const signature=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|"+digit+"|"+state.ticks.length;
   const key=ouValidationRecordKey(state.symbol,state.selectedDigit,state.selectedSide,digit);
   if(!state.ouValidationBook[key]){
-    state.ouValidationBook[key]={market:state.symbol,selectedDigit:state.selectedDigit,side:state.selectedSide,candidate:digit,1:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},triggers:0,lastUpdated:Date.now()};
+    state.ouValidationBook[key]={market:state.symbol,selectedDigit:state.selectedDigit,side:state.selectedSide,candidate:digit,confidenceSum:0,confidenceN:0,1:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},triggers:0,lastUpdated:Date.now()};
   }
   state.ouValidationBook[key].triggers++;
-  state.ouValidation.pending.push({digit,candidate:digit,selectedDigit:state.selectedDigit,side:state.selectedSide,market:state.symbol,steps:0,hits:[],signature});
+  state.ouValidation.pending.push({digit,candidate:digit,selectedDigit:state.selectedDigit,side:state.selectedSide,market:state.symbol,steps:0,hits:[],confidence:Number(snap.confidence),signature});
   state.ouValidation.lastTrigger="Entry digit "+digit+" triggered at tick "+state.ticks.length;state.validationDirty=true;
 }
 function otherValidationKey(engine,target,market=state.symbol){return market+"|"+engine+"|"+target;}
-function setOtherValidationForecast(engine,target,signal,hasEntry,tickCount){
+function setOtherValidationForecast(engine,target,signal,hasEntry,tickCount,confidence){
   const active=(signal==="SIGNAL"||signal==="STRONG SIGNAL")&&hasEntry;
-  state.otherValidation.snapshot=active?{engine,target,market:state.symbol,tickCount,active:true}:null;
+  state.otherValidation.snapshot=active?{engine,target,market:state.symbol,tickCount,confidence:Number(confidence),active:true}:null;
 }
 function scoreOtherValidationPending(p,digit,quote,previousQuote){
   let hit=false;
@@ -529,6 +532,7 @@ function scoreOtherValidationPending(p,digit,quote,previousQuote){
   if(rec){
     const h=rec[p.steps];
     h.n++;
+    if(p.steps===1&&Number.isFinite(p.confidence)){rec.confidenceSum=(Number(rec.confidenceSum)||0)+Math.max(0,Math.min(1,p.confidence));rec.confidenceN=(Number(rec.confidenceN)||0)+1;}
     if(p.hits.slice(0,p.steps).every(Boolean)){h.hits++;h.failureStreak=0;}
     else{h.failureStreak=(h.failureStreak||0)+1;h.maxFailureStreak=Math.max(h.maxFailureStreak||0,h.failureStreak);}
     rec.lastUpdated=Date.now();state.validationDirty=true;
@@ -546,9 +550,9 @@ function processOtherValidationTick(digit,quote,previousQuote){
   ov.snapshot=null;
   if(!snap||!snap.active||snap.market!==state.symbol||snap.tickCount>=state.ticks.length)return;
   const key=otherValidationKey(snap.engine,snap.target,snap.market);
-  if(!ov.book[key])ov.book[key]={market:snap.market,engine:snap.engine,target:snap.target,triggers:0,1:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},lastUpdated:Date.now()};
+  if(!ov.book[key])ov.book[key]={market:snap.market,engine:snap.engine,target:snap.target,triggers:0,confidenceSum:0,confidenceN:0,1:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},lastUpdated:Date.now()};
   ov.book[key].triggers++;state.validationDirty=true;
-  const p={market:snap.market,engine:snap.engine,target:snap.target,steps:0,hits:[]};
+  const p={market:snap.market,engine:snap.engine,target:snap.target,steps:0,hits:[],confidence:snap.confidence};
   scoreOtherValidationPending(p,digit,quote,previousQuote);
   if(p.steps<3)ov.pending.push(p);
 }
@@ -572,13 +576,18 @@ function getValidationReliability(engine){
   const hits=records.reduce((sum,r)=>sum+(r[1]?.hits||0),0);
   const rate=forecasts?hits/forecasts:null;
   const status=forecasts<10?"TOO LITTLE DATA":forecasts<30?"EARLY SAMPLE":"SAMPLE AVAILABLE";
-  return {forecasts,hits,rate,status};
+  const confidenceN=records.reduce((sum,r)=>sum+(r.confidenceN||0),0);
+  const confidenceSum=records.reduce((sum,r)=>sum+(r.confidenceSum||0),0);
+  const averageConfidence=confidenceN?confidenceSum/confidenceN:null;
+  const calibrationGap=rate!==null&&averageConfidence!==null?Math.abs(rate-averageConfidence):null;
+  return {forecasts,hits,rate,status,confidenceN,averageConfidence,calibrationGap};
 }
 function validationReliabilityNote(engine){
   const v=getValidationReliability(engine);
-  if(v.forecasts<10)return "AI feedback: too little outcome data ("+v.forecasts+" scored 1-tick outcomes). Do not treat this setup as historically validated.";
-  if(v.forecasts<30)return "AI feedback: early sample ("+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate). Keep confidence provisional; this is not a profitability guarantee.";
-  return "AI feedback: "+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate. Historical sample available; it remains stored in this browser and does not guarantee future results.";
+  const calibration=v.confidenceN>=10&&v.calibrationGap!==null?" Forecast confidence averaged "+Math.round(v.averageConfidence*100)+"% versus "+Math.round(v.rate*100)+"% observed 1-tick hit rate (gap "+Math.round(v.calibrationGap*100)+" points; "+v.confidenceN+" paired outcomes).":" Confidence calibration is still collecting paired forecasts and outcomes.";
+  if(v.forecasts<10)return "AI feedback: too little outcome data ("+v.forecasts+" scored 1-tick outcomes). Do not treat this setup as historically validated."+calibration;
+  if(v.forecasts<30)return "AI feedback: early sample ("+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate). Keep confidence provisional; this is not a profitability guarantee."+calibration;
+  return "AI feedback: "+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate."+calibration+" Historical sample is saved in this browser and does not guarantee future results.";
 }
 function renderOUValidationPanel(){
   const card=$("ouValidationCard"),out=$("ouValidationResults"),payoutControl=$("ouPayoutControl");
@@ -601,7 +610,7 @@ function renderOUValidationPanel(){
   const breakeven=100/(1+payout/100);
   const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"—";
   const roi=x=>x.n?(((x.hits*payout-(x.n-x.hits)*100)/x.n)>=0?"+":"")+(((x.hits*payout-(x.n-x.hits)*100)/x.n).toFixed(1))+"%":"—";
-  out.innerHTML='<div class="ou-validation-note">Session-only tracking • only live entry-digit triggers count • no trades are placed. Assumed win profit is editable and is a what-if estimate, not Deriv live payout.</div><div class="ou-validation-breakeven">'+esc(validationReliabilityNote("overunder"))+'</div>'+
+  out.innerHTML='<div class="ou-validation-note">Saved locally in this browser • only live entry-digit triggers count • no trades are placed. Assumed win profit is editable and is a what-if estimate, not Deriv live payout.</div><div class="ou-validation-breakeven">'+esc(validationReliabilityNote("overunder"))+'</div>'+
     '<div class="ou-validation-breakeven">Assumed profit per win: <strong>'+payout.toFixed(1)+'%</strong> of stake • break-even hit rate: <strong>'+breakeven.toFixed(1)+'%</strong></div>'+
     (rows.length?'<div class="ou-validation-table"><div class="ou-validation-row ou-validation-head"><span>ENTRY</span><span>TRIGGERS</span><span>1 TICK</span><span>2 IN A ROW</span><span>3 IN A ROW</span><span>MAX FAILS</span><span>EST. ROI*</span></div>'+rows.map(r=>{const selected=[1,2,3].reduce((best,h)=>r[h].n>best.n?r[h]:best,r[1]);return '<div class="ou-validation-row"><strong>'+r.candidate+'</strong><span>'+r.triggers+'</span><span>'+fmt(r[1])+'</span><span>'+fmt(r[2])+'</span><span>'+fmt(r[3])+'</span><span>'+((selected.maxFailureStreak||0))+'</span><span>'+roi(selected)+'</span></div>'}).join("")+'</div><div class="ou-validation-note">*ROI uses the best-sampled horizon for that digit, assumes the entered profit rate and a 100% stake loss on misses. Change payout assumption to match a real quoted contract before interpreting it.</div>':'<div class="ou-validation-empty">No qualifying entry-digit triggers recorded for '+esc(state.symbol)+' • '+state.selectedSide+' '+state.selectedDigit+' yet. Keep the live stream running; the table fills as entry digits trigger and their next ticks complete.</div>');
 }
@@ -1273,7 +1282,7 @@ function renderEvenOdd(root,d,last,n){
   const entryActive=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const rawEntry=entryActive?selectParityEntry(d,state.selectedParity):null;
   const entry=mavenAIReviewEntry("evenodd",rawEntry,e.aiDecision);
-  setOtherValidationForecast("evenodd",state.selectedParity,e.signal,!!entry,n);
+  setOtherValidationForecast("evenodd",state.selectedParity,e.signal,!!entry,n,e.aiDecision?.confidence);
   const entryDisplay=entry||{main:entryActive?"NO STRONG ENTRY":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No trigger has enough conditional lift toward the selected Final Signal.":"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."};
   const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
   const reason=e.conflict?"WAIT: recent and longer-window parity behaviour conflict. The AI will wait for stronger agreement.":e.signal==="STRONG SIGNAL"?"Multiple parity evidence layers are aligned for "+state.selectedParity+".":e.signal==="SIGNAL"?"The selected parity has sufficient multi-factor evidence, but it is not at STRONG SIGNAL level.":e.signal==="AVOID"?"The selected parity has unfavorable evidence.":"Evidence for the selected parity is still developing.";
@@ -1412,7 +1421,7 @@ function renderRiseFall(root,last,n){
   }
   const rawEntry=riseFallEntry(prices,a);
   const entry=mavenAIReviewEntry("risefall",rawEntry,a.aiDecision);
-  setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,n);
+  setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,n,a.aiDecision?.confidence);
   const entryDisplay=entry||{
     main:a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"?"NO CONFIRMED ENTRY":"NO ACTIVE ENTRY",
     confidence:"—",
