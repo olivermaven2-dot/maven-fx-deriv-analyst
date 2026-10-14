@@ -154,6 +154,17 @@
 </main>
 
 <footer>Live analysis • Auto Trade is optional and requires your Deriv account authorization</footer>
+
+  <button id="mavenAIFab" class="maven-ai-fab" type="button" aria-label="Open Maven AI Analyst" aria-controls="mavenAIChat" aria-expanded="false"><span aria-hidden="true">✦</span><small>AI</small></button>
+  <section id="mavenAIChat" class="maven-ai-chat" aria-label="Maven AI Analyst chat" aria-hidden="true">
+    <div class="maven-ai-header"><div><strong>MAVEN AI ANALYST</strong><small>LOCAL RULE-BASED ANALYSIS · NO EXTERNAL AI</small></div><button id="mavenAIClose" type="button" aria-label="Close Maven AI Analyst">×</button></div>
+    <div class="maven-ai-quick" aria-label="Suggested questions"><button type="button" data-maven-ai-question="Why is the current signal blocked?">Explain signal</button><button type="button" data-maven-ai-question="Explain the digit distribution gate">Distribution</button><button type="button" data-maven-ai-question="Which entry digits are eligible?">Entry digits</button><button type="button" data-maven-ai-question="Is my data sent outside this page?">Privacy</button></div>
+    <div id="mavenAIMessages" class="maven-ai-messages" aria-live="polite"></div>
+    <form id="mavenAIForm" class="maven-ai-form"><label class="maven-ai-sr" for="mavenAIInput">Ask Maven AI Analyst</label><input id="mavenAIInput" type="text" maxlength="400" placeholder="Ask about your signal…" autocomplete="off"><button type="submit">Send</button></form>
+    <p class="maven-ai-disclaimer">Statistical guidance only. Signals are not guarantees.</p>
+  </section>
+
 <script src="app.js?v=20261014-mobile-scan-pause"></script>
+<script src="maven-ai.js?v=20261014-local-analyst"></script>
 </body>
 </html>
