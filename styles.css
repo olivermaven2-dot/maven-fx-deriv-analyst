@@ -348,3 +348,104 @@ button,select,summary{touch-action:manipulation}
   .distribution-note{margin:6px 0 9px}
   .distribution-legend{margin-top:9px}
 }
+
+/* Maven FX Glass & Layered visual theme — presentation only */
+:root{
+  --glass-bg:rgba(13,22,36,.84);
+  --glass-panel:rgba(20,32,50,.74);
+  --glass-panel-strong:rgba(25,40,61,.88);
+  --glass-line:rgba(131,177,221,.22);
+  --glass-line-bright:rgba(90,190,255,.42);
+  --glass-glow:rgba(38,150,255,.10);
+}
+body{
+  background:
+    radial-gradient(ellipse at 12% 0%,rgba(35,119,190,.16),transparent 42%),
+    radial-gradient(ellipse at 92% 18%,rgba(37,208,220,.09),transparent 34%),
+    linear-gradient(145deg,#070c15 0%,#0a1220 48%,#080e18 100%);
+  background-attachment:fixed;
+}
+.topbar{
+  background:rgba(8,14,24,.78);
+  border-bottom:1px solid var(--glass-line);
+  box-shadow:0 8px 28px rgba(0,0,0,.18);
+}
+.app .live-card,.app .market-picker-card, .app .control-card,.app .distribution-card,.app .stream-card,
+.app .details,.app #overUnderControls,.app #evenOddControls, .app #riseFallControls,.app #engineRoot,
+.app .engine-nav{
+  background:linear-gradient(145deg,rgba(24,39,59,.88),rgba(12,21,34,.88));
+  border:1px solid var(--glass-line);
+  box-shadow:0 10px 28px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.035);
+  border-radius:15px;
+}
+.app .live-card,.app .market-picker-card, .app .control-card,.app .distribution-card,.app .stream-card,
+.app .details,.app #overUnderControls,.app #evenOddControls, .app #riseFallControls,.app #engineRoot{
+  position:relative;
+  overflow:hidden;
+}
+.app .live-card::before,.app .market-picker-card, .app .control-card::before,.app .distribution-card::before,
+.app .stream-card::before,.app .details::before,.app #overUnderControls::before,
+.app #evenOddControls, .app #riseFallControls::before,.app #engineRoot::before{
+  content:"";
+  position:absolute;
+  inset:0 0 auto;
+  height:1px;
+  background:linear-gradient(90deg,transparent,rgba(108,203,255,.48),transparent);
+  pointer-events:none;
+}
+.app .engine-nav{
+  padding:7px;
+  background:rgba(11,19,31,.9);
+}
+.engine-tab{
+  border:1px solid transparent;
+  border-radius:10px;
+  transition:background-color .15s ease,border-color .15s ease;
+}
+.engine-tab.active,.engine-tab[aria-selected="true"]{
+  background:linear-gradient(135deg,rgba(34,133,211,.28),rgba(29,191,211,.12));
+  border-color:rgba(90,190,255,.36);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
+}
+button,select,input,.ou-digit,.ou-side{
+  border-radius:9px;
+}
+button:focus-visible,select:focus-visible,input:focus-visible,.ou-digit:focus-visible,.ou-side:focus-visible{
+  outline:2px solid rgba(94,203,255,.85);
+  outline-offset:2px;
+}
+.price-grid>div,.metric-card,.signal-card,.digit-card,.stat-card{
+  background:linear-gradient(145deg,rgba(29,46,68,.72),rgba(13,24,39,.78));
+  border:1px solid rgba(132,177,218,.16);
+  border-radius:11px;
+}
+.status,.pill,.badge{
+  border:1px solid rgba(130,185,225,.2);
+  border-radius:999px;
+}
+.distribution-circle{
+  box-shadow:0 4px 14px rgba(0,0,0,.2),inset 0 1px 0 rgba(255,255,255,.09);
+}
+.state,.final-signal,.signal-value{
+  text-shadow:0 0 22px rgba(65,177,255,.12);
+}
+@media(min-width:760px){
+  .app .engine-nav{backdrop-filter:blur(12px)}
+  .app .live-card,.app .market-picker-card, .app .control-card,.app .distribution-card,.app .stream-card,
+  .app .details,.app #overUnderControls,.app #evenOddControls, .app #riseFallControls,.app #engineRoot{
+    backdrop-filter:blur(10px);
+  }
+}
+@media(max-width:759px){
+  body{background-attachment:scroll}
+  .app .live-card,.app .market-picker-card, .app .control-card,.app .distribution-card,.app .stream-card,
+  .app .details,.app #overUnderControls,.app #evenOddControls, .app #riseFallControls,.app #engineRoot,
+  .app .engine-nav{border-radius:12px;box-shadow:0 5px 16px rgba(0,0,0,.2)}
+  .app .live-card,.app .market-picker-card, .app .control-card,.app .distribution-card,.app .stream-card,
+  .app .details,.app #overUnderControls,.app #evenOddControls, .app #riseFallControls,.app #engineRoot{
+    backdrop-filter:none;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+}
