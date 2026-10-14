@@ -392,10 +392,31 @@ function renderEngine(){
   const ou=$("overUnderControls"),parity=$("evenOddControls");
   if(ou)ou.style.display=state.engine==="overunder"?"":"none";
   if(parity)parity.style.display=state.engine==="evenodd"?"":"none";
-  if(n<30){root.innerHTML=panel("INSUFFICIENT DATA","Collecting more validated market data before analysis.",null,["At least 30 recent digits are required","Live data stream is active when ticks are arriving"],n);return}
+  if(n<30){root.innerHTML=panel("INSUFFICIENT DATA","Collecting more validated market data before analysis.",null,["At least 30 recent digits are required","Live data stream is active when ticks are arriving"],n);renderAiAnalyst(d,n);return}
   if(state.engine==="overunder")renderOverUnder(root,d,c,last,n);
   if(state.engine==="evenodd")renderEvenOdd(root,d,last,n);
   if(state.engine==="risefall")renderRiseFall(root,d,last,n);
+  renderAiAnalyst(d,n);
+}
+function renderAiAnalyst(d,n){
+  const status=$("aiStatus"),verdict=$("aiVerdict"),summary=$("aiSummary"),windowEl=$("aiWindow"),distCheck=$("aiDistributionCheck"),setup=$("aiSetup"),reasoning=$("aiReasoning");
+  if(!status||!verdict||!summary||!windowEl||!distCheck||!setup||!reasoning)return;
+  windowEl.textContent=Math.min(n,1000)+" / 1,000 ticks";
+  if(state.engine==="overunder"){
+    const e=overUnderEvidence(d,state.selectedDigit,state.selectedSide);
+    const group=e.distribution.checks.map(x=>x.digit+":"+x.percent.toFixed(1)+"%"+(x.most?" MOST":x.least?" LEAST":"")).join(" • ");
+    setup.textContent=state.selectedSide+" "+state.selectedDigit;
+    distCheck.textContent=!e.distribution.ready?"WAITING":e.distribution.pass?"PASS":"BLOCKED";
+    if(!e.distribution.ready){status.textContent="COLLECTING";verdict.textContent="Waiting for 1,000 ticks";summary.textContent="The distribution gate cannot pass until the complete rolling 1,000-tick window is available.";reasoning.textContent="The selected "+state.selectedSide+" "+state.selectedDigit+" setup requires every checked digit below 10.5%, with no green MOST or red LEAST highlight. "+group;}
+    else if(!e.distribution.pass){status.textContent="BLOCKED";verdict.textContent="Setup blocked by distribution";summary.textContent="At least one required digit failed the 10.5% and highlight rules. No Over/Under entry should be considered.";reasoning.textContent=e.distribution.failures.map(x=>"Digit "+x.digit+" is "+x.percent.toFixed(1)+"%"+(x.most?", marked MOST appearing":"")+(x.least?", marked LEAST appearing":"")).join(". ")+ ".";}
+    else if(e.probabilityConflict){status.textContent="BLOCKED";verdict.textContent="Probability conflict";summary.textContent="The complementary setup has stronger probability evidence, so the selected setup remains blocked.";reasoning.textContent=e.distribution.reason+" Probability comparison also favors the complementary setup.";}
+    else{status.textContent=e.signal==="STRONG SIGNAL"?"STRONG":e.signal==="SIGNAL"?"SIGNAL":e.signal==="AVOID"?"CAUTION":"WAIT";verdict.textContent=e.signal;summary.textContent=e.signal==="STRONG SIGNAL"?"Multiple evidence layers align; verify the entry engine before acting.":e.signal==="SIGNAL"?"Evidence supports the selected setup, but it is not at strong-signal level.":e.signal==="AVOID"?"Current evidence is unfavorable or conflicting.":"Live evidence is still developing; do not force an entry.";reasoning.textContent=e.distribution.reason+" Evidence score "+Math.round(e.evidence*100)+"/100; selected probability "+Math.round(e.selectedRate*100)+"%, complementary probability "+Math.round(e.oppositeRate*100)+"%.";}
+  }else if(state.engine==="evenodd"){
+    const e=parityStats(d,state.selectedParity);setup.textContent=state.selectedParity;distCheck.textContent="OVER/UNDER ONLY";status.textContent=e.signal==="STRONG SIGNAL"?"STRONG":e.signal;verdict.textContent=e.signal;summary.textContent="Parity review uses live even/odd frequencies, transitions, momentum, consistency and recent behavior.";reasoning.textContent="Selected "+state.selectedParity+" • evidence "+Math.round(e.evidence*100)+"/100 • recent pattern "+d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ")+". The 10.5% digit-group gate applies to Over/Under setups only.";
+  }else{
+    const recent=d.slice(-100);let rise=0,fall=0;for(let i=1;i<recent.length;i++){if(recent[i]>recent[i-1])rise++;else if(recent[i]<recent[i-1])fall++;}const total=rise+fall,share=total?Math.max(rise,fall)/total:0,side=rise>=fall?"RISE":"FALL",signal=total>=80&&share>=.68?"STRONG SIGNAL":total>=30&&share>=.62?"SIGNAL":"WAIT";setup.textContent=side;distCheck.textContent="OVER/UNDER ONLY";status.textContent=signal==="STRONG SIGNAL"?"STRONG":signal;verdict.textContent=signal;summary.textContent="Directional review of the latest "+total+" non-flat price transitions.";reasoning.textContent="Rise "+rise+" • Fall "+fall+" • dominant direction "+side+" at "+Math.round(share*100)+"% of non-flat transitions. This is a historical directional measure, not a guarantee of the next tick.";
+  }
+  status.className="ai-status "+(status.textContent==="BLOCKED"?"blocked":status.textContent==="STRONG"||status.textContent==="SIGNAL"?"positive":"");
 }
 function panel(stateText,reason,entry,why,n){
   const cls=stateText==="STRONG SIGNAL"?"strong":stateText==="SIGNAL"?"signal":stateText==="NO SIGNAL"||stateText==="NO ENTRY"?"none":"wait";
