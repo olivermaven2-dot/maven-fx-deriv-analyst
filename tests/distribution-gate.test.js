@@ -121,3 +121,28 @@ test('complementary probability conflict still blocks a distribution-passing set
   assert.equal(result.probabilityConflict, true);
   assert.equal(result.signal, 'AVOID');
 });
+
+test('distributionBarFlags matches the displayed MOST and LEAST bars', () => {
+  const start = appSource.indexOf('function distributionBarFlags');
+  assert.notEqual(start, -1, 'distributionBarFlags must exist');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const run = vm.runInNewContext(source + '\ndistributionBarFlags');
+  const flags = run([0,0,1,1,2,2,3,3,4,5]);
+  assert.deepEqual(Array.from(flags.most, (v,i)=>v?i:null).filter(v=>v!==null), [0,1,2,3]);
+  assert.deepEqual(Array.from(flags.least, (v,i)=>v?i:null).filter(v=>v!==null), [6,7,8,9]);
+});
+
+test('Over/Under entry loop explicitly rejects both highlighted distribution bars', () => {
+  const entryStart = appSource.indexOf('function overUnderEntry');
+  assert.notEqual(entryStart, -1);
+  const entryEnd = appSource.indexOf('\nfunction ', entryStart + 10);
+  const entrySource = appSource.slice(entryStart, entryEnd);
+  assert.match(entrySource, /entryBars\.most\[candidate\]\|\|entryBars\.least\[candidate\]/);
+});
+
+test('local Maven AI module contains no network APIs or remote model calls', () => {
+  const source = fs.readFileSync(require('node:path').join(__dirname, '..', 'maven-ai.js'), 'utf8');
+  assert.doesNotMatch(source, /\bfetch\s*\(|XMLHttpRequest|WebSocket|https?:\/\//i);
+  assert.match(source, /mavenAIGetContext/);
+});
