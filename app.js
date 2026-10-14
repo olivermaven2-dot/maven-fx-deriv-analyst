@@ -1241,7 +1241,7 @@ function renderSubscribedMarketStatus(mode="switching"){
 const autoTrade={
   socket:null,authorized:false,account:null,enabled:false,realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
-  recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,
+  recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,recoverySide1:"DEFAULT",recoverySide2:"DEFAULT",
   activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,logLines:[],demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
 };
 function autoTradeLog(message){
@@ -1315,9 +1315,11 @@ function autoTradeStart(){
   if(!(stake>=0.35&&stake<=100&&mg>=1&&mg<=10&&tp>0&&sl>0)){autoTradeLog("Invalid risk settings. Stake must be 0.35–100, multiplier 1–10, and take-profit/stop-loss must be positive.");return}
   const recoveryEnabled=$("autoTradeRecoveryEnabled").checked;
   const digit1=Number($("autoTradeRecoveryDigit1").value),digit2=Number($("autoTradeRecoveryDigit2").value);
+  const recoverySide1=$("autoTradeRecoverySide1").value,recoverySide2=$("autoTradeRecoverySide2").value;
   if(!Number.isInteger(digit1)||digit1<0||digit1>9||!Number.isInteger(digit2)||digit2<0||digit2>9){autoTradeLog("Recovery digits must be whole numbers from 0 to 9.");return}
+  if(!["DEFAULT","OVER","UNDER"].includes(recoverySide1)||!["DEFAULT","OVER","UNDER"].includes(recoverySide2)){autoTradeLog("Choose a valid side for each recovery attempt.");return}
   autoTrade.stake=stake;autoTrade.martingale=mg;autoTrade.takeProfit=tp;autoTrade.stopLoss=sl;autoTrade.nextStake=stake;
-  autoTrade.recoveryEnabled=recoveryEnabled;autoTrade.recoveryPhase=0;autoTrade.recoveryDigit1=digit1;autoTrade.recoveryDigit2=digit2;
+  autoTrade.recoveryEnabled=recoveryEnabled;autoTrade.recoveryPhase=0;autoTrade.recoveryDigit1=digit1;autoTrade.recoveryDigit2=digit2;autoTrade.recoverySide1=recoverySide1;autoTrade.recoverySide2=recoverySide2;
   autoTrade.sessionProfit=0;autoTrade.wins=0;autoTrade.losses=0;autoTrade.settled=new Set();autoTrade.enabled=true;autoTrade.armed=true;autoTrade.lastDigit=null;autoTrade.startedAt=Date.now();
   autoTradeLog("Bot started on "+state.symbol+" · "+state.selectedSide+" "+state.selectedDigit+" · stake "+stake+" "+autoTrade.currency+" · recovery "+(recoveryEnabled?"ON":"OFF")+".");
   autoTradeRender();
@@ -1364,7 +1366,7 @@ function autoTradePlaceNext(){
   if(autoTrade.sessionProfit>=autoTrade.takeProfit){autoTradePause("take-profit limit reached");return}
   if(autoTrade.sessionProfit<=-autoTrade.stopLoss){autoTradePause("stop-loss limit reached");return}
   const stake=Math.max(0.35,Math.min(100,Number(autoTrade.nextStake)||autoTrade.stake));
-  const side=isRecovery?(autoTrade.recoveryPhase===1?autoTrade.runSide:(autoTrade.runSide==="OVER"?"UNDER":"OVER")):autoTrade.runSide;
+  const side=isRecovery?(autoTrade.recoveryPhase===1?(autoTrade.recoverySide1==="DEFAULT"?autoTrade.runSide:autoTrade.recoverySide1):(autoTrade.recoverySide2==="DEFAULT"?(autoTrade.runSide==="OVER"?"UNDER":"OVER"):autoTrade.recoverySide2)):autoTrade.runSide;
   const digit=isRecovery?(autoTrade.recoveryPhase===1?autoTrade.recoveryDigit1:autoTrade.recoveryDigit2):autoTrade.runSelectedDigit;
   const parameters={amount:Number(stake.toFixed(2)),basis:"stake",contract_type:side==="OVER"?"DIGITOVER":"DIGITUNDER",currency:autoTrade.currency,duration:1,duration_unit:"t",underlying_symbol:autoTrade.runSymbol,barrier:String(digit)};
   try{const reqId=autoTradeReq({proposal:1,...parameters},"proposal");autoTrade.pendingBuyQuotes[reqId]=parameters;autoTradeLog("Requesting "+(isRecovery?"RECOVERY "+autoTrade.recoveryPhase:"BASE")+" · "+side+" "+digit+" · stake "+stake.toFixed(2)+" "+autoTrade.currency+".")}
