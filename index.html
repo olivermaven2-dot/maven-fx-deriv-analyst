@@ -123,6 +123,17 @@
 
 
   <section id="engineRoot" class="engine" aria-label="Selected analysis engine"></section>
+
+  <section id="mavenAiPanel" class="maven-ai-panel" aria-label="Maven FX AI shadow analysis">
+    <div class="section-title"><span>MAVEN AI · SHADOW MODE</span><span id="mavenAiMode">OBSERVING</span></div>
+    <p class="maven-ai-note">Independent distribution checks. Existing signals and Auto Trade are not changed.</p>
+    <div id="mavenAiStatus" class="maven-ai-status">Waiting for validated live ticks…</div>
+    <div id="mavenAiReason" class="maven-ai-reason">AI assessments will appear after the next bounded live-data snapshot.</div>
+    <div class="maven-ai-subtitle">DISTRIBUTION GATE</div>
+    <div id="mavenAiGateDetails" class="maven-ai-details">Awaiting data</div>
+    <div class="maven-ai-subtitle">ENTRY DIGITS WITHOUT RED/GREEN BARS</div>
+    <div id="mavenAiEntries" class="maven-ai-entries">Awaiting data</div>
+  </section>
   
   <section class="distribution-card" aria-label="Live digit distribution">
     <div class="section-title"><span>DIGIT DISTRIBUTION</span><span id="distributionInfo">Waiting for ticks</span></div>
@@ -152,6 +163,6 @@
 </main>
 
 <footer>Live analysis • Auto Trade is optional and requires your Deriv account authorization</footer>
-<script src="app.js?v=20261014-mobile-scan-pause"></script>
+<script src="maven-ai.js?v=20261014-ai-shadow1"></script>\n<script src="app.js?v=20261014-ai-shadow1"></script>
 </body>
 </html>
