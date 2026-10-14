@@ -211,3 +211,15 @@ test('complementary Over/Under digit mapping is symmetric for all five pairs', (
     assert.equal(under.oppositeDigit, digit, 'UNDER ' + (9 - digit) + ' should pair with OVER ' + digit);
   }
 });
+
+test('spike-risk protection blocks entry eligibility without overwriting the directional Final Signal', () => {
+  const start = appSource.indexOf('function applySpikeRiskProtection');
+  assert.notEqual(start, -1, 'applySpikeRiskProtection must exist');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  assert.match(source, /Spike risk blocks entry eligibility only/);
+  assert.match(source, /NO ENTRY — SPIKE RISK/);
+  assert.match(source, /Final Signal remains the engine analysis/);
+  assert.doesNotMatch(source, /signal\.textContent\s*=\s*["']ENTRY BLOCKED/);
+  assert.doesNotMatch(source, /reason\.textContent\s*=/);
+});
