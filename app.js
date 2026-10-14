@@ -580,14 +580,19 @@ function getValidationReliability(engine){
   const confidenceSum=records.reduce((sum,r)=>sum+(r.confidenceSum||0),0);
   const averageConfidence=confidenceN?confidenceSum/confidenceN:null;
   const calibrationGap=rate!==null&&averageConfidence!==null?Math.abs(rate-averageConfidence):null;
-  return {forecasts,hits,rate,status,confidenceN,averageConfidence,calibrationGap};
+  // Smooth small samples toward a neutral 50% prior so a few wins/losses do not dominate.
+  const smoothedRate=(hits+10)/(forecasts+20);
+  const learningWeight=forecasts/(forecasts+30);
+  const adaptiveAdjustment=forecasts>=10?Math.max(-.08,Math.min(.08,(smoothedRate-.5)*.8*learningWeight)):0;
+  return {forecasts,hits,rate,status,confidenceN,averageConfidence,calibrationGap,smoothedRate,learningWeight,adaptiveAdjustment};
 }
 function validationReliabilityNote(engine){
   const v=getValidationReliability(engine);
   const calibration=v.confidenceN>=10&&v.calibrationGap!==null?" Forecast confidence averaged "+Math.round(v.averageConfidence*100)+"% versus "+Math.round(v.rate*100)+"% observed 1-tick hit rate (gap "+Math.round(v.calibrationGap*100)+" points; "+v.confidenceN+" paired outcomes).":" Confidence calibration is still collecting paired forecasts and outcomes.";
-  if(v.forecasts<10)return "AI feedback: too little outcome data ("+v.forecasts+" scored 1-tick outcomes). Do not treat this setup as historically validated."+calibration;
-  if(v.forecasts<30)return "AI feedback: early sample ("+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate). Keep confidence provisional; this is not a profitability guarantee."+calibration;
-  return "AI feedback: "+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate."+calibration+" Historical sample is saved in this browser and does not guarantee future results.";
+  const learning=v.forecasts>=10?" Adaptive feedback: "+Math.round(v.smoothedRate*100)+"% smoothed hit rate; its influence is weighted by sample size and capped at ±8 confidence points.":" Adaptive feedback is neutral until at least 10 outcomes are recorded.";
+  if(v.forecasts<10)return "AI feedback: too little outcome data ("+v.forecasts+" scored 1-tick outcomes). Do not treat this setup as historically validated."+calibration+learning;
+  if(v.forecasts<30)return "AI feedback: early sample ("+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate). Keep confidence provisional; this is not a profitability guarantee."+calibration+learning;
+  return "AI feedback: "+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate."+calibration+learning+" Historical sample is saved in this browser and does not guarantee future results.";
 }
 function renderOUValidationPanel(){
   const card=$("ouValidationCard"),out=$("ouValidationResults"),payoutControl=$("ouPayoutControl");
@@ -802,9 +807,9 @@ function mavenAIDecisionLayer(engine,baseSignal,evidence,alignment,conflict,hard
   const agreement=factors.length?factors.filter(x=>x>=.55).length/factors.length:.5;
   const validation=getValidationReliability(engine);
   let confidence=Math.max(0,Math.min(1,(Number(evidence)||0)*.75+agreement*.25));
-  if(validation.forecasts>=30&&Number.isFinite(validation.rate)){
-    if(validation.rate<.40)confidence=Math.max(0,confidence-.06);
-    else if(validation.rate>=.60)confidence=Math.min(1,confidence+.02);
+  if(validation.forecasts>=10)confidence=Math.max(0,Math.min(1,confidence+validation.adaptiveAdjustment));
+  if(validation.forecasts>=30&&Number.isFinite(validation.rate)&&validation.rate<.40){
+    confidence=Math.max(0,confidence-.04);
   }
   let decision=baseSignal,reason="AI evidence review agrees with the rule-based result.";
   if(hardGate){reason="AI review preserved a mandatory data/distribution gate; the AI layer cannot override it.";}
@@ -820,9 +825,11 @@ function mavenAIDecisionLayer(engine,baseSignal,evidence,alignment,conflict,hard
   }else if(decision==="SIGNAL"&&confidence>=.76&&agreement>=.78&&sample>=200){
     decision="STRONG SIGNAL";reason="AI review upgraded the signal after strong factor agreement and a sufficiently large live sample.";
   }else{
-    reason="AI review combined evidence strength, cross-factor agreement, sample size and available walk-forward outcomes.";
+    reason="AI review combined live evidence, cross-factor agreement and sample size";
+    if(validation.forecasts>=10)reason+=" with conservatively weighted market/setup outcome learning ("+Math.round(validation.smoothedRate*100)+"% smoothed hit rate from "+validation.forecasts+" forecasts)";
+    reason+=".";
   }
-  return {signal:decision,baseSignal,confidence,agreement,validationForecasts:validation.forecasts,validationRate:validation.rate,reason};
+  return {signal:decision,baseSignal,confidence,agreement,validationForecasts:validation.forecasts,validationRate:validation.rate,validationSmoothedRate:validation.smoothedRate,learningWeight:validation.learningWeight,adaptiveAdjustment:validation.adaptiveAdjustment,reason};
 }
 function mavenAIReviewEntry(engine,entry,signalDecision){
   if(!entry||!signalDecision||!["SIGNAL","STRONG SIGNAL"].includes(signalDecision.signal))return null;
