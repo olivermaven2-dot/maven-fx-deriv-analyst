@@ -803,11 +803,16 @@ function distributionGate(d,selectedDigit,selectedSide){
 }
 
 function mavenAIDecisionLayer(engine,baseSignal,evidence,alignment,conflict,hardGate,sample){
-  const factors=(Array.isArray(alignment)?alignment:[]).filter(Number.isFinite);
-  const agreement=factors.length?factors.filter(x=>x>=.55).length/factors.length:.5;
   const validation=getValidationReliability(engine);
-  let confidence=Math.max(0,Math.min(1,(Number(evidence)||0)*.75+agreement*.25));
-  if(validation.forecasts>=10)confidence=Math.max(0,Math.min(1,confidence+validation.adaptiveAdjustment));
+  // Apply saved outcome learning to every normalized evidence factor and the aggregate analysis score.
+  // Small samples remain neutral; the adjustment is capped by getValidationReliability at +/-8 points.
+  const adjustment=validation.forecasts>=10?validation.adaptiveAdjustment:0;
+  const factors=(Array.isArray(alignment)?alignment:[]).filter(Number.isFinite);
+  const adjustedFactors=factors.map(x=>Math.max(0,Math.min(1,x+adjustment*.5)));
+  const rawAgreement=factors.length?factors.filter(x=>x>=.55).length/factors.length:.5;
+  const agreement=adjustedFactors.length?adjustedFactors.filter(x=>x>=.55).length/adjustedFactors.length:.5;
+  const adjustedEvidence=Math.max(0,Math.min(1,(Number(evidence)||0)+adjustment));
+  let confidence=Math.max(0,Math.min(1,adjustedEvidence*.75+agreement*.25));
   if(validation.forecasts>=30&&Number.isFinite(validation.rate)&&validation.rate<.40){
     confidence=Math.max(0,confidence-.04);
   }
@@ -829,7 +834,7 @@ function mavenAIDecisionLayer(engine,baseSignal,evidence,alignment,conflict,hard
     if(validation.forecasts>=10)reason+=" with conservatively weighted market/setup outcome learning ("+Math.round(validation.smoothedRate*100)+"% smoothed hit rate from "+validation.forecasts+" forecasts)";
     reason+=".";
   }
-  return {signal:decision,baseSignal,confidence,agreement,validationForecasts:validation.forecasts,validationRate:validation.rate,validationSmoothedRate:validation.smoothedRate,learningWeight:validation.learningWeight,adaptiveAdjustment:validation.adaptiveAdjustment,reason};
+  return {signal:decision,baseSignal,confidence,agreement,rawAgreement,adjustedEvidence,adjustedAlignment:adjustedFactors,analysisAdjustment:adjustment,validationForecasts:validation.forecasts,validationRate:validation.rate,validationSmoothedRate:validation.smoothedRate,learningWeight:validation.learningWeight,adaptiveAdjustment:validation.adaptiveAdjustment,reason};
 }
 function mavenAIReviewEntry(engine,entry,signalDecision){
   if(!entry||!signalDecision||!["SIGNAL","STRONG SIGNAL"].includes(signalDecision.signal))return null;
@@ -841,6 +846,9 @@ function mavenAIReviewEntry(engine,entry,signalDecision){
     if(Number.isFinite(conf))entryStrength=Math.max(0,Math.min(1,conf/100));
     else if(Number.isFinite(Number(entry.score)))entryStrength=Math.max(0,Math.min(1,Number(entry.score)>10?Number(entry.score)/100:Number(entry.score)/10));
   }
+  const validationAdjustment=Number.isFinite(signalDecision.adaptiveAdjustment)&&Number(signalDecision.validationForecasts)>=10?signalDecision.adaptiveAdjustment:0;
+  // Entry strength also learns from scored outcomes, independently of signal confidence.
+  entryStrength=Math.max(0,Math.min(1,entryStrength+validationAdjustment*.5));
   const confidence=Number(signalDecision.confidence)||.5;
   const combined=entryStrength*.65+confidence*.35;
   if(entryStrength<.43||combined<.49)return null;
@@ -850,7 +858,7 @@ function mavenAIReviewEntry(engine,entry,signalDecision){
     entry.main=entry.entries.map(x=>String(x.digit)).join("  •  ");
     entry.meta=entry.entries.map(x=>"Digit "+x.digit+": AI score "+x.aiScore+"/100").join(" • ");
   }
-  return {...entry,aiReview:{entryStrength,confidence,combined},reason:(entry.reason?entry.reason+" ":"")+note,evidence:(entry.evidence?entry.evidence+" • ":"")+note};
+  return {...entry,aiReview:{entryStrength,confidence,combined,adaptiveAdjustment:validationAdjustment,validationForecasts:Number(signalDecision.validationForecasts)||0},reason:(entry.reason?entry.reason+" ":"")+note,evidence:(entry.evidence?entry.evidence+" • ":"")+note};
 }
 function overUnderEvidence(d,selectedDigit,selectedSide){
   const n=d.length;
@@ -883,7 +891,7 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   else if(evidence>=.54&&selectedRate>=baseline-.07&&consistency>=.45)signal="SIGNAL";
   else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
   const aiDecision=mavenAIDecisionLayer("overunder",signal,evidence,[probability,momentumScore,trendScore,transition,selected.cluster,reaction,recency,consistency,historical,context],evidenceConflict,n<100||!distribution.ready||!distribution.pass,n);signal=aiDecision.signal;
-  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,windowConflict,evidenceConflict,distribution,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
+  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability:aiDecision.adjustedAlignment[0]??probability,momentum:aiDecision.adjustedAlignment[1]??momentumScore,trend:aiDecision.adjustedAlignment[2]??trendScore,transition:aiDecision.adjustedAlignment[3]??transition,cluster:aiDecision.adjustedAlignment[4]??selected.cluster,reaction:aiDecision.adjustedAlignment[5]??reaction,recency:aiDecision.adjustedAlignment[6]??recency,consistency:aiDecision.adjustedAlignment[7]??consistency,historical:aiDecision.adjustedAlignment[8]??historical,context:aiDecision.adjustedAlignment[9]??context,evidence:aiDecision.adjustedEvidence,probabilityConflict,windowConflict,evidenceConflict,distribution,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
 }
 function distributionBarFlags(d){
   const windowDigits=d.slice(-1000);
@@ -1160,7 +1168,7 @@ function parityStats(d,selectedSide){
   else if(evidence>=.54&&recent>=.50&&consistency>=.45)signal="SIGNAL";
   else if(evidence<.38||recent<.44)signal="AVOID";
   const aiDecision=mavenAIDecisionLayer("evenodd",signal,evidence,[probability,momentumScore,trendScore,transition,clustering,recency,consistency,historical,context],conflict,n<100,n);signal=aiDecision.signal;
-  return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,probability,momentumScore,trendScore,transition,historical,recency,context,evidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,target,other};
+  return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,probability:aiDecision.adjustedAlignment[0]??probability,momentumScore:aiDecision.adjustedAlignment[1]??momentumScore,trendScore:aiDecision.adjustedAlignment[2]??trendScore,transition:aiDecision.adjustedAlignment[3]??transition,historical:aiDecision.adjustedAlignment[7]??historical,recency:aiDecision.adjustedAlignment[5]??recency,context:aiDecision.adjustedAlignment[8]??context,evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,target,other};
 }
 function parityEntryCandidates(d,selectedSide){
   const key=x=>x%2===0?"E":"O";
@@ -1356,7 +1364,7 @@ function riseFallAnalysis(prices){
   else if(evidence>=.55&&recentTarget>=.51&&shortTarget>=.49&&persistence>=.45)signal="SIGNAL";
   else if(evidence<.43)signal="AVOID";
   const aiDecision=mavenAIDecisionLayer("risefall",signal,evidence,[recentTarget,shortTarget,midTarget,longTarget,persistence,1-reversalPressure,recentMove,trendRate,momentum],conflict,clean.length<100||recentDirectional.length<15||stats.some(x=>x.size<=100&&x.directional<10),clean.length);signal=aiDecision.signal;
-  return {selected:state.selectedRiseFall,stats,recentRate,recentMove,trendRate,momentum,persistence,streak,reversalPressure,evidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentTarget,shortTarget,midTarget,longTarget};
+  return {selected:state.selectedRiseFall,stats,recentRate,recentMove,trendRate,momentum,persistence,streak,reversalPressure,evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentTarget,shortTarget,midTarget,longTarget};
 }
 
 function riseFallEntry(prices,analysis){
