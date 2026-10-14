@@ -383,7 +383,7 @@ body{
   position:relative;
   overflow:hidden;
 }
-.app .live-card::before,.app .market-picker-card, .app .control-card::before,.app .distribution-card::before,
+.app .live-card::before,.app .market-picker-card::before, .app .control-card::before,.app .distribution-card::before,
 .app .stream-card::before,.app .details::before,.app #overUnderControls::before,
 .app #evenOddControls, .app #riseFallControls::before,.app #engineRoot::before{
   content:"";
