@@ -7,7 +7,8 @@ function renderOverUnder(root,d,c,last,n){
   state.ouSignalSnapshot={key:ouValidationKey(),active:activeSignal&&!e.probabilityConflict,signal:e.signal,probabilityConflict:!!e.probabilityConflict,tickCount:state.digits.length};
   autoTradeUpdateLiveFields();
   let reason;
-  if(e.probabilityConflict)reason="Probability Comparison is blocking the selected setup because the complementary setup has stronger live probability evidence.";
+  if(e.probabilityConflict)reason="WAIT: Probability Comparison conflicts with the selected setup because the complementary setup has stronger observed live frequency. The entry is blocked until evidence aligns.";
+  else if(e.windowConflict)reason="WAIT: Recent and longer-window behaviour conflict. The AI is withholding the signal until the windows align more clearly.";
   else if(e.signal==="AVOID")reason="The selected setup does not have enough aligned A-Setup evidence.";
   else if(e.signal==="WAIT")reason="The selected setup is still building enough independent evidence across the required analysis windows.";
   else if(e.signal==="STRONG SIGNAL")reason="Probability, momentum, trend, transitions, reaction behavior, recency, consistency and context are aligned for "+setup+".";
@@ -20,7 +21,7 @@ function renderOverUnder(root,d,c,last,n){
     "A-Setup alignment: probability "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentum*100)+" • trend "+Math.round(e.trend*100)+" • transitions "+Math.round(e.transition*100),
     "Reaction "+Math.round(e.reaction*100)+" • clustering "+Math.round(e.cluster*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
     "Historical "+Math.round(e.historical*100)+" • current context "+Math.round(e.context*100)+" • evidence "+Math.round(e.evidence*100),
-    e.probabilityConflict?"× Complementary probability conflict — selected setup blocked":entry?"✓ Entry candidates "+entry.main+" passed historical reaction filters":"× Entry candidates remain inactive or did not pass validation",
+    e.probabilityConflict?"× Complementary probability conflict — waiting for stronger agreement":e.windowConflict?"× Recent and long-window evidence conflict — waiting for alignment":entry?"✓ Entry candidates "+entry.main+" passed historical reaction filters":"× Entry candidates remain inactive or did not pass validation",
     ouValidationSummary()
   ],n);
 }
@@ -684,15 +685,17 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   const context=Math.max(0,Math.min(1,(selected.cluster*.55)+(Math.min(1,selected.streak/4)*.2)+(selected.recent>=selected.short50?.15:0)+(selected.recent>=selected.long?.1:0)));
   const reaction=selected.transitions>=8?Math.max(0,Math.min(1,.5+(selected.transitionRate-baseline)*2.5)):0;
   const evidence=probability*.20+momentumScore*.10+trendScore*.08+transition*.14+selected.cluster*.08+reaction*.10+recency*.10+consistency*.08+historical*.07+context*.05;
+  const windowConflict=(selected.recent<baseline-.08&&selected.long>baseline+.08)||(Math.abs(selected.recent-selected.long)>=.18&&selected.recent<baseline);
+  const evidenceConflict=probabilityConflict||windowConflict;
   let signal="WAIT";
   if(n<100)signal="WAIT";
   else if(!distribution.ready)signal="WAIT";
   else if(!distribution.pass)signal="AVOID";
-  else if(probabilityConflict)signal="AVOID";
+  else if(evidenceConflict)signal="WAIT";
   else if(evidence>=.68&&selectedRate>=baseline-.03&&selected.weightedTransitionRate>=Math.max(.48,baseline-.05)&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
   else if(evidence>=.54&&selectedRate>=baseline-.07&&consistency>=.45)signal="SIGNAL";
   else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
-  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,distribution,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
+  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,windowConflict,evidenceConflict,distribution,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
 }
 function distributionBarFlags(d){
   const windowDigits=d.slice(-1000);
@@ -944,15 +947,15 @@ function parityStats(d,selectedSide){
   const recency=Math.max(0,Math.min(1,.5+(recent-long)*3));
   const context=Math.max(0,Math.min(1,clustering*.65+Math.min(1,streak/5)*.2+(recent>=short50?.15:0)));
   const evidence=probability*.20+momentumScore*.12+trendScore*.08+transition*.15+clustering*.10+recency*.10+consistency*.10+historical*.08+context*.07;
-  const conflict=Math.abs(recent-(1-recent))>.20&&recent<.5;
+  const conflict=(recent<.43&&long>.53)||(Math.abs(recent-long)>=.16&&recent<.5)||(recent<.45&&short50>.56);
   let signal="WAIT";
   const n=d.length;
   if(n<100)signal="WAIT";
-  else if(conflict)signal="AVOID";
+  else if(conflict)signal="WAIT";
   else if(evidence>=.68&&recent>=.53&&recentTransitionRate>=.50&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
   else if(evidence>=.54&&recent>=.50&&consistency>=.45)signal="SIGNAL";
   else if(evidence<.38||recent<.44)signal="AVOID";
-  return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,probability,momentumScore,trendScore,transition,historical,recency,context,evidence,signal,target,other};
+  return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,probability,momentumScore,trendScore,transition,historical,recency,context,evidence,conflict,signal,target,other};
 }
 function parityEntryCandidates(d,selectedSide){
   const key=x=>x%2===0?"E":"O";
@@ -1082,7 +1085,7 @@ function renderEvenOdd(root,d,last,n){
   const entry=entryActive?selectParityEntry(d,state.selectedParity):null;
   const entryDisplay=entry||{main:entryActive?"NO STRONG ENTRY":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No trigger has enough conditional lift toward the selected Final Signal.":"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."};
   const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
-  const reason=e.signal==="STRONG SIGNAL"?"Multiple parity evidence layers are aligned for "+state.selectedParity+".":e.signal==="SIGNAL"?"The selected parity has sufficient multi-factor evidence, but it is not at STRONG SIGNAL level.":e.signal==="AVOID"?"The selected parity has unfavorable or conflicting evidence.":"Evidence for the selected parity is still developing.";
+  const reason=e.conflict?"WAIT: recent and longer-window parity behaviour conflict. The AI will wait for stronger agreement.":e.signal==="STRONG SIGNAL"?"Multiple parity evidence layers are aligned for "+state.selectedParity+".":e.signal==="SIGNAL"?"The selected parity has sufficient multi-factor evidence, but it is not at STRONG SIGNAL level.":e.signal==="AVOID"?"The selected parity has unfavorable evidence.":"Evidence for the selected parity is still developing.";
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
     "Selected parity: "+state.selectedParity,
     "Recent parity: "+pattern,
@@ -1136,13 +1139,15 @@ function riseFallAnalysis(prices){
     .25*recentTarget+.20*shortTarget+.15*midTarget+.10*longTarget+
     .12*persistence+.10*(state.selectedRiseFall==="RISE"?recentMove:1-recentMove)+.08*(1-reversalPressure)
   ));
+  const conflict=(recentTarget<.45&&longTarget>.55)||(Math.abs(recentTarget-longTarget)>=.16&&recentTarget<.5)||(shortTarget<.43&&midTarget>.56);
   let signal="WAIT";
   if(clean.length<100||recentDirectional.length<15||stats.some(x=>x.size<=100&&x.directional<10))signal="WAIT";
+  else if(conflict)signal="WAIT";
   else if(recentTarget<.43||shortTarget<.42||persistence<.38)signal="AVOID";
   else if(evidence>=.67&&recentTarget>=.57&&shortTarget>=.54&&midTarget>=.51&&persistence>=.53&&clean.length>=200)signal="STRONG SIGNAL";
   else if(evidence>=.55&&recentTarget>=.51&&shortTarget>=.49&&persistence>=.45)signal="SIGNAL";
   else if(evidence<.43)signal="AVOID";
-  return {selected:state.selectedRiseFall,stats,recentRate,recentMove,trendRate,momentum,persistence,streak,reversalPressure,evidence,signal,recentTarget,shortTarget,midTarget,longTarget};
+  return {selected:state.selectedRiseFall,stats,recentRate,recentMove,trendRate,momentum,persistence,streak,reversalPressure,evidence,conflict,signal,recentTarget,shortTarget,midTarget,longTarget};
 }
 
 function riseFallEntry(prices,analysis){
@@ -1222,7 +1227,9 @@ function renderRiseFall(root,last,n){
   };
   const latest=a.stats.map(x=>x.directional>=10?Math.round(x.rate*100)+"% RISE":"—").join(" / ");
   const recentPattern=prices.slice(-8).reduce((acc,x,i,arr)=>i===0?acc:acc.concat(x>arr[i-1]?"R":x<arr[i-1]?"F":"X"),[]).join(" → ");
-  const reason=a.signal==="STRONG SIGNAL"
+  const reason=a.conflict
+    ?"WAIT: short-term and longer-term price direction disagree. The AI is waiting for clearer confirmation."
+    :a.signal==="STRONG SIGNAL"
     ?"Multi-window price direction, momentum, persistence and movement magnitude align for "+a.selected+"."
     :a.signal==="SIGNAL"
     ?"The selected direction has supporting price evidence, but it is below the strongest alignment level."
@@ -1237,6 +1244,7 @@ function renderRiseFall(root,last,n){
     "Selected-direction support: "+Math.round(a.recentTarget*100)+"% • movement-weighted rise: "+Math.round(a.recentMove*100)+"%",
     "Momentum "+Math.round(a.momentum*100)+" • persistence "+Math.round(a.persistence*100)+" • target streak "+a.streak,
     "Reversal pressure "+Math.round(a.reversalPressure*100)+" • evidence "+Math.round(a.evidence*100)+"%",
+    a.conflict?"× Directional windows conflict — waiting for stronger agreement":"✓ Directional conflict check passed",
     entry?"✓ Confirmed entry: historical trigger matched the live stream with qualified follow-through toward "+a.selected:"× No entry confirmed yet; historical patterns alone cannot trigger an entry"
   ],n);
 }
