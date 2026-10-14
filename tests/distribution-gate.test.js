@@ -161,3 +161,53 @@ test('one qualified Over/Under entry candidate is visibly marked incomplete with
   const evidenceSource = appSource.slice(evidenceStart, evidenceEnd);
   assert.doesNotMatch(evidenceSource, /overUnderEntry/);
 });
+
+test('Over/Under reaction depth preserves valid one-tick evidence when longer horizons are unavailable', () => {
+  const start = appSource.indexOf('function ouReactionDepth');
+  assert.notEqual(start, -1, 'ouReactionDepth must exist');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const run = vm.runInNewContext(source + '\nouReactionDepth');
+  const result = run([5, 6], 5, 4, 'OVER');
+  assert.equal(result.n1, 1);
+  assert.equal(result.r1, 1);
+  assert.equal(result.n2, 0);
+  assert.equal(result.n3, 0);
+});
+
+test('Over/Under reaction depth preserves two-tick continuation without requiring three ticks', () => {
+  const start = appSource.indexOf('function ouReactionDepth');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const run = vm.runInNewContext(source + '\nouReactionDepth');
+  const result = run([5, 6, 7], 5, 4, 'OVER');
+  assert.equal(result.n1, 1);
+  assert.equal(result.r1, 1);
+  assert.equal(result.n2, 1);
+  assert.equal(result.r2, 1);
+  assert.equal(result.n3, 0);
+});
+
+test('complementary Over/Under digit mapping is symmetric for all five pairs', () => {
+  const start = appSource.indexOf('function overUnderEvidence');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const evidenceSource = appSource.slice(start, end);
+  const harness = `
+    const ouStats = () => ({
+      momentum: 0, trend: 0, weightedTransitionRate: .6, long: .5,
+      recent: .5, short50: .5, mid250: .5, medium: .5,
+      cluster: .5, streak: 2, transitions: 10, transitionRate: .6
+    });
+    const ouRate = () => .5;
+    ${gateSource}
+    ${evidenceSource}
+    overUnderEvidence
+  `;
+  const runEvidence = vm.runInNewContext(harness);
+  for (let digit = 0; digit <= 4; digit++) {
+    const over = runEvidence(overPassTicks, digit, 'OVER');
+    const under = runEvidence(underPassTicks, 9 - digit, 'UNDER');
+    assert.equal(over.oppositeDigit, 9 - digit, 'OVER ' + digit + ' should pair with UNDER ' + (9 - digit));
+    assert.equal(under.oppositeDigit, digit, 'UNDER ' + (9 - digit) + ' should pair with OVER ' + digit);
+  }
+});
