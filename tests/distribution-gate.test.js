@@ -262,6 +262,7 @@ test('bot entry validation refuses an incomplete or duplicated entry pair', () =
     };
     const ouValidationKey = () => 'R_100|2|OVER';
     const autoTradeEntrySelection = () => state.ouEntrySnapshot?.active ? state.ouEntrySnapshot.digits : [];
+    const $ = () => ({ checked: false });
     const spikeRiskAssessment = () => ({ level: 'LOW', title: 'LOW SPIKE RISK' });
     ${source}
     autoTradeReadyToEnter
