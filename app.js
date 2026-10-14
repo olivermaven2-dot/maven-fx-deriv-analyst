@@ -244,7 +244,12 @@ function receiveScannerTick(t){
   deepScannerEvaluate(false);
 }
 function scannerRisk(r){
-  if(!state.connected||!r.lastTickAt||Date.now()-r.lastTickAt>60000)return {level:"UNKNOWN",reason:"No sufficiently fresh live ticks"};
+  // Use the timestamp of the latest real Deriv tick, whether it came from the initial
+  // ticks_history snapshot or the live subscription. A fresh history alone is enough
+  // to compare markets while subscriptions are warming up.
+  const latestEpoch=Number(r.ticks.at(-1)?.epoch)||0;
+  const latestTickAt=r.lastTickAt&&Date.now()-r.lastTickAt<=60000?r.lastTickAt:(latestEpoch?latestEpoch*1000:0);
+  if(!state.connected||!latestTickAt||Date.now()-latestTickAt>60000)return {level:"UNKNOWN",reason:"No sufficiently fresh Deriv ticks"};
   if(r.ticks.length<100)return {level:"UNKNOWN",reason:"Fewer than 100 price samples"};
   const moves=[];for(let i=1;i<r.ticks.length;i++)moves.push(Math.abs(r.ticks[i].quote-r.ticks[i-1].quote));
   const nonzero=moves.filter(x=>x>0);if(nonzero.length<40)return {level:"UNKNOWN",reason:"Insufficient movement baseline"};
