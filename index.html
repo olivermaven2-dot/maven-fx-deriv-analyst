@@ -71,11 +71,11 @@
         <label>Martingale multiplier<input id="autoTradeMartingale" type="number" min="1" max="10" step="0.1" value="2" inputmode="decimal"></label>
         <label>Take profit (<span class="autoTradeCurrencyText">account currency</span>)<input id="autoTradeTP" type="number" min="0.01" step="0.01" value="2" inputmode="decimal"></label>
         <label>Stop loss (<span class="autoTradeCurrencyText">account currency</span>)<input id="autoTradeSL" type="number" min="0.01" step="0.01" value="3" inputmode="decimal"></label>
-        <label class="auto-trade-wide"><input id="autoTradeRecoveryEnabled" type="checkbox"> Enable recovery mode (OFF = stop immediately on any loss)</label>
+        <label class="auto-trade-wide"><input id="autoTradeRecoveryEnabled" type="checkbox"> Enable recovery mode (OFF = wait for the next valid entry after a loss)</label>
         <div id="autoTradeRecoveryFields" class="auto-trade-wide" hidden>
           <label>First recovery digit (defaults to selected setup digit)<input id="autoTradeRecoveryDigit1" type="number" min="0" max="9" step="1" value="2" inputmode="numeric"></label>
           <label>Second recovery digit<input id="autoTradeRecoveryDigit2" type="number" min="0" max="9" step="1" value="5" inputmode="numeric"></label>
-          <small>OVER setup: recovery 1 is OVER, recovery 2 is UNDER. UNDER setup: recovery 1 is UNDER, recovery 2 is OVER. Recovery trades bypass analysis and use your manual digits.</small>
+          <small>OVER setup: recovery 1 is OVER, recovery 2 is UNDER. UNDER setup: recovery 1 is UNDER, recovery 2 is OVER. Recovery trades bypass analysis and use your manual digits. With recovery OFF, a loss ends that entry sequence and the bot waits for a fresh valid entry.</small>
         </div>
       </div>
       <div id="autoTradeRealGate" class="auto-trade-real-gate" hidden><label><input id="autoTradeRealCheck" type="checkbox"> I understand real-money trades can lose money.</label><input id="autoTradeRealPhrase" type="text" autocomplete="off" placeholder="Type TRADE REAL to unlock real account trading"></div>
