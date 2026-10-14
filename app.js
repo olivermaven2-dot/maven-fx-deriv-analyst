@@ -765,9 +765,16 @@ function panel(stateText,reason,entry,why,n){
   return `<section class="engine-panel"><div class="decision-summary"><div class="panel-kicker">FINAL SIGNAL</div><div class="state ${cls}">${esc(stateText)}</div><div class="spike-risk-banner spike-risk-unknown"><strong>SPIKE STATUS: CHECKING</strong></div>${entry?entryHtml(entry):""}</div><details class="why-details"><summary>Why this state?</summary><div class="why-content"><div class="why-section"><strong>Signal reason</strong><p class="reason">${esc(reason)}</p></div><div class="why-section"><strong class="spike-reason-label">Spike assessment</strong><p class="spike-risk-reason">Checking recent market movement.</p></div><div class="why-section"><strong>Entry reason</strong><p class="entry-reason">${esc(entryReason)}</p><p class="entry-evidence">${esc(entryEvidence)}</p></div><div class="why"><div class="why-title">Analysis checks</div><ul>${why.map(x=>`<li class="${x[0]==="×"?"block":""}">${esc(x)}</li>`).join("")}</ul></div><details class="analysis-details"><summary>Technical details</summary><div class="stats"><div class="stat"><span>Sample</span><strong>${n}</strong></div><div class="stat"><span>Evidence</span><strong>${entryEvidence}</strong></div><div class="stat"><span>Data quality</span><strong>${n>=500?"GOOD":n>=100?"BUILDING":"INSUFFICIENT"}</strong></div><div class="stat"><span>Last digit</span><strong>${state.digits?.at(-1)??"—"}</strong></div></div></details></div></details></section>`;
 }
 function entryHtml(e){
-  const cards=Array.isArray(e.entries)
-    ? '<div class="entry-candidates">'+e.entries.map(x=>'<div class="entry-candidate"><strong>'+esc(x.digit)+'</strong><span>SCORE '+esc(x.score)+'/100</span></div>').join("")+'</div>'
-    : '<div class="entry-candidates"><div class="entry-candidate"><strong>'+esc(e.main||"NO ENTRY")+'</strong>'+(Number.isFinite(Number(e.score))&&e.score!==""?'<span>SCORE '+esc(Math.round(Number(e.score)))+'/100</span>':Number.isFinite(Number.parseFloat(e.confidence))&&Number.parseFloat(e.confidence)>0?'<span>SCORE '+esc(Math.round(Number.parseFloat(e.confidence)))+'/100</span>':'')+'</div></div>';
+  let cards;
+  if(Array.isArray(e.entries)){
+    const candidateCards=e.entries.map(x=>'<div class="entry-candidate"><strong>'+esc(x.digit)+'</strong><span>SCORE '+esc(x.score)+'/100</span></div>').join("");
+    const secondSlotMissing=e.status==="1 VALID CANDIDATE"&&e.entries.length===1;
+    const pendingCard=secondSlotMissing?'<div class="entry-candidate entry-pending"><strong>—</strong><span>SECOND DIGIT NOT QUALIFIED</span></div>':"";
+    const status=e.status?'<div class="entry-status">'+esc(e.status)+'</div>':"";
+    cards=status+'<div class="entry-candidates">'+candidateCards+pendingCard+'</div>';
+  }else{
+    cards='<div class="entry-candidates"><div class="entry-candidate"><strong>'+esc(e.main||"NO ENTRY")+'</strong>'+(Number.isFinite(Number(e.score))&&e.score!==""?'<span>SCORE '+esc(Math.round(Number(e.score)))+'/100</span>':Number.isFinite(Number.parseFloat(e.confidence))&&Number.parseFloat(e.confidence)>0?'<span>SCORE '+esc(Math.round(Number.parseFloat(e.confidence)))+'/100</span>':'')+'</div></div>';
+  }
   return '<div class="entry"><div class="entry-head">ENTRY DIGITS</div>'+cards+'</div>';
 }
 function parityStats(d,selectedSide){
