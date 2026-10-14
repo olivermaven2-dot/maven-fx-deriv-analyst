@@ -38,7 +38,7 @@ footer{text-align:center;color:#68768d;font-size:10px;padding:10px 16px 28px}
 .ou-validation-note{font-size:10px;line-height:1.5;color:var(--muted);margin:7px 0}
 .ou-validation-breakeven{font-size:11px;padding:9px;border:1px solid var(--line);border-radius:8px;margin:8px 0;line-height:1.5}
 .ou-validation-table{width:100%;overflow-x:auto}
-.ou-validation-row{display:grid;grid-template-columns:48px 58px 70px 82px 82px 66px;gap:6px;align-items:center;min-width:440px;padding:9px 4px;border-bottom:1px solid var(--line);font-size:10px;text-align:center}
+.ou-validation-row{display:grid;grid-template-columns:48px 58px 70px 82px 82px 58px 66px;gap:6px;align-items:center;min-width:440px;padding:9px 4px;border-bottom:1px solid var(--line);font-size:10px;text-align:center}
 .ou-validation-row>*:first-child{text-align:left}
 .ou-validation-head{font-size:8px;color:var(--muted);font-weight:900;letter-spacing:.04em}
 .ou-validation-empty{font-size:11px;color:var(--muted);line-height:1.6;padding:10px 2px}
