@@ -14,8 +14,21 @@
     <div class="brand">MAVEN FX</div>
     <div class="subbrand">DERIV ANALYST</div>
   </div>
-  <div id="statusBadge" class="status connecting"><span class="dot"></span><span id="statusText">Connecting</span></div>
+  <div class="topbar-right">
+    <div id="statusBadge" class="status connecting"><span class="dot"></span><span id="statusText">Connecting</span></div>
+    <div class="quick-actions" aria-label="Tools">
+      <button id="botIcon" class="quick-action" type="button" aria-label="Open AUTO BOT panel" title="AUTO BOT"><span aria-hidden="true">🤖</span><small>BOT</small></button>
+      <button id="scannerIcon" class="quick-action scanner-action" type="button" aria-label="Open Deep Scanner" title="Deep Scanner"><span aria-hidden="true">⌕</span><small>SCAN</small></button>
+    </div>
+  </div>
 </header>
+<div id="toolModal" class="tool-modal" hidden role="dialog" aria-modal="true" aria-labelledby="toolModalTitle">
+  <div class="tool-backdrop" data-close-modal></div>
+  <section class="tool-dialog">
+    <div class="tool-dialog-head"><div><span class="eyebrow" id="toolModalEyebrow">MAVEN FX TOOLS</span><h2 id="toolModalTitle">Deep Scanner</h2></div><button type="button" id="toolModalClose" class="tool-close" aria-label="Close">×</button></div>
+    <div id="toolModalBody" class="tool-modal-body"></div>
+  </section>
+</div>
 
 <main class="app">
   <section class="live-card" aria-label="Live market data">
@@ -82,6 +95,6 @@
 </main>
 
 <footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261014-compact-ui"></script>
+<script src="app.js?v=20261014-tools-1"></script>
 </body>
 </html>
