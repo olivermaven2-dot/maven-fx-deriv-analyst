@@ -74,12 +74,12 @@ test('uses the most recent 1,000 ticks when the input is longer', () => {
 });
 
 test('manual bot entry digits replace automatic digits only after passing identical Entry Engine qualification', () => {
-  assert.match(appSource, /function overUnderEntry\\(d,selectedDigit,selectedSide,onlyCandidates=null\\)/);
-  assert.match(appSource, /if\\(Array\\.isArray\\(onlyCandidates\\)&&!onlyCandidates\\.includes\\(candidate\\)\\)continue/);
-  assert.match(appSource, /function autoTradeEntrySelection\\(\\)/);
-  assert.match(appSource, /overUnderEntry\\(state\\.digits,state\\.selectedDigit,state\\.selectedSide,\\[first,second\\]\\)/);
+  assert.match(appSource, /function overUnderEntry\(d,selectedDigit,selectedSide,onlyCandidates=null\)/);
+  assert.match(appSource, /if\(Array\\.isArray\(onlyCandidates\)&&!onlyCandidates\\.includes\(candidate\)\)continue/);
+  assert.match(appSource, /function autoTradeEntrySelection\(\)/);
+  assert.match(appSource, /overUnderEntry\(state\\.digits,state\\.selectedDigit,state\\.selectedSide,\\[first,second\\]\)/);
   assert.match(appSource, /manual digits have not both passed the Entry Engine rules/);
-  assert.match(appSource, /const candidates=autoTradeEntrySelection\\(\\)/);
+  assert.match(appSource, /const candidates=autoTradeEntrySelection\(\)/);
   const page = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.match(page, /id="autoTradeManualEntriesEnabled"/);
   assert.match(page, /id="autoTradeManualDigit1"/);
