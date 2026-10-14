@@ -55,13 +55,6 @@
     </div>
   </section>
 
-  <section class="distribution-card" aria-label="Live digit distribution">
-    <div class="section-title"><span>DIGIT DISTRIBUTION</span><span id="distributionInfo">Waiting for ticks</span></div>
-    <p class="distribution-note">Rolling 1,000-tick window • percentages from the live Deriv tick stream</p>
-    <div id="digitDistribution" class="digit-distribution" aria-live="polite"></div>
-    <div class="distribution-legend"><span><i class="legend-dot most"></i> Most appearing</span><span><i class="legend-dot least"></i> Least appearing</span></div>
-  </section>
-
   <section id="aiAnalyst" class="ai-analyst" aria-live="polite" aria-label="Maven AI analyst">
     <div class="ai-head"><div class="ai-orb"><span>AI</span></div><div class="ai-heading"><div class="ai-eyebrow">MAVEN FX INTELLIGENCE</div><h2>AI Analyst</h2><p>Live evidence review • Rule-based analysis</p></div><span id="aiStatus" class="ai-status">ANALYSING</span></div>
     <div class="ai-verdict"><span id="aiVerdictLabel">CURRENT ASSESSMENT</span><strong id="aiVerdict">Collecting live data</strong><p id="aiSummary">The analyst will evaluate incoming digits and the selected setup as live ticks arrive.</p></div>
@@ -72,6 +65,15 @@
     </div>
     <div class="ai-reason"><span>AI REASONING</span><p id="aiReasoning">Waiting for live evidence.</p></div>
   </section>
+
+  <section class="distribution-card" aria-label="Live digit distribution">
+    <div class="section-title"><span>DIGIT DISTRIBUTION</span><span id="distributionInfo">Waiting for ticks</span></div>
+    <p class="distribution-note">Rolling 1,000-tick window • percentages from the live Deriv tick stream</p>
+    <div id="digitDistribution" class="digit-distribution" aria-live="polite"></div>
+    <div class="distribution-legend"><span><i class="legend-dot most"></i> Most appearing</span><span><i class="legend-dot least"></i> Least appearing</span></div>
+  </section>
+
+
 
   <section id="engineRoot" class="engine"></section>
 
@@ -93,6 +95,6 @@
 </main>
 
 <footer>Analysis only • No trading or contract execution</footer>
-<script src="app.js?v=20261014-ai-panel"></script>
+<script src="app.js?v=20261014-ai-visible"></script>
 </body>
 </html>
