@@ -81,7 +81,7 @@ test('app.js remains syntactically valid', () => {
 test('distribution failure forces Final Signal to AVOID in the existing evidence pipeline', () => {
   const evidenceStart = appSource.indexOf('function overUnderEvidence');
   assert.notEqual(evidenceStart, -1, 'overUnderEvidence must exist in app.js');
-  const evidenceEnd = appSource.indexOf('\\nfunction ', evidenceStart + 10);
+  const evidenceEnd = appSource.indexOf('\nfunction ', evidenceStart + 10);
   const evidenceSource = appSource.slice(evidenceStart, evidenceEnd);
   const harness = `
     const ouStats = () => ({
@@ -102,7 +102,7 @@ test('distribution failure forces Final Signal to AVOID in the existing evidence
 
 test('complementary probability conflict still blocks a distribution-passing setup', () => {
   const evidenceStart = appSource.indexOf('function overUnderEvidence');
-  const evidenceEnd = appSource.indexOf('\\nfunction ', evidenceStart + 10);
+  const evidenceEnd = appSource.indexOf('\nfunction ', evidenceStart + 10);
   const evidenceSource = appSource.slice(evidenceStart, evidenceEnd);
   const harness = `
     const ouStats = () => ({
