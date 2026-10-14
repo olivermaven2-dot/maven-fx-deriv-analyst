@@ -736,15 +736,12 @@ function autoTradeEntrySelection(){
   const first=Number(firstRaw),second=Number(secondRaw);
   if(!Number.isInteger(first)||first<0||first>9||!Number.isInteger(second)||second<0||second>9){autoTrade.lastManualBlockReason="Manual entry digits must be whole numbers from 0 to 9.";return [];}
   if(first===second){autoTrade.lastManualBlockReason="Manual entry digits must be different.";return [];}
-  // Manual digits bypass every Entry Engine candidate filter. The only manual-digit filter is the visible red/green distribution-bar rule.
+  // Manual digits bypass every Entry Engine candidate filter. Each digit is assessed independently; keep whichever digit has neither a red nor green distribution bar.
   const bars=distributionBarFlags(state.digits);
-  const blocked=[];
-  for(const digit of [first,second]){
-    if(bars.most[digit]||bars.least[digit])blocked.push("digit "+digit+(bars.most[digit]&&bars.least[digit]?" has a red and green distribution bar":bars.most[digit]?" has a green distribution bar":" has a red distribution bar"));
-  }
-  if(blocked.length){autoTrade.lastManualBlockReason=blocked.join("; ")+". Waiting until both manual digits have neither bar.";return [];}
-  autoTrade.lastManualBlockReason="";
-  return [first,second];
+  const selected=[first,second],eligible=selected.filter(digit=>!bars.most[digit]&&!bars.least[digit]);
+  const blocked=selected.filter(digit=>bars.most[digit]||bars.least[digit]).map(digit=>"digit "+digit+(bars.most[digit]&&bars.least[digit]?" has a red and green distribution bar":bars.most[digit]?" has a green distribution bar":" has a red distribution bar"));
+  autoTrade.lastManualBlockReason=blocked.length?blocked.join("; ")+". "+(eligible.length?"Using the remaining manual digit "+eligible[0]+".":"Both manual digits have red/green bars; waiting for an eligible digit."):"";
+  return eligible;
 }
 function renderParityControls(){
   document.querySelectorAll(".parity-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.parity===state.selectedParity)); const label=$("paritySetupLabel"); if(label)label.textContent=state.selectedParity;
@@ -1357,8 +1354,8 @@ function autoTradeReadyToEnter(digit){
   if(risk.level==="UNKNOWN"||risk.level==="HIGH")return {ok:false,reason:risk.title};
   if(risk.level==="MODERATE"&&state.ouSignalSnapshot.signal!=="STRONG SIGNAL")return {ok:false,reason:"moderate spike risk requires STRONG SIGNAL"};
   const selectedEntries=autoTradeEntrySelection();
-  if(selectedEntries.length!==2||selectedEntries[0]===selectedEntries[1])return {ok:false,reason:$("autoTradeManualEntriesEnabled")?.checked?"manual digits must be distinct and have neither a red nor green distribution bar":"exactly two distinct validated entry digits are required"};
-  if(!selectedEntries.includes(digit))return {ok:false,reason:$("autoTradeManualEntriesEnabled")?.checked?"digit is not one of the two valid manual digits without red/green bars":"digit is not a current Entry Engine candidate"};
+  if(manualEntriesEnabled?(selectedEntries.length<1||selectedEntries.length>2):(selectedEntries.length!==2||selectedEntries[0]===selectedEntries[1]))return {ok:false,reason:manualEntriesEnabled?(autoTrade.lastManualBlockReason||"neither manual digit currently passes the red/green distribution-bar rule"):"exactly two distinct validated entry digits are required"};
+  if(!selectedEntries.includes(digit))return {ok:false,reason:manualEntriesEnabled?"digit is not an eligible manual digit without red/green bars":"digit is not a current Entry Engine candidate"};
   return {ok:true};
 }
 function processAutoTradeTick(digit){
