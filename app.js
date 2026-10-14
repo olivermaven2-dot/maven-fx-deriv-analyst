@@ -134,15 +134,17 @@ function handleMessage(d){
     return;
   }
   if(d.msg_type==="tick"){
-    const t=d.tick;
-    if(t&&t.symbol===state.symbol){
+    const raw=d.tick,sub=d.subscription||raw?.subscription,req=d.req_id;
+    if(!raw)return;
+    const t={...raw,subscription:sub,req_id:req};
+    if(t.symbol===state.symbol){
       renderSubscribedMarketStatus("connected");
       const r=state.deepScanner.data[t.symbol];
       const pending=Object.entries(state.deepScanner.subscribeRequests).find(([,sym])=>sym===t.symbol);
-      const scannerSub=!!(r?.subscriptionId&&t.subscription?.id===r.subscriptionId)||(!!pending&&String(t.req_id)===String(pending[0]));
-      if(scannerSub){if(pending)delete state.deepScanner.subscribeRequests[pending[0]];if(t.subscription?.id){request({forget:t.subscription.id,req_id:nextReq()});delete state.deepScanner.subscriptions[t.symbol];}if(r){r.subscriptionId=null;r.subscribed=false;}return;}
-      if(t.subscription?.id){state.primarySubscriptionId=t.subscription.id;state.primarySubscriptionSymbol=t.symbol;}
-      if(t.req_id!=null&&state.primarySubscribeRequests[t.req_id]===t.symbol)delete state.primarySubscribeRequests[t.req_id];
+      const scannerSub=!!(r?.subscriptionId&&sub?.id===r.subscriptionId)||(!!pending&&String(req)===String(pending[0]));
+      if(scannerSub){if(pending)delete state.deepScanner.subscribeRequests[pending[0]];if(sub?.id){request({forget:sub.id,req_id:nextReq()});delete state.deepScanner.subscriptions[t.symbol];}if(r){r.subscriptionId=null;r.subscribed=false;}return;}
+      if(sub?.id){state.primarySubscriptionId=sub.id;state.primarySubscriptionSymbol=t.symbol;}
+      if(req!=null&&state.primarySubscribeRequests[req]===t.symbol)delete state.primarySubscribeRequests[req];
       receiveTick(t);syncCurrentIntoScanner(t);
     }else receiveScannerTick(t);
   }
