@@ -74,16 +74,16 @@ test('uses the most recent 1,000 ticks when the input is longer', () => {
 });
 
 test('manual bot entry digits replace automatic digits only after passing identical Entry Engine qualification', () => {
-  assert.match(appSource, /function overUnderEntry\(d,selectedDigit,selectedSide,onlyCandidates=null\)/);
-  assert.match(appSource, /if\(Array\\.isArray\(onlyCandidates\)&&!onlyCandidates\\.includes\(candidate\)\)continue/);
-  assert.match(appSource, /function autoTradeEntrySelection\(\)/);
-  assert.match(appSource, /overUnderEntry\(state\\.digits,state\\.selectedDigit,state\\.selectedSide,\\[first,second\\]\)/);
-  assert.match(appSource, /manual digits have not both passed the Entry Engine rules/);
-  assert.match(appSource, /const candidates=autoTradeEntrySelection\(\)/);
+  assert.ok(appSource.includes('function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null)'));
+  assert.ok(appSource.includes('if(Array.isArray(onlyCandidates)&&!onlyCandidates.includes(candidate))continue'));
+  assert.ok(appSource.includes('function autoTradeEntrySelection()'));
+  assert.ok(appSource.includes('overUnderEntry(state.digits,state.selectedDigit,state.selectedSide,[first,second])'));
+  assert.ok(appSource.includes('manual digits have not both passed the Entry Engine rules'));
+  assert.ok(appSource.includes('const candidates=autoTradeEntrySelection()'));
   const page = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
-  assert.match(page, /id="autoTradeManualEntriesEnabled"/);
-  assert.match(page, /id="autoTradeManualDigit1"/);
-  assert.match(page, /id="autoTradeManualDigit2"/);
+  assert.ok(page.includes('id="autoTradeManualEntriesEnabled"'));
+  assert.ok(page.includes('id="autoTradeManualDigit1"'));
+  assert.ok(page.includes('id="autoTradeManualDigit2"'));
 });
 
 test('app.js remains syntactically valid', () => {
@@ -261,6 +261,7 @@ test('bot entry validation refuses an incomplete or duplicated entry pair', () =
       ouEntrySnapshot: { key: 'R_100|2|OVER', active: true, digits: [3] }
     };
     const ouValidationKey = () => 'R_100|2|OVER';
+    const autoTradeEntrySelection = () => state.ouEntrySnapshot?.active ? state.ouEntrySnapshot.digits : [];
     const spikeRiskAssessment = () => ({ level: 'LOW', title: 'LOW SPIKE RISK' });
     ${source}
     autoTradeReadyToEnter
