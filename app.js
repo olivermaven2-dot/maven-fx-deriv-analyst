@@ -2,7 +2,7 @@ function renderOverUnder(root,d,c,last,n){
   const e=overUnderEvidence(d,state.selectedDigit,state.selectedSide);
   const setup=state.selectedSide+" "+state.selectedDigit;
   const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
-  const entry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
+  const entry=activeSignal&&e.distribution.ready&&e.distribution.pass&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
   let reason;
   if(!e.distribution.ready)reason="AI is waiting for a complete 1,000-tick digit-distribution window before evaluating the selected setup.";
   else if(!e.distribution.pass)reason="AI distribution gate blocked this setup: "+e.distribution.failures.map(x=>x.digit+" ("+x.percent.toFixed(1)+"%"+(x.most?", most appearing":"")+(x.least?", least appearing":"")+")").join(", ")+". Every required digit must be below 10.5% with no red/green highlight.";
