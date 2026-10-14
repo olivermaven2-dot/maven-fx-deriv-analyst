@@ -498,17 +498,17 @@ test('recovery side selectors default to existing logic and allow independent Ov
 
 test('manual entry digits bypass Entry Engine filters but must have neither red nor green distribution bars', () => {
   const start = appSource.indexOf('function autoTradeEntrySelection');
-  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const end = appSource.indexOf('function renderParityControls', start);
   assert.notEqual(start, -1);
   const source = appSource.slice(start, end);
-  assert.match(source, /distributionBarFlags\\(state\\.digits\\)/);
-  assert.match(source, /bars\\.most\\[first\\]\\|\\|bars\\.least\\[first\\]\\|\\|bars\\.most\\[second\\]\\|\\|bars\\.least\\[second\\]/);
+  assert.ok(source.includes('distributionBarFlags(state.digits)'));
+  assert.ok(source.includes('bars.most[first]||bars.least[first]||bars.most[second]||bars.least[second]'));
   assert.doesNotMatch(source, /overUnderEntry/);
-  assert.match(appSource, /manual digits must be distinct and have neither a red nor green distribution bar/);
-  assert.match(appSource, /digit is not one of the two valid manual digits without red.*green bars/);
-  assert.match(appSource, /!manualEntriesEnabled&&!state\\.ouEntrySnapshot\\?\\.active/);
+  assert.ok(appSource.includes('manual digits must be distinct and have neither a red nor green distribution bar'));
+  assert.ok(appSource.includes('digit is not one of the two valid manual digits without red/green bars'));
+  assert.ok(appSource.includes('!manualEntriesEnabled&&!state.ouEntrySnapshot?.active'));
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
-  assert.match(html, /Use my manual entry digits instead of the Entry Engine digits/);
-  assert.match(html, /Each manual digit must only avoid a red \\(least frequent\\) or green \\(most frequent\\) distribution bar/);
-  assert.match(html, /Final Signal, probability comparison, live-data and spike-risk checks still apply/);
+  assert.ok(html.includes('Use my manual entry digits instead of the Entry Engine digits'));
+  assert.ok(html.includes('Each manual digit must only avoid a red (least frequent) or green (most frequent) distribution bar'));
+  assert.ok(html.includes('Final Signal, probability comparison, live-data and spike-risk checks still apply'));
 });
