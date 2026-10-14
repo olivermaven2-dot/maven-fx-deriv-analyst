@@ -78,9 +78,8 @@
       distribution.bars[digit] !== "none"
     );
 
-    const entryCandidates = Array.from(new Set(digits.filter(validDigit)))
-      .filter(digit => distribution.bars[digit] === "none")
-      .sort((a,b) => a-b);
+    const entryCandidates = Array.from({length: 10}, (_, digit) => digit)
+      .filter(digit => distribution.bars[digit] === "none");
 
     const eligible = distribution.total > 0 && failedDigits.length === 0;
     const reasons = [];
