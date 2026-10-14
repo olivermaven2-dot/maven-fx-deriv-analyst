@@ -87,7 +87,7 @@ connect();return;}
     setStatus("connecting",`Connected — requesting ${state.marketName||state.symbol}`);
     state.lastMessage="WebSocket OPEN";
     request({ping:1,req_id:nextReq()});
-    request({active_symbols:"brief",req_id:nextReq()});
+    request({active_symbols:"full",req_id:nextReq()});
     startMarket(true);
   };
   ws.onmessage=e=>{try{const msg=JSON.parse(e.data);state.lastMessage=msg.msg_type||"unknown";if($("diagMessage"))$("diagMessage").textContent=state.lastMessage;if($("diagLastMessageAt"))$("diagLastMessageAt").textContent=new Date().toLocaleTimeString();handleMessage(msg)}catch(err){state.lastError=String(err.message||err);if($("diagError"))$("diagError").textContent=state.lastError;console.warn("Invalid WebSocket message",err)}};
@@ -146,7 +146,7 @@ function normalizeMarket(m){
 }
 function loadMarkets(raw){
   const all=raw.map(normalizeMarket).filter(m=>m.symbol);
-  const preferred=all.filter(m=>/volatility|jump/i.test(m.market+" "+m.name+" "+m.submarket+" "+m.subgroup)||/^R_|^JD|^1HZ/i.test(m.symbol));
+  const preferred=all.filter(m=>/volatility|jump/i.test(m.market+" "+m.name+" "+m.submarket+" "+m.subgroup)||/^(?:R_|1HZ\d+V|JD\d+)/i.test(m.symbol));
   state.markets=(preferred.length?preferred:all).sort((a,b)=>a.name.localeCompare(b.name));
   marketSelect.innerHTML="";
   const groups={};
