@@ -95,12 +95,13 @@ connect();return;}
     clearTimeout(state.connectTimer);
     state.connected=false;
     state.lastError="Browser WebSocket error";
+    renderSubscribedMarketStatus("error");
     setStatus("error","WebSocket error — switching endpoint");
   };
   ws.onclose=e=>{
     clearTimeout(state.connectTimer);
     state.connected=false;state.primarySubscriptionId=null;state.primarySubscriptionSymbol="";state.primaryHistoryRequests={};state.primarySubscribeRequests={};
-    state.lastError=`Close ${e.code}${e.reason?": "+e.reason:""}${e.code===1006?" — abnormal close before a WebSocket close frame":""}`;renderSubscribedMarketStatus("switching");
+    state.lastError=`Close ${e.code}${e.reason?": "+e.reason:""}${e.code===1006?" — abnormal close before a WebSocket close frame":""}`;renderSubscribedMarketStatus("offline");
     state.endpointIndex=(state.endpointIndex+1)%WS_URLS.length;
     setStatus("offline",`Disconnected (${e.code}) — switching endpoint`);
     scheduleReconnect();
@@ -138,13 +139,13 @@ function handleMessage(d){
     if(!raw)return;
     const t={...raw,subscription:sub,req_id:req};
     if(t.symbol===state.symbol){
-      renderSubscribedMarketStatus("connected");
       const r=state.deepScanner.data[t.symbol];
       const pending=Object.entries(state.deepScanner.subscribeRequests).find(([,sym])=>sym===t.symbol);
       const scannerSub=!!(r?.subscriptionId&&sub?.id===r.subscriptionId)||(!!pending&&String(req)===String(pending[0]));
       if(scannerSub){if(pending)delete state.deepScanner.subscribeRequests[pending[0]];if(sub?.id){request({forget:sub.id,req_id:nextReq()});delete state.deepScanner.subscriptions[t.symbol];}if(r){r.subscriptionId=null;r.subscribed=false;}return;}
       if(sub?.id){state.primarySubscriptionId=sub.id;state.primarySubscriptionSymbol=t.symbol;}
       if(req!=null&&state.primarySubscribeRequests[req]===t.symbol)delete state.primarySubscribeRequests[req];
+      if(state.primarySubscriptionSymbol===t.symbol && state.primarySubscriptionId)renderSubscribedMarketStatus("connected");
       receiveTick(t);syncCurrentIntoScanner(t);
     }else receiveScannerTick(t);
   }
@@ -1231,7 +1232,7 @@ marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symb
 let touchX=0,touchY=0;
 document.querySelector(".engine-nav").addEventListener("touchstart",e=>{touchX=e.changedTouches[0].clientX;touchY=e.changedTouches[0].clientY},{passive:true});
 document.querySelector(".engine-nav").addEventListener("touchend",e=>{const dx=e.changedTouches[0].clientX-touchX,dy=e.changedTouches[0].clientY-touchY;if(Math.abs(dx)>55&&Math.abs(dx)>Math.abs(dy)){const names=["overunder","evenodd","risefall"],i=names.indexOf(state.engine),next=names[Math.max(0,Math.min(2,i+(dx<0?1:-1)))];document.querySelector(`[data-engine="${next}"]`).click()}},{passive:true});
-setInterval(()=>{if(state.deepScanner.enabled&&Date.now()-state.deepScanner.lastScanAt>10000)deepScannerEvaluate(false);if(state.lastTickAt){$("diagAge").textContent=Math.round((Date.now()-state.lastTickAt)/1000)+"s";if(Date.now()-state.lastTickAt>15000&&state.connected)setStatus("offline","Waiting for data")}const root=$("engineRoot");if(root&&root.querySelector(".engine-panel"))applySpikeRiskProtection(root)},1000);
+setInterval(()=>{if(state.deepScanner.enabled&&Date.now()-state.deepScanner.lastScanAt>10000)deepScannerEvaluate(false);if(state.lastTickAt){$("diagAge").textContent=Math.round((Date.now()-state.lastTickAt)/1000)+"s";if(Date.now()-state.lastTickAt>15000&&state.connected){setStatus("offline","Waiting for data");renderSubscribedMarketStatus("stale")}}const root=$("engineRoot");if(root&&root.querySelector(".engine-panel"))applySpikeRiskProtection(root)},1000);
 // Keep the WebSocket alive with Deriv protocol pings and recover if its heartbeat stops.
 setInterval(()=>{
   const ws=state.socket;if(!ws||ws.readyState!==WebSocket.OPEN||!state.connected)return;
@@ -1252,17 +1253,30 @@ connect();
   setInterval(updateDot,1200);updateDot();
 })();
 
-// Keep the extraction block explicit about the market whose tick feed is active.
+// Show the primary WebSocket's confirmed feed, not just the selected dropdown value.
 function renderSubscribedMarketStatus(mode="switching"){
   const box=$("subscribedMarketStatus"),name=$("subscribedMarketName"),symbol=$("subscribedMarketSymbol");
   if(!box||!name||!symbol)return;
-  const market=state.markets.find(m=>m.symbol===state.symbol);
-  const label=market?.name||state.marketName||state.symbol||"No market selected";
+  const activeSymbol=state.primarySubscriptionSymbol;
+  const market=state.markets.find(m=>m.symbol===activeSymbol);
+  const selected=state.markets.find(m=>m.symbol===state.symbol);
+  const label=market?.name||(activeSymbol===state.symbol?(state.marketName||state.symbol):activeSymbol)||selected?.name||state.marketName||state.symbol||"No market selected";
+  const age=state.lastTickAt?Date.now()-state.lastTickAt:Infinity;
+  if(mode==="connected"&&(!state.connected||activeSymbol!==state.symbol||age>15000))mode=age>15000?"stale":"switching";
   name.textContent=label;
-  symbol.textContent="Symbol: "+(state.symbol||"—")+" · "+(mode==="connected"?"Live tick subscription active":mode==="switching"?"Switching / requesting live tick feed":"Waiting for live tick feed");
-  if(mode==="connected"&&state.connected)setStatus("live",`LIVE — ${label} feed`);
-  else if(state.connected)setStatus("connecting",`Connected — requesting ${label}`);
-  box.classList.toggle("connected",mode==="connected");box.classList.toggle("switching",mode!=="connected");
+  if(mode==="connected"&&activeSymbol===state.symbol&&state.primarySubscriptionId){
+    symbol.textContent="Subscribed: "+activeSymbol+" · Confirmed by matching live ticks";
+    setStatus("live",`LIVE — ${label} feed`);
+  }else if(mode==="stale"){
+    symbol.textContent="Subscribed: "+(activeSymbol||"—")+" · No fresh ticks for "+(Number.isFinite(age)?Math.floor(age/1000)+"s":"15s+")+" · Feed may be stalled";
+  }else if(mode==="offline"||mode==="error"){
+    symbol.textContent="Feed "+(mode==="error"?"error":"disconnected")+" · Last subscription: "+(activeSymbol||"none")+" · Waiting to reconnect";
+  }else{
+    symbol.textContent="Selected: "+(state.symbol||"—")+" · Waiting for matching live ticks to confirm subscription";
+  }
+  box.classList.toggle("connected",mode==="connected");
+  box.classList.toggle("switching",mode!=="connected");
+  box.classList.toggle("stale",mode==="stale"||mode==="offline"||mode==="error");
 }
 
 
