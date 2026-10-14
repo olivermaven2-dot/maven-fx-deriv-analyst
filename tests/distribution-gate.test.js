@@ -361,3 +361,21 @@ test('Deep Scanner re-evaluates candidates when live scanner ticks arrive', () =
     'live scanner ticks must trigger the throttled candidate evaluation');
   assert.ok(source.indexOf('r.lastTickAt=Date.now()') < source.indexOf('deepScannerEvaluate(false)'));
 });
+
+test('Deep Scanner can assess a market from a fresh Deriv history while live subscription warms up', () => {
+  const start = appSource.indexOf('function scannerRisk');
+  assert.notEqual(start, -1, 'scannerRisk must exist');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const run = vm.runInNewContext(source + '\nscannerRisk', { state: { connected: true }, Date });
+  const now = Math.floor(Date.now() / 1000);
+  const record = {
+    lastTickAt: 0,
+    ticks: Array.from({ length: 120 }, (_, i) => ({ quote: 100 + i, epoch: now - (119 - i) }))
+  };
+  assert.equal(run(record).level, 'LOW',
+    'fresh historical Deriv ticks should be eligible for risk assessment before a live subscription tick arrives');
+  record.ticks[record.ticks.length - 1].epoch = now - 180;
+  assert.equal(run(record).level, 'UNKNOWN',
+    'stale Deriv history must not be treated as fresh');
+});
