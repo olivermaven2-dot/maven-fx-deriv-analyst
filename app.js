@@ -854,7 +854,7 @@ function mavenAIReviewEntry(engine,entry,signalDecision){
   if(entryStrength<.43||combined<.49)return null;
   const note="Maven AI entry review: "+Math.round(combined*100)+"% combined entry/evidence score; "+Math.round(entryStrength*100)+"% entry strength and "+Math.round(confidence*100)+"% signal confidence.";
   if(Array.isArray(entry.entries)){
-    entry={...entry,entries:entry.entries.map(x=>({...x,aiScore:Math.round((Number(x.score)||0)*.65+confidence*35)})).sort((a,b)=>b.aiScore-a.aiScore)};
+    entry={...entry,entries:entry.entries.map(x=>({...x,aiScore:Math.max(0,Math.min(100,Math.round((Number(x.score)||0)*.65+confidence*35+validationAdjustment*32.5)))})).sort((a,b)=>b.aiScore-a.aiScore)};
     entry.main=entry.entries.map(x=>String(x.digit)).join("  •  ");
     entry.meta=entry.entries.map(x=>"Digit "+x.digit+": AI score "+x.aiScore+"/100").join(" • ");
   }
@@ -1364,7 +1364,7 @@ function riseFallAnalysis(prices){
   else if(evidence>=.55&&recentTarget>=.51&&shortTarget>=.49&&persistence>=.45)signal="SIGNAL";
   else if(evidence<.43)signal="AVOID";
   const aiDecision=mavenAIDecisionLayer("risefall",signal,evidence,[recentTarget,shortTarget,midTarget,longTarget,persistence,1-reversalPressure,recentMove,trendRate,momentum],conflict,clean.length<100||recentDirectional.length<15||stats.some(x=>x.size<=100&&x.directional<10),clean.length);signal=aiDecision.signal;
-  return {selected:state.selectedRiseFall,stats,recentRate,recentMove,trendRate,momentum,persistence,streak,reversalPressure,evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentTarget,shortTarget,midTarget,longTarget};
+  return {selected:state.selectedRiseFall,stats,recentRate,recentMove:aiDecision.adjustedAlignment[6]??recentMove,trendRate:aiDecision.adjustedAlignment[7]??trendRate,momentum:aiDecision.adjustedAlignment[8]??momentum,persistence:aiDecision.adjustedAlignment[4]??persistence,streak,reversalPressure, evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentTarget:aiDecision.adjustedAlignment[0]??recentTarget,shortTarget:aiDecision.adjustedAlignment[1]??shortTarget,midTarget:aiDecision.adjustedAlignment[2]??midTarget,longTarget:aiDecision.adjustedAlignment[3]??longTarget};
 }
 
 function riseFallEntry(prices,analysis){
