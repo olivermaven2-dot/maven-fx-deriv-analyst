@@ -1249,6 +1249,7 @@ function autoTradeReadyToEnter(digit){
   const risk=spikeRiskAssessment();
   if(risk.level==="UNKNOWN"||risk.level==="HIGH")return {ok:false,reason:risk.title};
   if(risk.level==="MODERATE"&&state.ouSignalSnapshot.signal!=="STRONG SIGNAL")return {ok:false,reason:"moderate spike risk requires STRONG SIGNAL"};
+  if(!Array.isArray(state.ouEntrySnapshot?.digits)||state.ouEntrySnapshot.digits.length!==2||state.ouEntrySnapshot.digits[0]===state.ouEntrySnapshot.digits[1])return {ok:false,reason:"exactly two distinct validated entry digits are required"};
   if(!state.ouEntrySnapshot.digits.includes(digit))return {ok:false,reason:"digit is not a current Entry Engine candidate"};
   return {ok:true};
 }
