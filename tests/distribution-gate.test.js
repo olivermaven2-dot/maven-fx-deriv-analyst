@@ -539,3 +539,19 @@ test('manual entry mode does not depend on the automatic Entry Engine snapshot a
   assert.match(tickSource, /Manual entry waiting/);
   assert.match(tickSource, /lastManualLoggedReason!==reason/);
 });
+
+test('recovery OFF keeps the two-run entry cycle after a loss and waits for a fresh trigger after run 2', () => {
+  const start = appSource.indexOf('function autoTradeHandleMessage');
+  const end = appSource.indexOf('async function autoTradeConnect', start);
+  const source = appSource.slice(start, end);
+  const lossStart = source.indexOf('if(!autoTrade.recoveryEnabled)');
+  assert.notEqual(lossStart, -1);
+  const lossEnd = source.indexOf('if(wasRecovery<2)', lossStart);
+  assert.notEqual(lossEnd, -1);
+  const lossBranch = source.slice(lossStart, lossEnd);
+  assert.match(lossBranch, /autoTrade\.recoveryPhase=0;autoTrade\.nextStake=autoTrade\.stake;runFinished=true/);
+  assert.doesNotMatch(lossBranch, /autoTradePause\(/);
+  assert.match(source, /if\(runFinished\)[\s\S]*?RUN 1 COMPLETE[\s\S]*?RUN 2 COMPLETE/);
+  assert.match(source, /autoTrade\.sessionProfit>=autoTrade\.takeProfit/);
+  assert.match(source, /autoTrade\.sessionProfit<=-autoTrade\.stopLoss/);
+});
