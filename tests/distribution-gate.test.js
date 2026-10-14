@@ -232,3 +232,36 @@ test('spike-risk refresh uses a removable note marker to avoid stacking warnings
   assert.match(source, /className="block spike-risk-note"/);
   assert.match(source, /className="spike-risk-note"/);
 });
+
+
+test('bot entry validation refuses an incomplete or duplicated entry pair', () => {
+  const start = appSource.indexOf('function autoTradeReadyToEnter');
+  assert.notEqual(start, -1, 'autoTradeReadyToEnter must exist');
+  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const harness = `
+    const autoTrade = { enabled: true, authorized: true };
+    const state = {
+      connected: true, lastTickAt: Date.now(), engine: 'overunder',
+      digits: Array(100).fill(2), symbol: 'R_100',
+      ouSignalSnapshot: { tickCount: 100, key: 'R_100|2|OVER', active: true, signal: 'STRONG SIGNAL' },
+      ouEntrySnapshot: { key: 'R_100|2|OVER', active: true, digits: [3] }
+    };
+    const ouValidationKey = () => 'R_100|2|OVER';
+    const spikeRiskAssessment = () => ({ level: 'LOW', title: 'LOW SPIKE RISK' });
+    ${source}
+    autoTradeReadyToEnter
+  `;
+  const ready = vm.runInNewContext(harness);
+  assert.equal(ready(3).ok, false);
+  assert.match(ready(3).reason, /exactly two distinct validated entry digits/);
+
+  const distinctPairHarness = harness.replace('digits: [3]', 'digits: [3, 4]');
+  const readyWithPair = vm.runInNewContext(distinctPairHarness);
+  assert.equal(readyWithPair(3).ok, true);
+  assert.equal(readyWithPair(4).ok, true);
+
+  const duplicatePairHarness = harness.replace('digits: [3]', 'digits: [3, 3]');
+  const readyWithDuplicates = vm.runInNewContext(duplicatePairHarness);
+  assert.equal(readyWithDuplicates(3).ok, false);
+});
