@@ -168,4 +168,48 @@
     filterEntryDigits,
     analyze
   });
+
+  // Render only into the dedicated shadow panel; never call production renderers.
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    let lastPanelUpdate = 0;
+    window.addEventListener("mavenfx:shadow-tick", function (event) {
+      const now = Date.now();
+      if (now - lastPanelUpdate < 1800) return;
+      lastPanelUpdate = now;
+      const detail = event && event.detail;
+      if (!detail || !Array.isArray(detail.digits)) return;
+      const status = document.getElementById("mavenAiStatus");
+      const reason = document.getElementById("mavenAiReason");
+      const gateDetails = document.getElementById("mavenAiGateDetails");
+      const entries = document.getElementById("mavenAiEntries");
+      const mode = document.getElementById("mavenAiMode");
+      if (!status || !reason || !gateDetails || !entries) return;
+      const candidates = Array.from({length: 10}, (_, digit) => digit);
+      const result = analyze({
+        digits: detail.digits,
+        selectedDigit: detail.selectedDigit,
+        side: detail.side,
+        entryCandidates: candidates
+      });
+      const setup = result.setup;
+      if (detail.engine !== "overunder") {
+        status.textContent = "SHADOW MODE · " + String(detail.engine || "engine").toUpperCase();
+        reason.textContent = "Distribution and entry-bar audit are running independently. Over/Under's 10.5% setup gate applies only to Over/Under.";
+        gateDetails.textContent = "Switch to Over/Under to assess the selected threshold.";
+      } else {
+        status.textContent = setup.eligible ? "DISTRIBUTION GATE PASSED" : setup.status;
+        reason.textContent = setup.explanation;
+        gateDetails.textContent = setup.requiredDigits.length
+          ? setup.checked.map(row => "Digit " + row.digit + ": " + row.percentLabel + " · " + row.bar + (row.passed ? " · PASS" : " · BLOCK")).join(" | ")
+          : "Collect at least 30 valid digits and select a valid Over/Under setup.";
+      }
+      if (mode) mode.textContent = result.distribution.total + " TICKS";
+      entries.textContent = result.entryFilter.accepted.length
+        ? result.entryFilter.accepted.join(", ")
+        : "No digits currently pass the bar exclusion.";
+      if (result.entryFilter.rejected.length) {
+        entries.textContent += " · Excluded: " + result.entryFilter.rejected.map(x => x.digit + " (" + x.bar + ")").join(", ");
+      }
+    });
+  }
 })(typeof window !== "undefined" ? window : globalThis);
