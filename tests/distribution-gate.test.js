@@ -426,7 +426,7 @@ test('primary Deriv feed sends heartbeat pings and detects a stale connection', 
 
 test('market changes forget the previous primary tick subscription', () => {
   const start = appSource.indexOf('function startMarket(force=false)');
-  const end = appSource.indexOf('\\nfunction loadHistory', start + 10);
+  const end = appSource.indexOf('\nfunction loadHistory', start + 10);
   const source = appSource.slice(start, end);
   assert.match(source, /state\.primarySubscriptionId&&state\.socket\?\.readyState===WebSocket\.OPEN/);
   assert.match(source, /request\(\{forget:state\.primarySubscriptionId/);
