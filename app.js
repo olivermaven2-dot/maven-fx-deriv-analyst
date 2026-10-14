@@ -38,7 +38,7 @@ function shouldRenderEngineForCurrentTick(){
   lastMobileEngineRenderAt=now;
   return true;
 }
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],lastTickSignature:"",primarySubscriptionId:null,primarySubscriptionSymbol:"",primaryHistoryRequests:{},primarySubscribeRequests:{},lastPongAt:0,engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],lastTickSignature:"",primarySubscriptionId:null,primarySubscriptionSymbol:"",primaryHistoryRequests:{},primarySubscribeRequests:{},lastPongAt:0,engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,otherValidation:{snapshot:null,pending:[],book:{}},deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
 
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
@@ -469,6 +469,46 @@ function recordOUValidationTrigger(digit){
   state.ouValidation.pending.push({digit,candidate:digit,selectedDigit:state.selectedDigit,side:state.selectedSide,market:state.symbol,steps:0,hits:[],signature});
   state.ouValidation.lastTrigger="Entry digit "+digit+" triggered at tick "+state.ticks.length;
 }
+function otherValidationKey(engine,target,market=state.symbol){return market+"|"+engine+"|"+target;}
+function setOtherValidationForecast(engine,target,signal,hasEntry,tickCount){
+  const active=(signal==="SIGNAL"||signal==="STRONG SIGNAL")&&hasEntry;
+  state.otherValidation.snapshot=active?{engine,target,market:state.symbol,tickCount,active:true}:null;
+}
+function scoreOtherValidationPending(p,digit,quote,previousQuote){
+  let hit=false;
+  if(p.engine==="evenodd")hit=(digit%2===0?"EVEN":"ODD")===p.target;
+  else if(p.engine==="risefall"){
+    const move=quote>previousQuote?"RISE":quote<previousQuote?"FALL":"FLAT";
+    hit=move===p.target;
+  }
+  p.steps++;p.hits.push(hit);
+  const rec=state.otherValidation.book[otherValidationKey(p.engine,p.target,p.market)];
+  if(rec){
+    const h=rec[p.steps];
+    h.n++;
+    if(p.hits.slice(0,p.steps).every(Boolean)){h.hits++;h.failureStreak=0;}
+    else{h.failureStreak=(h.failureStreak||0)+1;h.maxFailureStreak=Math.max(h.maxFailureStreak||0,h.failureStreak);}
+    rec.lastUpdated=Date.now();
+  }
+}
+function processOtherValidationTick(digit,quote,previousQuote){
+  const ov=state.otherValidation;
+  for(let i=ov.pending.length-1;i>=0;i--){
+    const p=ov.pending[i];
+    if(p.market!==state.symbol){ov.pending.splice(i,1);continue;}
+    scoreOtherValidationPending(p,digit,quote,previousQuote);
+    if(p.steps>=3)ov.pending.splice(i,1);
+  }
+  const snap=ov.snapshot;
+  ov.snapshot=null;
+  if(!snap||!snap.active||snap.market!==state.symbol||snap.tickCount>=state.ticks.length)return;
+  const key=otherValidationKey(snap.engine,snap.target,snap.market);
+  if(!ov.book[key])ov.book[key]={market:snap.market,engine:snap.engine,target:snap.target,triggers:0,1:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},lastUpdated:Date.now()};
+  ov.book[key].triggers++;
+  const p={market:snap.market,engine:snap.engine,target:snap.target,steps:0,hits:[]};
+  scoreOtherValidationPending(p,digit,quote,previousQuote);
+  if(p.steps<3)ov.pending.push(p);
+}
 function ouValidationSummary(){
   resetOUValidationIfNeeded();
   const c=state.ouValidation.completed;
@@ -476,9 +516,20 @@ function ouValidationSummary(){
   return "Live entry validation — next 1 tick: "+fmt(c[1])+" • next 2 consecutive ticks: "+fmt(c[2])+" • next 3 consecutive ticks: "+fmt(c[3]);
 }
 function renderOUValidationPanel(){
-  const card=$("ouValidationCard"),out=$("ouValidationResults");
+  const card=$("ouValidationCard"),out=$("ouValidationResults"),payoutControl=$("ouPayoutControl");
   if(!card||!out)return;
-  card.style.display=state.engine==="overunder"?"":"none";
+  card.style.display="";
+  if(payoutControl)payoutControl.style.display=state.engine==="overunder"?"":"none";
+  if(state.engine!=="overunder"){
+    const engine=state.engine,target=engine==="evenodd"?state.selectedParity:state.selectedRiseFall;
+    const key=otherValidationKey(engine,target),rec=state.otherValidation.book[key];
+    const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"—";
+    const label=engine==="evenodd"?"EVEN/ODD":"RISE/FALL";
+    out.innerHTML='<div class="ou-validation-note">Session-only walk-forward validation • '+label+' forecasts count only when Final Signal and Entry Engine both qualify. Outcomes use future live ticks; this is a prediction hit rate, not proof of profitability.</div>'+
+      (rec?'<div class="ou-validation-table"><div class="ou-validation-row engine-validation-row ou-validation-head"><span>SETUP</span><span>FORECASTS</span><span>1 TICK</span><span>2 IN A ROW</span><span>3 IN A ROW</span><span>MAX FAILS</span></div><div class="ou-validation-row engine-validation-row"><strong>'+esc(target)+'</strong><span>'+rec.triggers+'</span><span>'+fmt(rec[1])+'</span><span>'+fmt(rec[2])+'</span><span>'+fmt(rec[3])+'</span><span>'+Math.max(rec[1].maxFailureStreak||0,rec[2].maxFailureStreak||0,rec[3].maxFailureStreak||0)+'</span></div></div><div class="ou-validation-note">Even/Odd checks the next digit parity. Rise/Fall checks the next real quote movement; unchanged prices count as misses. A 2- or 3-tick success requires every consecutive outcome in that horizon to match.</div>':
+      '<div class="ou-validation-empty">No qualifying '+label+' forecasts recorded for '+esc(state.symbol)+' · '+esc(target)+' yet. Keep the live stream running and leave this engine selected while valid signals and entries appear.</div>');
+    return;
+  }
   const prefix=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|";
   const rows=Object.values(state.ouValidationBook).filter(r=>ouValidationRecordKey(r.market,r.selectedDigit,r.side,r.candidate).startsWith(prefix)).sort((a,b)=>b.triggers-a.triggers).slice(0,5);
   const payout=Math.max(1,Math.min(500,Number(state.ouPayoutPercent)||95));
@@ -501,8 +552,9 @@ function receiveTick(t){
   state.ticks.push({quote:Number(quote),epoch});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
   state.lastTickAt=Date.now();
-  // Score previously registered entry triggers only against this newly received live tick.
+  // Score previously registered forecasts only against this newly received live tick.
   processOUValidationTick(digit);
+  processOtherValidationTick(digit,Number(quote),state.ticks.length>1?Number(state.ticks[state.ticks.length-2].quote):Number.NaN);
   recordOUValidationTrigger(digit);
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
@@ -1101,6 +1153,7 @@ function renderEvenOdd(root,d,last,n){
   const e=parityStats(d,state.selectedParity);
   const entryActive=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const entry=entryActive?selectParityEntry(d,state.selectedParity):null;
+  setOtherValidationForecast("evenodd",state.selectedParity,e.signal,!!entry,n);
   const entryDisplay=entry||{main:entryActive?"NO STRONG ENTRY":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No trigger has enough conditional lift toward the selected Final Signal.":"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."};
   const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
   const reason=e.conflict?"WAIT: recent and longer-window parity behaviour conflict. The AI will wait for stronger agreement.":e.signal==="STRONG SIGNAL"?"Multiple parity evidence layers are aligned for "+state.selectedParity+".":e.signal==="SIGNAL"?"The selected parity has sufficient multi-factor evidence, but it is not at STRONG SIGNAL level.":e.signal==="AVOID"?"The selected parity has unfavorable evidence.":"Evidence for the selected parity is still developing.";
@@ -1236,6 +1289,7 @@ function renderRiseFall(root,last,n){
     return;
   }
   const entry=riseFallEntry(prices,a);
+  setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,n);
   const entryDisplay=entry||{
     main:a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"?"NO CONFIRMED ENTRY":"NO ACTIVE ENTRY",
     confidence:"—",
