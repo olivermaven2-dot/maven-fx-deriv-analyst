@@ -598,12 +598,27 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
   return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,distribution,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
 }
+function distributionBarFlags(d){
+  const windowDigits=d.slice(-1000);
+  const freq=Array(10).fill(0);
+  for(const digit of windowDigits)if(Number.isInteger(digit)&&digit>=0&&digit<=9)freq[digit]++;
+  const max=Math.max(...freq),min=Math.min(...freq);
+  return {
+    total:windowDigits.length,
+    most:freq.map(count=>count===max),
+    least:freq.map(count=>count===min),
+    percentages:freq.map(count=>windowDigits.length?count/windowDigits.length*100:0)
+  };
+}
 function overUnderEntry(d,selectedDigit,selectedSide){
   const candidates=[];
+  const entryBars=distributionBarFlags(d);
   const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
   for(let candidate=0;candidate<=9;candidate++){
     // Exclude spike-prone extreme entry digits for the selected direction.
     if((selectedSide==="UNDER"&&(candidate===0||candidate===1))||(selectedSide==="OVER"&&(candidate===8||candidate===9)))continue;
+    // Never use a red LEAST or green MOST distribution digit as an entry candidate.
+    if(entryBars.most[candidate]||entryBars.least[candidate])continue;
     const t=ouTransitionStats(d,candidate,selectedDigit,selectedSide);
     if(t.total<20||t.recentTotal<5)continue;
     const sample=Math.min(1,t.total/100),recentWeight=Math.min(1,t.recentTotal/40);
@@ -713,6 +728,22 @@ function applySpikeRiskProtection(root){
     if(why){const li=document.createElement("li");li.textContent="! Moderate spike risk: confidence is reduced; wait for conditions to normalize.";why.prepend(li)}
   }
 }
+
+
+window.mavenAIGetContext=function(){
+  const digits=state.digits.slice();
+  const context={market:state.marketName||state.symbol||"Unknown",symbol:state.symbol||"Unknown",connected:!!state.connected,tickCount:digits.length,lastDigit:digits.length?digits[digits.length-1]:null,engine:state.engine,selectedDigit:state.selectedDigit,selectedSide:state.selectedSide,selectedParity:state.selectedParity,selectedRiseFall:state.selectedRiseFall};
+  const bars=distributionBarFlags(digits);
+  context.distribution={total:bars.total,percentages:bars.percentages,most:bars.most.map((v,i)=>v?i:null).filter(v=>v!==null),least:bars.least.map((v,i)=>v?i:null).filter(v=>v!==null)};
+  if(state.engine==="overunder"&&digits.length>=30){
+    const evidence=overUnderEvidence(digits,state.selectedDigit,state.selectedSide);
+    const entry=(evidence.signal==="SIGNAL"||evidence.signal==="STRONG SIGNAL")&&!evidence.probabilityConflict?overUnderEntry(digits,state.selectedDigit,state.selectedSide):null;
+    context.signal={value:evidence.signal,reason:evidence.distribution.reason,distributionReady:evidence.distribution.ready,distributionPass:evidence.distribution.pass,failures:evidence.distribution.failures||[],selectedRate:evidence.selectedRate,oppositeRate:evidence.oppositeRate,probabilityConflict:evidence.probabilityConflict,evidence:evidence.evidence,entries:entry?entry.entries.map(x=>({digit:x.digit,score:x.score,status:x.status})):[]};
+  }else if(state.engine==="overunder"){
+    context.signal={value:"WAIT",reason:"At least 30 live digits are needed before the engine can analyze this setup.",distributionReady:bars.total===1000,distributionPass:false,failures:[],entries:[]};
+  }
+  return context;
+};
 
 function renderEngine(){
   const d=state.digits, n=d.length, c=counts(d), last=d.at(-1);
