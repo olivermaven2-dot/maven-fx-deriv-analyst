@@ -38,8 +38,48 @@ function shouldRenderEngineForCurrentTick(){
   lastMobileEngineRenderAt=now;
   return true;
 }
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],lastTickSignature:"",primarySubscriptionId:null,primarySubscriptionSymbol:"",primaryHistoryRequests:{},primarySubscribeRequests:{},lastPongAt:0,engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,otherValidation:{snapshot:null,pending:[],book:{}},deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],lastTickSignature:"",primarySubscriptionId:null,primarySubscriptionSymbol:"",primaryHistoryRequests:{},primarySubscribeRequests:{},lastPongAt:0,engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,otherValidation:{snapshot:null,pending:[],book:{}},validationDirty:false,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
 
+const VALIDATION_STORAGE_KEY="mavenFx.validationStats.v1";
+function cleanValidationBook(value,kind){
+  if(!value||typeof value!=="object"||Array.isArray(value))return {};
+  const out={};
+  for(const [key,r] of Object.entries(value).slice(-500)){
+    if(!r||typeof r!=="object"||typeof r.market!=="string")continue;
+    if(kind==="ou"&&(!Number.isInteger(Number(r.selectedDigit))||!["OVER","UNDER"].includes(r.side)||!Number.isInteger(Number(r.candidate))))continue;
+    if(kind==="other"&&(!["evenodd","risefall"].includes(r.engine)||typeof r.target!=="string"))continue;
+    const rec={market:r.market};
+    if(kind==="ou"){rec.selectedDigit=Number(r.selectedDigit);rec.side=r.side;rec.candidate=Number(r.candidate);}
+    else{rec.engine=r.engine;rec.target=r.target;}
+    rec.triggers=Math.max(0,Math.floor(Number(r.triggers)||0));
+    for(const h of [1,2,3]){
+      const x=r[h]&&typeof r[h]==="object"?r[h]:{};
+      rec[h]={n:Math.max(0,Math.floor(Number(x.n)||0)),hits:Math.max(0,Math.min(Math.floor(Number(x.n)||0),Math.floor(Number(x.hits)||0))),failureStreak:Math.max(0,Math.floor(Number(x.failureStreak)||0)),maxFailureStreak:Math.max(0,Math.floor(Number(x.maxFailureStreak)||0))};
+    }
+    rec.lastUpdated=Number(r.lastUpdated)||0;
+    out[key]=rec;
+  }
+  return out;
+}
+function loadValidationData(){
+  try{
+    const raw=localStorage.getItem(VALIDATION_STORAGE_KEY);
+    if(!raw)return;
+    const data=JSON.parse(raw);
+    if(!data||data.version!==1)return;
+    state.ouValidationBook=cleanValidationBook(data.overUnder,"ou");
+    state.otherValidation.book=cleanValidationBook(data.other,"other");
+    state.ouPayoutPercent=Math.max(1,Math.min(100,Number(data.payoutPercent)||95));
+  }catch(e){console.warn("Maven FX validation history could not be loaded.",e);}
+}
+function persistValidationData(){
+  if(!state.validationDirty)return;
+  state.validationDirty=false;
+  try{
+    localStorage.setItem(VALIDATION_STORAGE_KEY,JSON.stringify({version:1,overUnder:state.ouValidationBook,other:state.otherValidation.book,payoutPercent:state.ouPayoutPercent}));
+  }catch(e){console.warn("Maven FX validation history could not be saved in this browser.",e);}
+}
+loadValidationData();
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
 function setStatus(kind,text){statusBadge.className="status "+kind;statusText.textContent=text;$("diagConnection").textContent=text;$("diagSocket").textContent=state.socket?state.socket.readyState===1?"OPEN":"CLOSED":"—";if($("diagEndpoint"))$("diagEndpoint").textContent=WS_URLS[state.endpointIndex%WS_URLS.length];if($("diagMessage"))$("diagMessage").textContent=state.lastMessage;if($("diagError"))$("diagError").textContent=state.lastError}
@@ -443,7 +483,7 @@ function processOUValidationTick(digit){
           else{rec[horizon].failureStreak=(rec[horizon].failureStreak||0)+1;rec[horizon].maxFailureStreak=Math.max(rec[horizon].maxFailureStreak||0,rec[horizon].failureStreak);}
         }
       }
-      rec.lastUpdated=Date.now();
+      rec.lastUpdated=Date.now();state.validationDirty=true;
     }
     if(p.selectedDigit===state.selectedDigit&&p.side===state.selectedSide){
       for(const horizon of [1,2,3]){
@@ -467,7 +507,7 @@ function recordOUValidationTrigger(digit){
   }
   state.ouValidationBook[key].triggers++;
   state.ouValidation.pending.push({digit,candidate:digit,selectedDigit:state.selectedDigit,side:state.selectedSide,market:state.symbol,steps:0,hits:[],signature});
-  state.ouValidation.lastTrigger="Entry digit "+digit+" triggered at tick "+state.ticks.length;
+  state.ouValidation.lastTrigger="Entry digit "+digit+" triggered at tick "+state.ticks.length;state.validationDirty=true;
 }
 function otherValidationKey(engine,target,market=state.symbol){return market+"|"+engine+"|"+target;}
 function setOtherValidationForecast(engine,target,signal,hasEntry,tickCount){
@@ -488,7 +528,7 @@ function scoreOtherValidationPending(p,digit,quote,previousQuote){
     h.n++;
     if(p.hits.slice(0,p.steps).every(Boolean)){h.hits++;h.failureStreak=0;}
     else{h.failureStreak=(h.failureStreak||0)+1;h.maxFailureStreak=Math.max(h.maxFailureStreak||0,h.failureStreak);}
-    rec.lastUpdated=Date.now();
+    rec.lastUpdated=Date.now();state.validationDirty=true;
   }
 }
 function processOtherValidationTick(digit,quote,previousQuote){
@@ -504,7 +544,7 @@ function processOtherValidationTick(digit,quote,previousQuote){
   if(!snap||!snap.active||snap.market!==state.symbol||snap.tickCount>=state.ticks.length)return;
   const key=otherValidationKey(snap.engine,snap.target,snap.market);
   if(!ov.book[key])ov.book[key]={market:snap.market,engine:snap.engine,target:snap.target,triggers:0,1:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},lastUpdated:Date.now()};
-  ov.book[key].triggers++;
+  ov.book[key].triggers++;state.validationDirty=true;
   const p={market:snap.market,engine:snap.engine,target:snap.target,steps:0,hits:[]};
   scoreOtherValidationPending(p,digit,quote,previousQuote);
   if(p.steps<3)ov.pending.push(p);
@@ -578,6 +618,7 @@ function receiveTick(t){
   processOUValidationTick(digit);
   processOtherValidationTick(digit,Number(quote),state.ticks.length>1?Number(state.ticks[state.ticks.length-2].quote):Number.NaN);
   recordOUValidationTrigger(digit);
+  persistValidationData();
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
   $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream(true);if(shouldRenderEngineForCurrentTick())renderEngine();else renderOUValidationPanel();if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);
