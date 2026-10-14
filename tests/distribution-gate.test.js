@@ -379,3 +379,17 @@ test('Deep Scanner can assess a market from a fresh Deriv history while live sub
   assert.equal(run(record).level, 'UNKNOWN',
     'stale Deriv history must not be treated as fresh');
 });
+
+test('Deep Scanner requests the full 1,000-tick window required by the distribution gate', () => {
+  const scannerStart = appSource.indexOf('function syncDeepScannerSubscriptions');
+  const scannerEnd = appSource.indexOf('\nfunction receiveScannerTick', scannerStart);
+  assert.notEqual(scannerStart, -1, 'syncDeepScannerSubscriptions must exist');
+  const subscriptionSource = appSource.slice(scannerStart, scannerEnd);
+  assert.match(subscriptionSource, /ticks_history:m\.symbol,end:"latest",count:1000/);
+
+  const scanStart = appSource.indexOf('function startDeepScan');
+  const scanEnd = appSource.indexOf('\nfunction loadStrongestScannerMarket', scanStart);
+  assert.notEqual(scanStart, -1, 'startDeepScan must exist');
+  const scanSource = appSource.slice(scanStart, scanEnd);
+  assert.match(scanSource, /ticks_history:m\.symbol,end:"latest",count:1000/);
+});

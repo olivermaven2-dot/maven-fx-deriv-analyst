@@ -219,7 +219,7 @@ function syncDeepScannerSubscriptions(){
       continue;
     }
     if(!r.historyReady&&!Object.values(ds.historyRequests).includes(m.symbol)){
-      const req=nextReq();ds.historyRequests[req]=m.symbol;request({ticks_history:m.symbol,end:"latest",count:500,style:"ticks",req_id:req});
+      const req=nextReq();ds.historyRequests[req]=m.symbol;request({ticks_history:m.symbol,end:"latest",count:1000,style:"ticks",req_id:req});
     }
     if(!r.subscribed&&!Object.values(ds.subscribeRequests).includes(m.symbol)){
       const req=nextReq();ds.subscribeRequests[req]=m.symbol;r.subscribeReq=req;request({ticks:m.symbol,subscribe:1,req_id:req});
@@ -310,7 +310,7 @@ function startDeepScan(){
     if(Object.values(ds.historyRequests).includes(m.symbol))continue;
     const req=nextReq();
     ds.historyRequests[req]=m.symbol;
-    request({ticks_history:m.symbol,end:"latest",count:500,style:"ticks",req_id:req});
+    request({ticks_history:m.symbol,end:"latest",count:1000,style:"ticks",req_id:req});
   }
   renderDeepScanner();
   const winner=$("scannerWinner");
