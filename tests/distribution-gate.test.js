@@ -512,7 +512,7 @@ test('manual entry digits bypass Entry Engine filters but must have neither red 
   assert.ok(appSource.includes('automaticEntryIsCurrent=manualEntriesEnabled||'));
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(html.includes('Use my manual entry digits instead of the Entry Engine digits'));
-  assert.ok(html.includes('Each manual digit must only avoid a red (least frequent) or green (most frequent) distribution bar'));
+  assert.ok(html.includes('Each manual digit must avoid a red (least frequent) or green (most frequent) distribution bar. If one has a red/green bar, the bot can use the other eligible manual digit on its own.'));
   assert.ok(html.includes('Final Signal, probability comparison, live-data and spike-risk checks still apply'));
 });
 
