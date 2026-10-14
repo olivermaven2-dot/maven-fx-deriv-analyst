@@ -273,14 +273,21 @@ function deepScannerEvaluate(force=false){
   syncCurrentIntoScanner();
   const setup=deepScannerSetupKey();
   if(ds.lastSetupKey!==setup){ds.lastSetupKey=setup;ds.autoLoaded=false;ds.manualOverride=false;ds.lastLoadedSymbol="";ds.lastLoadedScore=0;ds.startedAt=Date.now();}
+  const counts={history:0,risk:0,distribution:0,probability:0,signal:0,entry:0};
   const rows=[];
   for(const m of state.markets){
-    const r=scannerRecord(m),risk=scannerRisk(r);
-    if(r.digits.length<100||risk.level==="HIGH"||risk.level==="UNKNOWN")continue;
+    const r=scannerRecord(m);
+    // The distribution gate needs all 1,000 real ticks. Do not report a candidate from a partial window.
+    if(r.digits.length<1000){counts.history++;continue;}
+    const risk=scannerRisk(r);
+    if(risk.level==="HIGH"||risk.level==="UNKNOWN"){counts.risk++;continue;}
     const a=overUnderEvidence(r.digits,state.selectedDigit,state.selectedSide);
-    if(!(a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL")||a.probabilityConflict)continue;
+    if(!a.distribution?.ready){counts.history++;continue;}
+    if(!a.distribution.pass){counts.distribution++;continue;}
+    if(a.probabilityConflict){counts.probability++;continue;}
+    if(!(a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL")){counts.signal++;continue;}
     const entry=overUnderEntry(r.digits,state.selectedDigit,state.selectedSide);
-    if(!entry||!entry.entries?.length)continue;
+    if(!entry||!entry.entries?.length){counts.entry++;continue;}
     const top=entry.entries[0],score=Math.round(a.evidence*60+Math.min(100,top.score||0)*.30+(risk.level==="LOW"?10:3));
     rows.push({symbol:m.symbol,name:m.name,score,signal:a.signal,evidence:Math.round(a.evidence*100),entry:top.digit,entryScore:top.score||0,sample:r.digits.length,risk:risk.level,riskReason:risk.reason,reason:a.signal==="STRONG SIGNAL"?"Strong multi-factor Over/Under evidence with a qualifying entry-digit reaction":"Qualified Over/Under evidence and entry-digit reaction"});
   }
@@ -288,6 +295,7 @@ function deepScannerEvaluate(force=false){
   ds.lastScanAt=Date.now();
   ds.lastScanRows=rows;
   ds.strongestCandidate=rows[0]||null;
+  ds.lastScanDiagnostics={...counts,total:state.markets.length,qualified:rows.length,at:Date.now()};
   renderDeepScanner(rows);
   return rows;
 }
@@ -342,14 +350,28 @@ function renderDeepScanner(rows=null){
   const card=$("deepScannerCard");if(!card)return;
   const ds=state.deepScanner;rows=rows||[];
   const best=rows.find(r=>r.score>0)||ds.strongestCandidate||null;
-  const total=state.markets.length,ready=state.markets.filter(m=>(ds.data[m.symbol]?.digits.length||0)>=100).length;
-  const status=$("deepScannerStatus");if(status)status.textContent=!state.connected?"FEED OFFLINE":best?"STRONG SETUP READY":ready+"/"+total+" READY";
-  const progress=$("scannerProgress");if(progress)progress.textContent=ready+" of "+total+" markets checked internally • Setup "+state.selectedSide+" "+state.selectedDigit;
+  const total=state.markets.length,ready=state.markets.filter(m=>(ds.data[m.symbol]?.digits.length||0)>=1000).length;
+  const status=$("deepScannerStatus");if(status)status.textContent=!state.connected?"FEED OFFLINE":best?"STRONG SETUP READY":ready+"/"+total+" FULL DATA";
+  const progress=$("scannerProgress");if(progress)progress.textContent=ready+" of "+total+" markets have 1,000 ticks • Setup "+state.selectedSide+" "+state.selectedDigit;
   const setup=$("scannerSetup");if(setup)setup.textContent=state.selectedSide+" "+state.selectedDigit;
   const winner=$("scannerWinner");
   if(winner){
     if(best)winner.innerHTML="<strong>STRONGEST ELIGIBLE SETUP READY</strong><span>Signal "+esc(best.signal)+" • Evidence "+best.evidence+"% • Entry digit "+best.entry+" • Risk "+esc(best.risk)+". Press LOAD STRONGEST MARKET to switch your active market.</span>";
-    else winner.innerHTML="<strong>NO STRONG MARKET READY</strong><span>The scanner continues checking markets privately. Your current market selection will not change unless you press LOAD STRONGEST MARKET.</span>";
+    else {
+      const d=ds.lastScanDiagnostics;
+      let why="";
+      if(d){
+        const reasons=[];
+        if(d.history)reasons.push(d.history+" awaiting 1,000 ticks");
+        if(d.risk)reasons.push(d.risk+" excluded by spike/freshness risk");
+        if(d.distribution)reasons.push(d.distribution+" blocked by distribution rules");
+        if(d.probability)reasons.push(d.probability+" blocked by complementary probability");
+        if(d.signal)reasons.push(d.signal+" did not reach SIGNAL strength");
+        if(d.entry)reasons.push(d.entry+" had no qualified entry digit");
+        why=reasons.length?" Scan results: "+reasons.join("; ")+".":" No eligible candidate passed every rule.";
+      }
+      winner.innerHTML="<strong>NO STRONG MARKET READY</strong><span>"+esc("The scanner keeps markets private and will not switch automatically."+why)+"</span>";
+    }
   }
   const loadBtn=$("loadStrongestBtn");if(loadBtn){loadBtn.disabled=!best;loadBtn.textContent=best?"LOAD STRONGEST MARKET":"NO STRONG MARKET READY";}
   const results=$("deepScannerResults");if(results){results.innerHTML="";results.hidden=true;}
