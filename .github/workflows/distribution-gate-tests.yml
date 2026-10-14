@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [ai-digit-distribution-gate]
+    branches: [main, ai-digit-distribution-gate]
 
 jobs:
   distribution-gate:
