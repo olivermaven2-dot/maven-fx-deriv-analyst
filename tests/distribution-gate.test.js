@@ -461,26 +461,27 @@ test('Deriv subscription metadata is read from the top-level tick response', () 
 });
 
 
-test('bot keeps running and waits for a fresh entry after a loss when recovery is OFF', () => {
-  const lossBranchStart = appSource.indexOf('if(!autoTrade.recoveryEnabled){', appSource.indexOf('function autoTradeHandleMessage'));
+test('recovery OFF keeps running through two runs after a loss and waits for a fresh entry afterward', () => {
+  const start = appSource.indexOf('function autoTradeHandleMessage');
+  const end = appSource.indexOf('async function autoTradeConnect', start);
+  const source = appSource.slice(start, end);
+  const lossBranchStart = source.indexOf('if(!autoTrade.recoveryEnabled)');
   assert.notEqual(lossBranchStart, -1, 'recovery-OFF loss handling must exist');
-  const lossBranchEnd = appSource.indexOf('\n      if(wasRecovery<2)', lossBranchStart);
+  const lossBranchEnd = source.indexOf('if(wasRecovery<2)', lossBranchStart);
   assert.notEqual(lossBranchEnd, -1, 'recovery-ON path must follow the recovery-OFF branch');
-  const lossBranch = appSource.slice(lossBranchStart, lossBranchEnd);
-  assert.match(lossBranch, /autoTrade\.sessionProfit<=-autoTrade\.stopLoss/);
-  assert.match(lossBranch, /autoTradePause\("stop-loss limit reached"\)/);
-  assert.match(lossBranch, /autoTrade\.runSymbol=""/);
-  assert.match(lossBranch, /autoTrade\.runRemaining=0/);
-  assert.match(lossBranch, /autoTrade\.runSettled=0/);
-  assert.match(lossBranch, /autoTrade\.nextStake=autoTrade\.stake/);
-  assert.match(lossBranch, /autoTrade\.armed=true/);
-  assert.match(lossBranch, /Bot remains RUNNING and is waiting for the next fully validated entry/);
-  assert.doesNotMatch(lossBranch, /autoTradePause\("loss — recovery mode is OFF"\)/);
+  const lossBranch = source.slice(lossBranchStart, lossBranchEnd);
+  assert.match(lossBranch, /autoTrade\.recoveryPhase=0;autoTrade\.nextStake=autoTrade\.stake;runFinished=true/);
+  assert.doesNotMatch(lossBranch, /autoTradePause\(/);
+  assert.match(source, /RUN 1 COMPLETE · starting RUN 2/);
+  assert.match(source, /RUN 2 COMPLETE · two-run entry finished\. Waiting for a fresh analysis-approved entry trigger/);
+  assert.match(source, /autoTrade\.sessionProfit>=autoTrade\.takeProfit/);
+  assert.match(source, /autoTrade\.sessionProfit<=-autoTrade\.stopLoss/);
 });
 
-test('recovery-OFF UI explains that the bot waits for a fresh valid entry after a loss', () => {
+test('recovery-OFF UI explains two-run entry cycles and fresh-entry waiting', () => {
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.match(html, /OFF = wait for the next valid entry after a loss/);
+  assert.match(html, /One valid manual digit is enough to trigger the normal two-run entry cycle/);
   assert.match(html, /With recovery OFF, a loss ends that entry sequence and the bot waits for a fresh valid entry/);
 });
 
@@ -512,7 +513,7 @@ test('manual entry digits bypass Entry Engine filters but must have neither red 
   assert.ok(appSource.includes('automaticEntryIsCurrent=manualEntriesEnabled||'));
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(html.includes('Use my manual entry digits instead of the Entry Engine digits'));
-  assert.ok(html.includes('Each manual digit must avoid a red (least frequent) or green (most frequent) distribution bar. If one has a red/green bar, the bot can use the other eligible manual digit on its own.'));
+  assert.ok(html.includes('Each manual digit must avoid a red (least frequent) or green (most frequent) distribution bar. If one has a red/green bar, the bot uses the other eligible manual digit on its own. One valid manual digit is enough to trigger the normal two-run entry cycle.'));
   assert.ok(html.includes('Final Signal, probability comparison, live-data and spike-risk checks still apply'));
 });
 
