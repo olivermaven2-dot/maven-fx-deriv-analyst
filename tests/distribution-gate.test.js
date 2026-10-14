@@ -465,3 +465,17 @@ test('recovery-OFF UI explains that the bot waits for a fresh valid entry after 
   assert.match(html, /OFF = wait for the next valid entry after a loss/);
   assert.match(html, /With recovery OFF, a loss ends that entry sequence and the bot waits for a fresh valid entry/);
 });
+
+
+test('recovery side selectors default to existing logic and allow independent Over/Under overrides', () => {
+  assert.match(appSource, /recoverySide1:"DEFAULT",recoverySide2:"DEFAULT"/);
+  assert.match(appSource, /autoTrade\.recoverySide1=recoverySide1;autoTrade\.recoverySide2=recoverySide2/);
+  assert.match(appSource, /autoTrade\.recoverySide1==="DEFAULT"\?autoTrade\.runSide:autoTrade\.recoverySide1/);
+  assert.match(appSource, /autoTrade\.recoverySide2==="DEFAULT"\?\(autoTrade\.runSide==="OVER"\?"UNDER":"OVER"\):autoTrade\.recoverySide2/);
+  const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(html, /id="autoTradeRecoverySide1"/);
+  assert.match(html, /id="autoTradeRecoverySide2"/);
+  assert.equal((html.match(/<option value="OVER">Over<\/option>/g) || []).length, 2);
+  assert.equal((html.match(/<option value="UNDER">Under<\/option>/g) || []).length, 2);
+  assert.match(html, /Defaults preserve the existing logic/);
+});
