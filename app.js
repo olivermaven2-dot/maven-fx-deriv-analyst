@@ -515,6 +515,28 @@ function ouValidationSummary(){
   const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"collecting (0)";
   return "Live entry validation — next 1 tick: "+fmt(c[1])+" • next 2 consecutive ticks: "+fmt(c[2])+" • next 3 consecutive ticks: "+fmt(c[3]);
 }
+function getValidationReliability(engine){
+  let records=[];
+  if(engine==="overunder"){
+    const prefix=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|";
+    records=Object.values(state.ouValidationBook).filter(r=>ouValidationRecordKey(r.market,r.selectedDigit,r.side,r.candidate).startsWith(prefix));
+  }else{
+    const target=engine==="evenodd"?state.selectedParity:state.selectedRiseFall;
+    const rec=state.otherValidation.book[otherValidationKey(engine,target)];
+    if(rec)records=[rec];
+  }
+  const forecasts=records.reduce((sum,r)=>sum+(r[1]?.n||0),0);
+  const hits=records.reduce((sum,r)=>sum+(r[1]?.hits||0),0);
+  const rate=forecasts?hits/forecasts:null;
+  const status=forecasts<10?"TOO LITTLE DATA":forecasts<30?"EARLY SAMPLE":"SAMPLE AVAILABLE";
+  return {forecasts,hits,rate,status};
+}
+function validationReliabilityNote(engine){
+  const v=getValidationReliability(engine);
+  if(v.forecasts<10)return "AI feedback: too little outcome data ("+v.forecasts+" scored 1-tick outcomes). Do not treat this setup as historically validated.";
+  if(v.forecasts<30)return "AI feedback: early sample ("+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate). Keep confidence provisional; this is not a profitability guarantee.";
+  return "AI feedback: "+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate. Historical sample available; it remains session-only and does not guarantee future results.";
+}
 function renderOUValidationPanel(){
   const card=$("ouValidationCard"),out=$("ouValidationResults"),payoutControl=$("ouPayoutControl");
   if(!card||!out)return;
@@ -525,7 +547,7 @@ function renderOUValidationPanel(){
     const key=otherValidationKey(engine,target),rec=state.otherValidation.book[key];
     const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"—";
     const label=engine==="evenodd"?"EVEN/ODD":"RISE/FALL";
-    out.innerHTML='<div class="ou-validation-note">Session-only walk-forward validation • '+label+' forecasts count only when Final Signal and Entry Engine both qualify. Outcomes use future live ticks; this is a prediction hit rate, not proof of profitability.</div>'+
+    out.innerHTML='<div class="ou-validation-note">Session-only walk-forward validation • '+label+' forecasts count only when Final Signal and Entry Engine both qualify. Outcomes use future live ticks; this is a prediction hit rate, not proof of profitability.</div><div class="ou-validation-breakeven">'+esc(validationReliabilityNote(engine))+'</div>'+
       (rec?'<div class="ou-validation-table"><div class="ou-validation-row engine-validation-row ou-validation-head"><span>SETUP</span><span>FORECASTS</span><span>1 TICK</span><span>2 IN A ROW</span><span>3 IN A ROW</span><span>MAX FAILS</span></div><div class="ou-validation-row engine-validation-row"><strong>'+esc(target)+'</strong><span>'+rec.triggers+'</span><span>'+fmt(rec[1])+'</span><span>'+fmt(rec[2])+'</span><span>'+fmt(rec[3])+'</span><span>'+Math.max(rec[1].maxFailureStreak||0,rec[2].maxFailureStreak||0,rec[3].maxFailureStreak||0)+'</span></div></div><div class="ou-validation-note">Even/Odd checks the next digit parity. Rise/Fall checks the next real quote movement; unchanged prices count as misses. A 2- or 3-tick success requires every consecutive outcome in that horizon to match.</div>':
       '<div class="ou-validation-empty">No qualifying '+label+' forecasts recorded for '+esc(state.symbol)+' · '+esc(target)+' yet. Keep the live stream running and leave this engine selected while valid signals and entries appear.</div>');
     return;
@@ -536,7 +558,7 @@ function renderOUValidationPanel(){
   const breakeven=100/(1+payout/100);
   const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"—";
   const roi=x=>x.n?(((x.hits*payout-(x.n-x.hits)*100)/x.n)>=0?"+":"")+(((x.hits*payout-(x.n-x.hits)*100)/x.n).toFixed(1))+"%":"—";
-  out.innerHTML='<div class="ou-validation-note">Session-only tracking • only live entry-digit triggers count • no trades are placed. Assumed win profit is editable and is a what-if estimate, not Deriv live payout.</div>'+
+  out.innerHTML='<div class="ou-validation-note">Session-only tracking • only live entry-digit triggers count • no trades are placed. Assumed win profit is editable and is a what-if estimate, not Deriv live payout.</div><div class="ou-validation-breakeven">'+esc(validationReliabilityNote("overunder"))+'</div>'+
     '<div class="ou-validation-breakeven">Assumed profit per win: <strong>'+payout.toFixed(1)+'%</strong> of stake • break-even hit rate: <strong>'+breakeven.toFixed(1)+'%</strong></div>'+
     (rows.length?'<div class="ou-validation-table"><div class="ou-validation-row ou-validation-head"><span>ENTRY</span><span>TRIGGERS</span><span>1 TICK</span><span>2 IN A ROW</span><span>3 IN A ROW</span><span>MAX FAILS</span><span>EST. ROI*</span></div>'+rows.map(r=>{const selected=[1,2,3].reduce((best,h)=>r[h].n>best.n?r[h]:best,r[1]);return '<div class="ou-validation-row"><strong>'+r.candidate+'</strong><span>'+r.triggers+'</span><span>'+fmt(r[1])+'</span><span>'+fmt(r[2])+'</span><span>'+fmt(r[3])+'</span><span>'+((selected.maxFailureStreak||0))+'</span><span>'+roi(selected)+'</span></div>'}).join("")+'</div><div class="ou-validation-note">*ROI uses the best-sampled horizon for that digit, assumes the entered profit rate and a 100% stake loss on misses. Change payout assumption to match a real quoted contract before interpreting it.</div>':'<div class="ou-validation-empty">No qualifying entry-digit triggers recorded for '+esc(state.symbol)+' • '+state.selectedSide+' '+state.selectedDigit+' yet. Keep the live stream running; the table fills as entry digits trigger and their next ticks complete.</div>');
 }
@@ -940,6 +962,8 @@ window.mavenAIGetContext=function(){
   }else if(state.engine==="overunder"){
     context.signal={value:"WAIT",reason:"At least 30 live digits are needed before the engine can analyze this setup.",distributionReady:bars.total===1000,distributionPass:false,failures:[],entries:[]};
   }
+  context.validation=getValidationReliability(state.engine);
+  context.validation.note=validationReliabilityNote(state.engine);
   return context;
 };
 
