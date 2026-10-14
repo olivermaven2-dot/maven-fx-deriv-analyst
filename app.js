@@ -312,11 +312,11 @@ function startDeepScan(){
     ds.historyRequests[req]=m.symbol;
     request({ticks_history:m.symbol,end:"latest",count:500,style:"ticks",req_id:req});
   }
+  renderDeepScanner();
   const winner=$("scannerWinner");
   if(winner)winner.innerHTML="<strong>SCANNING MARKETS NOW</strong><span>Refreshing live Deriv histories and evaluating your selected "+esc(state.selectedSide)+" "+state.selectedDigit+" setup. Your active market will not change automatically.</span>";
   const btn=$("loadStrongestBtn");
   if(btn){btn.disabled=true;btn.textContent="SCANNING MARKETS…";}
-  renderDeepScanner();
   deepScannerEvaluate(true);
 }
 function loadStrongestScannerMarket(){
