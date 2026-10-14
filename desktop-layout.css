@@ -1,0 +1,62 @@
+/* Desktop/laptop workspace expansion.
+   * Deliberately scoped to wide screens so existing phone layout stays unchanged. */
+@media (min-width: 1024px) {
+  html, body { min-height: 100%; }
+  .topbar {
+    width: 100%;
+    max-width: none;
+    padding: 14px clamp(22px, 2.4vw, 40px) 12px;
+  }
+  .app {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 12px clamp(22px, 2.4vw, 40px) 24px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    grid-template-areas:
+      "live live"
+      "market market"
+      "workspace workspace"
+      "nav nav"
+      "setup engine"
+      "distribution history"
+      "diagnostics diagnostics";
+    align-items: start;
+    column-gap: 16px;
+    row-gap: 12px;
+  }
+  .app > .live-card { grid-area: live; }
+  .app > .market-picker-card { grid-area: market; margin-top: 0; }
+  .app > .workspace-label { grid-area: workspace; margin: 2px 2px 0; }
+  .app > .engine-nav { grid-area: nav; position: sticky; top: 58px; margin: 0; }
+  .app > #overUnderControls,
+  .app > #evenOddControls,
+  .app > #riseFallControls { grid-area: setup; width: 100%; margin: 0; }
+  .app > #engineRoot { grid-area: engine; width: 100%; min-width: 0; margin: 0; }
+  .app > .distribution-card { grid-area: distribution; width: 100%; margin: 0; }
+  .app > .stream-card { grid-area: history; width: 100%; margin: 0; }
+  .app > .details { grid-area: diagnostics; width: 100%; margin: 0; }
+  .app .engine-panel { min-width: 0; }
+  .app .digit-stream { gap: 7px; }
+  .app .digit { width: 32px; height: 32px; font-size: 13px; }
+  .app .distribution-card,
+  .app .stream-card,
+  .app .details,
+  .app #overUnderControls,
+  .app #evenOddControls,
+  .app #riseFallControls,
+  .app #engineRoot { align-self: start; }
+  footer { padding-bottom: 18px; }
+}
+@media (min-width: 1440px) {
+  .app {
+    padding-left: clamp(32px, 3vw, 64px);
+    padding-right: clamp(32px, 3vw, 64px);
+    column-gap: 20px;
+    row-gap: 14px;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  }
+  .app > .live-card { padding: 22px; }
+  .app .distribution-circle { width: 58px; height: 58px; }
+}
