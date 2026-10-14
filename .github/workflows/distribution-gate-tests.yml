@@ -17,6 +17,6 @@ jobs:
         with:
           node-version: 20
       - name: Check JavaScript syntax
-        run: node --check app.js
+        run: node --check app.js && node --check maven-ai.js
       - name: Run distribution gate regression tests
         run: node --test tests/distribution-gate.test.js
