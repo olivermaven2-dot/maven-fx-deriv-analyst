@@ -73,12 +73,15 @@ test('uses the most recent 1,000 ticks when the input is longer', () => {
   assert.equal(result.pass, true);
 });
 
-test('manual bot entry digits replace automatic digits only after passing identical Entry Engine qualification', () => {
+test('manual bot entry digits replace automatic digits and only require unbarred distribution digits', () => {
   assert.ok(appSource.includes('function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null)'));
-  assert.ok(appSource.includes('if(Array.isArray(onlyCandidates)&&!onlyCandidates.includes(candidate))continue'));
   assert.ok(appSource.includes('function autoTradeEntrySelection()'));
-  assert.ok(appSource.includes('overUnderEntry(state.digits,state.selectedDigit,state.selectedSide,[first,second])'));
-  assert.ok(appSource.includes('manual digits have not both passed the Entry Engine rules'));
+  const selectionStart = appSource.indexOf('function autoTradeEntrySelection');
+  const selectionEnd = appSource.indexOf('function renderParityControls', selectionStart);
+  const selection = appSource.slice(selectionStart, selectionEnd);
+  assert.ok(selection.includes('distributionBarFlags(state.digits)'));
+  assert.ok(selection.includes('bars.most[first]||bars.least[first]||bars.most[second]||bars.least[second]'));
+  assert.ok(!selection.includes('overUnderEntry'));
   assert.ok(appSource.includes('const candidates=autoTradeEntrySelection()'));
   const page = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(page.includes('id="autoTradeManualEntriesEnabled"'));
