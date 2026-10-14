@@ -557,3 +557,19 @@ test('recovery OFF keeps the two-run entry cycle after a loss and waits for a fr
   assert.match(source, /autoTrade\.sessionProfit>=autoTrade\.takeProfit/);
   assert.match(source, /autoTrade\.sessionProfit<=-autoTrade\.stopLoss/);
 });
+
+test('bot session P/L is colored green for profit and red for loss', () => {
+  const start = appSource.indexOf('function autoTradeRenderPnL()');
+  assert.notEqual(start, -1, 'autoTradeRenderPnL must exist');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  assert.match(source, /pnl>0/);
+  assert.match(source, /pnl<0/);
+  assert.match(source, /pnl-positive/);
+  assert.match(source, /pnl-negative/);
+  assert.match(source, /pnl-neutral/);
+  const styles = fs.readFileSync(require('node:path').join(__dirname, '..', 'styles.css'), 'utf8');
+  assert.match(styles, /#autoTradePnL\.pnl-positive\{color:#16a34a/);
+  assert.match(styles, /#autoTradePnL\.pnl-negative\{color:#ef4444/);
+});
+
