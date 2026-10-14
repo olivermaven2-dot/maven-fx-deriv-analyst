@@ -393,3 +393,25 @@ test('Deep Scanner requests the full 1,000-tick window required by the distribut
   const scanSource = appSource.slice(scanStart, scanEnd);
   assert.match(scanSource, /ticks_history:m\.symbol,end:"latest",count:1000/);
 });
+
+test('Deep Scanner reports aggregate rejection reasons without exposing individual markets', () => {
+  const start = appSource.indexOf('function deepScannerEvaluate(force=false)');
+  const end = appSource.indexOf('\nfunction startDeepScan', start);
+  assert.notEqual(start, -1);
+  const evaluator = appSource.slice(start, end);
+  assert.match(evaluator, /r\.digits\.length<1000/);
+  assert.match(evaluator, /counts\.distribution\+\+/);
+  assert.match(evaluator, /counts\.probability\+\+/);
+  assert.match(evaluator, /counts\.signal\+\+/);
+  assert.match(evaluator, /counts\.entry\+\+/);
+  assert.match(evaluator, /ds\.lastScanDiagnostics=\{\.\.\.counts,total:state\.markets\.length,qualified:rows\.length/);
+
+  const renderStart = appSource.indexOf('function renderDeepScanner(rows=null)');
+  const renderEnd = appSource.indexOf('\nfunction ouValidationKey', renderStart);
+  const renderer = appSource.slice(renderStart, renderEnd);
+  assert.match(renderer, /awaiting 1,000 ticks/);
+  assert.match(renderer, /blocked by distribution rules/);
+  assert.match(renderer, /blocked by complementary probability/);
+  assert.match(renderer, /had no qualified entry digit/);
+  assert.match(renderer, /results\.hidden=true/);
+});
