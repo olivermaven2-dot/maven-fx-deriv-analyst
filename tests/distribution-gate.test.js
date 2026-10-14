@@ -237,7 +237,7 @@ test('spike-risk refresh uses a removable note marker to avoid stacking warnings
 test('bot entry validation refuses an incomplete or duplicated entry pair', () => {
   const start = appSource.indexOf('function autoTradeReadyToEnter');
   assert.notEqual(start, -1, 'autoTradeReadyToEnter must exist');
-  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
   const harness = `
     const autoTrade = { enabled: true, authorized: true };
@@ -270,9 +270,9 @@ test('bot entry validation refuses an incomplete or duplicated entry pair', () =
 test('Even/Odd waits for at least 100 observed digits before issuing a signal', () => {
   const start = appSource.indexOf('function parityStats');
   assert.notEqual(start, -1, 'parityStats must exist');
-  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
-  const run = vm.runInNewContext(source + '\\nparityStats');
+  const run = vm.runInNewContext(source + '\nparityStats');
   const result = run(Array(99).fill(2), 'EVEN');
   assert.equal(result.signal, 'WAIT');
 });
@@ -280,7 +280,7 @@ test('Even/Odd waits for at least 100 observed digits before issuing a signal', 
 test('Even/Odd entry requires a current live trigger and does not rely on a historical pattern alone', () => {
   const start = appSource.indexOf('function selectParityEntry');
   assert.notEqual(start, -1, 'selectParityEntry must exist');
-  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
   const harness = `
     const parityPatternStats = () => ({
@@ -302,7 +302,7 @@ test('Even/Odd entry requires a current live trigger and does not rely on a hist
 test('Even/Odd renderer only activates entry validation for SIGNAL or STRONG SIGNAL', () => {
   const start = appSource.indexOf('function renderEvenOdd');
   assert.notEqual(start, -1);
-  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
   assert.match(source, /e\.signal===\"SIGNAL\"\|\|e\.signal===\"STRONG SIGNAL\"/);
   assert.match(source, /entryActive\?selectParityEntry/);
@@ -311,9 +311,9 @@ test('Even/Odd renderer only activates entry validation for SIGNAL or STRONG SIG
 test('Rise/Fall waits for 100 prices before issuing a signal', () => {
   const start = appSource.indexOf('function riseFallAnalysis');
   assert.notEqual(start, -1, 'riseFallAnalysis must exist');
-  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
-  const run = vm.runInNewContext(source + '\\nriseFallAnalysis', {
+  const run = vm.runInNewContext(source + '\nriseFallAnalysis', {
     state: { selectedRiseFall: 'RISE' }
   });
   const result = run(Array.from({ length: 99 }, (_, i) => i + 100));
@@ -323,9 +323,9 @@ test('Rise/Fall waits for 100 prices before issuing a signal', () => {
 test('Rise/Fall entry rejects inactive signals and requires current pattern follow-through', () => {
   const start = appSource.indexOf('function riseFallEntry');
   assert.notEqual(start, -1, 'riseFallEntry must exist');
-  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
-  const run = vm.runInNewContext(source + '\\nriseFallEntry');
+  const run = vm.runInNewContext(source + '\nriseFallEntry');
   assert.equal(run(Array(100).fill(100), { signal: 'WAIT', selected: 'RISE' }), null);
   assert.equal(run(Array.from({ length: 100 }, (_, i) => i), { signal: 'SIGNAL', selected: 'RISE' }), null,
     'a trend alone must not count as an entry without a qualified historical trigger');
@@ -334,7 +334,7 @@ test('Rise/Fall entry rejects inactive signals and requires current pattern foll
 test('Rise/Fall renderer only activates entry validation for SIGNAL or STRONG SIGNAL', () => {
   const start = appSource.indexOf('function renderRiseFall');
   assert.notEqual(start, -1);
-  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
   assert.match(source, /const entry=riseFallEntry\(prices,a\)/);
   assert.match(source, /a\.signal===\"SIGNAL\"\|\|a\.signal===\"STRONG SIGNAL\"/);
@@ -343,7 +343,7 @@ test('Rise/Fall renderer only activates entry validation for SIGNAL or STRONG SI
 test('shared spike-risk protection blocks entry display without replacing any engine Final Signal', () => {
   const start = appSource.indexOf('function applySpikeRiskProtection');
   assert.notEqual(start, -1);
-  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
   assert.match(source, /NO ENTRY — SPIKE RISK/);
   assert.match(source, /Final Signal remains the engine analysis/);
