@@ -73,6 +73,19 @@ test('uses the most recent 1,000 ticks when the input is longer', () => {
   assert.equal(result.pass, true);
 });
 
+test('manual bot entry digits replace automatic digits only after passing identical Entry Engine qualification', () => {
+  assert.ok(appSource.includes('function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null)'));
+  assert.ok(appSource.includes('if(Array.isArray(onlyCandidates)&&!onlyCandidates.includes(candidate))continue'));
+  assert.ok(appSource.includes('function autoTradeEntrySelection()'));
+  assert.ok(appSource.includes('overUnderEntry(state.digits,state.selectedDigit,state.selectedSide,[first,second])'));
+  assert.ok(appSource.includes('manual digits have not both passed the Entry Engine rules'));
+  assert.ok(appSource.includes('const candidates=autoTradeEntrySelection()'));
+  const page = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(page.includes('id="autoTradeManualEntriesEnabled"'));
+  assert.ok(page.includes('id="autoTradeManualDigit1"'));
+  assert.ok(page.includes('id="autoTradeManualDigit2"'));
+});
+
 test('app.js remains syntactically valid', () => {
   // Node's parser check is run by the workflow with: node --check app.js
   assert.match(appSource, /function distributionGate/);
@@ -248,6 +261,8 @@ test('bot entry validation refuses an incomplete or duplicated entry pair', () =
       ouEntrySnapshot: { key: 'R_100|2|OVER', active: true, digits: [3] }
     };
     const ouValidationKey = () => 'R_100|2|OVER';
+    const autoTradeEntrySelection = () => state.ouEntrySnapshot?.active ? state.ouEntrySnapshot.digits : [];
+    const $ = () => ({ checked: false });
     const spikeRiskAssessment = () => ({ level: 'LOW', title: 'LOW SPIKE RISK' });
     ${source}
     autoTradeReadyToEnter
