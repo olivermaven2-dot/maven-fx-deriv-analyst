@@ -517,9 +517,12 @@ function renderDigitDistribution(){
   host.innerHTML=freq.map((count,digit)=>{
     const pct=percentages[digit],isMost=count===max,isLeast=count===min;
     const kind=isMost?' most':isLeast?' least':'',tag=isMost?'MOST':isLeast?'LEAST':'';
-    const share=maxPct?pct/maxPct*100:0;
-    return '<div class="distribution-cell'+kind+'"><div class="distribution-circle" style="--share:'+share.toFixed(2)+'%"><span>'+digit+'</span></div><span class="distribution-percent">'+pct.toFixed(1)+'%</span><span class="distribution-tag">'+tag+'</span></div>';
+    const share=maxPct?pct/maxPct*100:0,active=digit===state.selectedDigit;
+    const qualifies=state.selectedSide==="OVER"?digit>state.selectedDigit:digit<state.selectedDigit;
+    const relation=digit===state.selectedDigit?' selected':qualifies?' qualifies':' nonqualifying';
+    return '<button type="button" class="distribution-cell distribution-digit'+kind+relation+(active?' active':'')+'" data-digit="'+digit+'" aria-label="Select digit '+digit+'" aria-pressed="'+active+'"><span class="distribution-circle" style="--share:'+share.toFixed(2)+'%"><span>'+digit+'</span></span><span class="distribution-percent">'+pct.toFixed(1)+'%</span><span class="distribution-tag">'+tag+'</span></button>';
   }).join('');
+  host.querySelectorAll(".distribution-digit").forEach(btn=>btn.addEventListener("click",()=>selectOverUnderDigit(Number(btn.dataset.digit))));
 }
 function counts(d){return d.reduce((a,x)=>(a[x]=(a[x]||0)+1,a),{})}
 function rate(a,b){return b?Math.round(a/b*100):0}
@@ -747,17 +750,27 @@ function autoTradeEntrySelection(){
 function renderParityControls(){
   document.querySelectorAll(".parity-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.parity===state.selectedParity)); const label=$("paritySetupLabel"); if(label)label.textContent=state.selectedParity;
 }
+function selectOverUnderDigit(digit){
+  if(!Number.isInteger(digit)||digit<0||digit>9)return;
+  state.selectedDigit=digit;
+  autoTradeSetupChanged();
+  state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.strongestCandidate=null;
+  renderOUControls();renderDigitDistribution();renderEngine();deepScannerEvaluate(true);
+}
 function renderOUControls(){
-  const setupLabel=$("ouSetupLabel");
-  if(setupLabel)setupLabel.textContent=state.selectedSide+" "+state.selectedDigit;
-  document.querySelectorAll(".ou-digit").forEach(btn=>{
-    const d=Number(btn.dataset.digit);
+  document.querySelectorAll(".distribution-digit").forEach(btn=>{
+    const d=Number(btn.dataset.digit),active=d===state.selectedDigit;
     const qualifies=state.selectedSide==="OVER"?d>state.selectedDigit:d<state.selectedDigit;
-    btn.classList.toggle("active",d===state.selectedDigit);
-    btn.classList.toggle("qualifying",d!==state.selectedDigit&&qualifies);
+    btn.classList.toggle("active",active);
+    btn.classList.toggle("selected",active);
+    btn.classList.toggle("qualifies",d!==state.selectedDigit&&qualifies);
     btn.classList.toggle("nonqualifying",d!==state.selectedDigit&&!qualifies);
+    btn.setAttribute("aria-pressed",String(active));
   });
-  document.querySelectorAll(".ou-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.side===state.selectedSide));
+  document.querySelectorAll(".ou-side").forEach(btn=>{
+    const active=btn.dataset.side===state.selectedSide;
+    btn.classList.toggle("active",active);btn.setAttribute("aria-pressed",String(active));
+  });
 }
 
 function spikeRiskAssessment(){
@@ -1209,7 +1222,7 @@ function renderRiseFall(root,last,n){
 }
 document.querySelectorAll(".parity-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedParity=btn.dataset.parity;renderParityControls();renderEngine()}));
 document.querySelectorAll(".rise-fall-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedRiseFall=btn.dataset.direction;renderRiseFallControls();renderEngine()}));
-document.querySelectorAll(".ou-digit").forEach(btn=>btn.addEventListener("click",()=>{state.selectedDigit=Number(btn.dataset.digit);autoTradeSetupChanged();state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.strongestCandidate=null;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
+
 document.querySelectorAll(".ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;autoTradeSetupChanged();state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.strongestCandidate=null;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
 document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>{b.classList.remove("active");b.setAttribute("aria-selected","false")});btn.classList.add("active");btn.setAttribute("aria-selected","true");state.engine=btn.dataset.engine;const current=document.getElementById("workspaceCurrent");if(current)current.textContent=btn.textContent.trim();renderEngine()}));
 const scanNowBtn=$("scanNowBtn");if(scanNowBtn)scanNowBtn.addEventListener("click",startDeepScan);const loadStrongestBtn=$("loadStrongestBtn");if(loadStrongestBtn)loadStrongestBtn.addEventListener("click",loadStrongestScannerMarket);
