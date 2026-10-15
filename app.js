@@ -690,9 +690,11 @@ function receiveTick(t){
   $("diagTicks").textContent=state.ticks.length;
   const fastExecution=autoTrade.enabled&&autoTrade.speedMode==="FAST"&&state.engine==="overunder";
   if(fastExecution){
-    // Run after required signal/entry analysis but before noncritical history display work.
+    // Preserve every real tick in FIFO order while a quote/contract or the two-run sequence is in flight.
+    autoTrade.fastTickQueue.push({digit,quote:Number(quote),epoch,receivedAt:Date.now()});
+    if(autoTrade.fastTickQueue.length>autoTrade.fastTickQueueLimit)autoTrade.fastTickQueue.shift();
     if(shouldRenderEngineForCurrentTick())renderEngine();else renderOUValidationPanel();
-    processAutoTradeTick(digit);
+    autoTradeDrainFastTickQueue();
     updateQuality();renderStream(true);
   }else{
     updateQuality();renderStream(true);
@@ -1595,7 +1597,7 @@ const autoTrade={
   socket:null,authorized:false,account:null,enabled:false,speedMode:"STANDARD",realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,recoverySide1:"DEFAULT",recoverySide2:"DEFAULT",
-  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,logLines:[],lastManualBlockReason:"",lastManualLoggedReason:"",demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
+  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,fastTickQueue:[],fastTickQueueLimit:500,fastTickQueueStaleMs:3000,fastTickQueueDrainActive:false,logLines:[],lastManualBlockReason:"",lastManualLoggedReason:"",demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
 };
 function autoTradeLog(message){
   const stamp=new Date().toLocaleTimeString();
@@ -1667,16 +1669,34 @@ function autoTradeSetupChanged(){
   autoTrade.armed=true;
   autoTradeRender();
 }
+function autoTradeIsExecutionBusy(){
+  return !!(autoTrade.runSymbol||Object.keys(autoTrade.pendingBuyQuotes).length||Object.keys(autoTrade.activeContracts).length);
+}
+function autoTradeDrainFastTickQueue(){
+  if(autoTrade.fastTickQueueDrainActive||!autoTrade.enabled||autoTrade.speedMode!=="FAST"||state.engine!=="overunder"||autoTradeIsExecutionBusy())return;
+  autoTrade.fastTickQueueDrainActive=true;
+  try{
+    let processed=0,stale=0;
+    while(autoTrade.fastTickQueue.length&&autoTrade.enabled&&!autoTradeIsExecutionBusy()&&processed<autoTrade.fastTickQueueLimit){
+      const tick=autoTrade.fastTickQueue.shift();processed++;
+      if(Date.now()-tick.receivedAt>autoTrade.fastTickQueueStaleMs){stale++;continue;}
+      // Process each still-fresh queued live tick in arrival order; never place a trade from stale queued data.
+      processAutoTradeTick(tick.digit);
+    }
+    if(stale&&autoTrade.enabled)autoTradeLog("FAST QUEUE · processed "+processed+" queued ticks in order; "+stale+" were too old to trigger a new trade safely.");
+  }finally{autoTrade.fastTickQueueDrainActive=false}
+}
 function autoTradePause(reason){
-  autoTrade.enabled=false;autoTrade.runRemaining=0;autoTrade.runSymbol="";
+  autoTrade.enabled=false;autoTrade.runRemaining=0;autoTrade.runSymbol="";autoTrade.fastTickQueue.length=0;
   autoTradeStatus("PAUSED");autoTradeLog("BOT PAUSED · "+reason);autoTradeRender();
 }
 function autoTradeSetSpeedMode(mode,logChange=true){
   autoTrade.speedMode=mode==="FAST"?"FAST":"STANDARD";
   const button=$("autoTradeSpeedToggle");
   if(button){button.textContent=autoTrade.speedMode==="FAST"?"FAST EXECUTION: ON":"FAST EXECUTION: OFF";button.setAttribute("aria-pressed",autoTrade.speedMode==="FAST"?"true":"false");button.classList.toggle("fast-active",autoTrade.speedMode==="FAST");}
-  const note=$("autoTradeSpeedNote");if(note)note.textContent=autoTrade.speedMode==="FAST"?"Fast mode runs the bot immediately after required signal checks, before noncritical history display updates. Market tick speed and Deriv network response time are unchanged.":"Standard mode updates the live display before processing the bot. Both modes keep the same entry, risk and two-run rules.";
-  if(logChange&&$("autoTradeLog"))autoTradeLog("Execution speed set to "+(autoTrade.speedMode==="FAST"?"FAST":"STANDARD")+". This changes local processing order only; it cannot accelerate Deriv ticks or network response.");
+  if(autoTrade.speedMode!=="FAST"&&autoTrade.fastTickQueue.length){const cleared=autoTrade.fastTickQueue.length;autoTrade.fastTickQueue.length=0;if(logChange)autoTradeLog("FAST QUEUE CLEARED · "+cleared+" waiting ticks discarded because Standard mode was selected.");}
+  const note=$("autoTradeSpeedNote");if(note)note.textContent=autoTrade.speedMode==="FAST"?"Queues live ticks in arrival order while a quote/contract or the two-run cycle is busy, then processes each fresh tick. Old queued ticks are never used for stale entries; Deriv/network speed itself is unchanged.":"Standard mode processes the current live tick directly. Both modes keep the same entry, risk and two-run rules.";
+  if(logChange&&$("autoTradeLog"))autoTradeLog(autoTrade.speedMode==="FAST"?"FAST EXECUTION ON · FIFO live-tick queue enabled; no queued tick is replayed as a trade trigger if it has gone stale.":"Execution speed set to STANDARD.");
 }
 function autoTradeStart(){
   if(!autoTradeCanStart()){autoTradeLog("Start blocked: connect an account; real accounts additionally require the checkbox and exact phrase TRADE REAL.");autoTradeRender();return}
@@ -1905,6 +1925,8 @@ function autoTradeHandleMessage(d){
         autoTrade.runRemaining=1;autoTradeRender();autoTradePlaceNext();
       }else{
         autoTradeRender();
+        // A completed two-run cycle releases the FIFO queue for the next still-fresh entry tick.
+        autoTradeDrainFastTickQueue();
       }
     }else{autoTradeRender()}
   }}
