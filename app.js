@@ -16,7 +16,7 @@ function renderOverUnder(root,d,c,last,n){
   else if(e.signal==="WAIT")reason="The selected setup is still building enough independent evidence across the required analysis windows.";
   else if(e.signal==="STRONG SIGNAL")reason="Probability, momentum, trend, transitions, reaction behavior, recency, consistency and context are aligned for "+setup+".";
   else reason="The selected setup has sufficient multi-factor evidence, but the evidence is not strong enough for a STRONG SIGNAL.";
-  const entryDisplay=activeSignal?(entry||{main:"NO VALID ENTRY",confidence:"—",status:"NO ENTRY",reason:"No candidate digit passed the required sample-size, transition, reaction and consistency checks.",evidence:"Candidate evaluation completed"}):{main:"NO ACTIVE ENTRY",confidence:"—",status:"INACTIVE",reason:"Entry Engine activates only when the selected Final Signal is SIGNAL or STRONG SIGNAL.",evidence:"Waiting for an active signal"};
+  const entryDisplay=activeSignal?(entry||{main:"NO VALID ENTRY",confidence:"—",status:"NO ENTRY",reason:"No candidate digit passed the minimum sample, directional reaction and consistency checks.",evidence:"Candidate evaluation completed"}):{main:"NO ACTIVE ENTRY",confidence:"—",status:"INACTIVE",reason:"Entry Engine activates only when the selected Final Signal is SIGNAL or STRONG SIGNAL.",evidence:"Waiting for an active signal"};
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
     "Selected setup: "+setup,
     "Probability Comparison: "+Math.round(e.selectedRate*100)+"% vs complement "+Math.round(e.oppositeRate*100)+"% • baseline "+Math.round(e.baseline*100)+"%",
@@ -989,11 +989,13 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
   candidates.sort((a,b)=>b.score-a.score);
   if(!candidates.length)return null;
   const setupDepth=Math.min(selectedDigit,9-selectedDigit),middleBias=Math.max(0,Math.min(1,(setupDepth-1)/3));
-  const minTotal=Math.round(20-4*middleBias),recentMin=.49+.02*middleBias,scoreMin=55-3*middleBias;
+  const minTotal=Math.round(16-3*middleBias),recentMin=.48+.015*middleBias,scoreMin=52-4*middleBias;
   const qualified=candidates.filter(c=>{
-    const hasContinuation=c.r1>=.54||c.r2>=.52;
-    const hasDirectionalReaction=c.recentRate>=recentMin&&(c.weightedRate>=baseline-.02||c.r1>=.56||c.r2>=.54);
-    return c.total>=minTotal&&c.recentTotal>=5&&hasDirectionalReaction&&hasContinuation&&c.stability>=.56&&c.consistency>=.45&&c.score>=scoreMin;
+    // Treat a good immediate reaction OR credible two-tick follow-through as valid;
+    // don't require all horizons to agree before a candidate can qualify.
+    const hasContinuation=c.r1>=Math.max(.52,baseline-.10)||c.r2>=Math.max(.36,baseline-.18);
+    const hasDirectionalReaction=(c.recentRate>=recentMin&&(c.weightedRate>=baseline-.06||c.r1>=Math.max(.54,baseline-.08)||c.r2>=Math.max(.38,baseline-.16)));
+    return c.total>=minTotal&&c.recentTotal>=4&&hasDirectionalReaction&&hasContinuation&&c.stability>=.44&&c.consistency>=.28&&c.score>=scoreMin;
   }).slice(0,2);
   if(!qualified.length)return null;
   const entries=qualified.map(c=>{
