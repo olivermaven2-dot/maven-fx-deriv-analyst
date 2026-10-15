@@ -95,7 +95,7 @@ test('uses the most recent 1,000 ticks when the input is longer', () => {
   assert.equal(result.pass, true);
 });
 
-test('manual bot entry digits replace automatic digits and only require unbarred distribution digits', () => {
+test('manual bot entry digits must pass predictive qualification and distribution bars', () => {
   assert.ok(appSource.includes('function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null)'));
   assert.ok(appSource.includes('function autoTradeEntrySelection()'));
   const selectionStart = appSource.indexOf('function autoTradeEntrySelection');
@@ -103,7 +103,9 @@ test('manual bot entry digits replace automatic digits and only require unbarred
   const selection = appSource.slice(selectionStart, selectionEnd);
   assert.ok(selection.includes('distributionBarFlags(state.digits)'));
   assert.ok(selection.includes('bars.most[digit]||bars.least[digit]'));
-  assert.ok(!selection.includes('overUnderEntry'));
+  assert.ok(selection.includes('overUnderEntry(state.digits,state.selectedDigit,state.selectedSide,valid)'));
+  assert.ok(selection.includes('mavenAIReviewEntry("overunder",prediction'));
+  assert.ok(selection.includes('intersectPredictiveEntryCandidates(valid,reviewedPrediction?.entries)'));
   assert.ok(appSource.includes('const candidates=autoTradeEntrySelection()'));
   const page = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(page.includes('id="autoTradeManualEntriesEnabled"'));
