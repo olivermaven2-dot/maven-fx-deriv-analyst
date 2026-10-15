@@ -295,7 +295,7 @@ test('Over/Under validation scores only a candidate triggered immediately after 
 test('signal validation uses the monotonic live sequence after the tick buffer is full', () => {
   const start = appSource.indexOf('function processSignalValidationTick');
   assert.notEqual(start, -1);
-  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
   const makeHarness = snapshotTick => `
     const state = {
