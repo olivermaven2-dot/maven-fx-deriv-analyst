@@ -7,7 +7,7 @@ function renderOverUnder(root,d,c,last,n){
   state.ouSignalSnapshot={key:ouValidationKey(),active:activeSignal&&!e.probabilityConflict,signal:e.signal,probabilityConflict:!!e.probabilityConflict,tickCount:state.digits.length};
   autoTradeUpdateLiveFields();
   let reason;
-  if(e.probabilityConflict)reason="Probability Comparison is blocking the selected setup because the complementary setup has stronger live probability evidence.";
+  if(e.probabilityConflict)reason="Paired-setup comparison is blocking this setup because the paired historical rate is more than 4 percentage points higher. This is a custom filter, not a true probability complement.";
   else if(e.signal==="AVOID")reason="The selected setup does not have enough aligned A-Setup evidence.";
   else if(e.signal==="WAIT")reason="The selected setup is still building enough independent evidence across the required analysis windows.";
   else if(e.signal==="STRONG SIGNAL")reason="Heuristic evidence is aligned for "+setup+". This is not a calibrated win probability or a guarantee of profitability.";
@@ -15,12 +15,12 @@ function renderOverUnder(root,d,c,last,n){
   const entryDisplay=activeSignal?(entry||{main:"NO VALID ENTRY",confidence:"—",status:"NO ENTRY",reason:"No candidate digit passed the required sample-size, transition, reaction and consistency checks.",evidence:"Candidate evaluation completed"}):{main:"NO ACTIVE ENTRY",confidence:"—",status:"INACTIVE",reason:"Entry Engine activates only when the selected Final Signal is SIGNAL or STRONG SIGNAL.",evidence:"Waiting for an active signal"};
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
     "Selected setup: "+setup,
-    "Pair filter (heuristic, not true opposite outcomes): "+Math.round(e.selectedRate*100)+"% vs paired setup "+Math.round(e.oppositeRate*100)+"% • reference rate "+Math.round(e.baseline*100)+"%",
+    "Paired-setup filter (not true complementary probabilities): "+Math.round(e.selectedRate*100)+"% vs paired historical rate "+Math.round(e.oppositeRate*100)+"% • uniform reference "+Math.round(e.baseline*100)+"%",
     "Windows 20/50/100/250/500: "+[e.recentRate,e.short50,e.mediumRate,e.mid250,e.longRate].map(x=>Math.round(x*100)+"%").join(" / "),
     "Heuristic score components (not win probabilities): rate-fit "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentum*100)+" • trend "+Math.round(e.trend*100)+" • transitions "+Math.round(e.transition*100),
     "Reaction "+Math.round(e.reaction*100)+" • clustering "+Math.round(e.cluster*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
     "Historical fit "+Math.round(e.historical*100)+" • current context "+Math.round(e.context*100)+" • combined heuristic score "+Math.round(e.evidence*100),
-    e.probabilityConflict?"× Complementary probability conflict — selected setup blocked":entry?"✓ Entry candidates "+entry.main+" passed historical reaction filters":"× Entry candidates remain inactive or did not pass validation",
+    e.probabilityConflict?"× Paired historical-rate filter — selected setup blocked":entry?"✓ Entry candidates "+entry.main+" passed historical reaction filters":"× Entry candidates remain inactive or did not pass validation",
     ouValidationSummary()
   ],n);
 }
@@ -385,13 +385,9 @@ function renderOUValidationPanel(){
   card.style.display=state.engine==="overunder"?"":"none";
   const prefix=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|";
   const rows=Object.values(state.ouValidationBook).filter(r=>ouValidationRecordKey(r.market,r.selectedDigit,r.side,r.candidate).startsWith(prefix)).sort((a,b)=>b.triggers-a.triggers).slice(0,5);
-  const payout=Math.max(1,Math.min(500,Number(state.ouPayoutPercent)||95));
-  const breakeven=100/(1+payout/100);
   const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"—";
-  const roi=x=>x.n?(((x.hits*payout-(x.n-x.hits)*100)/x.n)>=0?"+":"")+(((x.hits*payout-(x.n-x.hits)*100)/x.n).toFixed(1))+"%":"—";
-  out.innerHTML='<div class="ou-validation-note">Session-only forward tracking. A trigger is counted once per observed live tick; the next 1/2/3 tick outcomes are recorded after the trigger. This is not a walk-forward backtest or proof of profitability.</div>'+
-    '<div class="ou-validation-breakeven">Assumed profit per win: <strong>'+payout.toFixed(1)+'%</strong> of stake • break-even hit rate: <strong>'+breakeven.toFixed(1)+'%</strong></div>'+
-    (rows.length?'<div class="ou-validation-table"><div class="ou-validation-row ou-validation-head"><span>ENTRY</span><span>TRIGGERS</span><span>1 TICK</span><span>2 IN A ROW</span><span>3 IN A ROW</span><span>EST. ROI*</span></div>'+rows.map(r=>'<div class="ou-validation-row"><strong>'+r.candidate+'</strong><span>'+r.triggers+'</span><span>'+fmt(r[1])+'</span><span>'+fmt(r[2])+'</span><span>'+fmt(r[3])+'</span><span>'+roi(r[1])+'</span></div>').join("")+'</div><div class="ou-validation-note">*ROI is a one-tick what-if only, based on your assumed payout, not an actual Deriv contract quote. Multi-tick results are consecutive-tick hit rates, not one-tick contract wins. Small samples are noisy; this is not proof of profitability.</div>':'<div class="ou-validation-empty">No qualifying entry-digit triggers recorded for '+esc(state.symbol)+' • '+state.selectedSide+' '+state.selectedDigit+' yet. Keep the live stream running; the table fills as entry digits trigger and their next ticks complete.</div>');
+  out.innerHTML='<div class="ou-validation-note"><strong>FORWARD OBSERVATION ONLY.</strong> These are next-tick and consecutive-tick direction checks after entry-digit triggers. Overlapping triggers are not independent trades; this session-only tracker is not a walk-forward backtest.</div>'+
+    (rows.length?'<div class="ou-validation-table"><div class="ou-validation-row ou-validation-head"><span>ENTRY</span><span>TRIGGERS</span><span>1 TICK</span><span>2 IN A ROW</span><span>3 IN A ROW</span></div>'+rows.map(r=>'<div class="ou-validation-row"><strong>'+r.candidate+'</strong><span>'+r.triggers+'</span><span>'+fmt(r[1])+'</span><span>'+fmt(r[2])+'</span><span>'+fmt(r[3])+'</span></div>').join("")+'</div><div class="ou-validation-note">No ROI or break-even claim is shown because actual contract payout, transaction outcomes and independent out-of-sample results are not measured here. Do not use this panel alone to justify real-money trading.</div>':'<div class="ou-validation-empty">No qualifying entry-digit triggers recorded for '+esc(state.symbol)+' • '+state.selectedSide+' '+state.selectedDigit+' yet. Keep the live stream running; the table fills as triggers and their next ticks arrive.</div>');
 }
 function receiveTick(t){
   if(!t||t.symbol!==state.symbol)return;
@@ -579,11 +575,15 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
   return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
 }
+function ouWilsonLowerBound(rate,n,z=1.96){
+  if(!Number.isFinite(rate)||!Number.isFinite(n)||n<=0)return 0;
+  const p=Math.max(0,Math.min(1,rate)),z2=z*z,den=1+z2/n;
+  return Math.max(0,(p+z2/(2*n)-z*Math.sqrt((p*(1-p)+z2/(4*n))/n))/den);
+}
 function overUnderEntry(d,selectedDigit,selectedSide){
   const candidates=[];
   const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
   for(let candidate=0;candidate<=9;candidate++){
-    // Exclude spike-prone extreme entry digits for the selected direction.
     if((selectedSide==="UNDER"&&(candidate===0||candidate===1))||(selectedSide==="OVER"&&(candidate===8||candidate===9)))continue;
     const t=ouTransitionStats(d,candidate,selectedDigit,selectedSide);
     if(t.total<50||t.recentTotal<10)continue;
@@ -596,29 +596,17 @@ function overUnderEntry(d,selectedDigit,selectedSide){
     const recentAdvantage=Math.max(0,Math.min(1,.5+(t.recentRate-baseline)*3));
     const stability=Math.max(0,Math.min(1,1-Math.abs(t.rate-t.recentRate)-Math.abs(t.r1-t.r2)*.35-Math.abs(t.r2-t.r3)*.25));
     const consistency=Math.max(0,Math.min(1,1-Math.abs(t.r1-t.r2)-Math.abs(t.r2-t.r3)));
-    // Predictive layer: condition past reactions on the market context immediately
-    // before this entry digit. This adds a forward-looking estimate, not just raw history.
-    const priorDigit=d.length?d[d.length-1]:null;
-    let contextN=0,contextOne=0,contextTwo=0,contextTwoN=0,contextRecentN=0,contextRecentOne=0;
-    const contextStart=Math.max(1,d.length-500);
-    for(let i=contextStart;i<d.length-1;i++){
-      if(d[i]!==candidate||d[i-1]!==priorDigit)continue;
-      const age=d.length-1-i;
-      const one=qualifies(d[i+1]);
-      contextN++;if(one)contextOne++;
-      if(age<=150){contextRecentN++;if(one)contextRecentOne++;}
-      if(i+2<d.length){contextTwoN++;if(one&&qualifies(d[i+2]))contextTwo++;}
-    }
-    const contextRate=contextN?contextOne/contextN:t.weightedRate;
-    const contextRecentRate=contextRecentN?contextRecentOne/contextRecentN:contextRate;
-    const contextTwoRate=contextTwoN?contextTwo/contextTwoN:t.r2;
-    const predictionSample=Math.min(1,contextN/30);
-    // This is a support score from sample counts, not a calibrated probability.
-    const predictionConfidence=Math.round(100*(.45*Math.min(1,contextN/30)+.30*Math.min(1,t.recentTotal/50)+.25*Math.min(1,t.total/100)));
-    const predictedRate=.50*contextRate+.30*contextRecentRate+.20*contextTwoRate;
-    const predictionScore=Math.max(0,Math.min(1,.5+(predictedRate-baseline)*3));
-    const score=Math.round(100*(directionalAdvantage*.19+recentAdvantage*.14+continuation*.23+immediateAdvantage*.08+twoTickAdvantage*.06+threeTickAdvantage*.02+stability*.05+consistency*.03+sample*.01+recentWeight*.01+predictionScore*.12+predictionSample*.06));
-    candidates.push({...t,candidate,baseline,score,continuation,stability,consistency,contextN,contextRate,contextRecentRate,contextTwoRate,predictedRate,predictionConfidence});
+    // Use completed historical outcomes only. The preceding digit at a future
+    // entry trigger is not known when the candidate is ranked.
+    const oneTickLower=ouWilsonLowerBound(t.r1,t.n1);
+    const twoTickLower=ouWilsonLowerBound(t.r2,t.n2);
+    const observedRate=.65*t.r1+.35*t.r2;
+    const conservativeRate=.65*oneTickLower+.35*twoTickLower;
+    const support=Math.round(100*(.45*Math.min(1,t.total/150)+.30*Math.min(1,t.recentTotal/50)+.25*Math.min(1,t.n2/100)));
+    const observedScore=Math.max(0,Math.min(1,.5+(observedRate-baseline)*3));
+    const conservativeScore=Math.max(0,Math.min(1,.5+(conservativeRate-baseline)*3));
+    const score=Math.round(100*(directionalAdvantage*.18+recentAdvantage*.13+continuation*.20+immediateAdvantage*.07+twoTickAdvantage*.05+threeTickAdvantage*.02+stability*.06+consistency*.04+sample*.02+recentWeight*.01+observedScore*.12+conservativeScore*.10));
+    candidates.push({...t,candidate,baseline,score,continuation,stability,consistency,observedRate,conservativeRate,oneTickLower,twoTickLower,support});
   }
   candidates.sort((a,b)=>b.score-a.score);
   if(!candidates.length)return null;
@@ -627,22 +615,21 @@ function overUnderEntry(d,selectedDigit,selectedSide){
   const qualified=candidates.filter(c=>{
     const hasContinuation=c.r1>=.54||c.r2>=.52;
     const hasDirectionalReaction=c.recentRate>=recentMin&&(c.weightedRate>=baseline-.02||c.r1>=.56||c.r2>=.54);
-    return c.total>=minTotal&&c.recentTotal>=5&&hasDirectionalReaction&&hasContinuation&&c.stability>=.56&&c.consistency>=.45&&c.score>=scoreMin;
+    return c.total>=minTotal&&c.recentTotal>=5&&c.n1>=40&&c.n2>=35&&hasDirectionalReaction&&hasContinuation&&c.stability>=.56&&c.consistency>=.45&&c.score>=scoreMin;
   }).slice(0,2);
   if(!qualified.length)return null;
   const entries=qualified.map(c=>{
-    let score=c.score;
-    const status=score>=78?"STRONG CANDIDATE":score>=66?"MODERATE CANDIDATE":"EARLY CANDIDATE";
+    const status=c.score>=78?"STRONG CANDIDATE":c.score>=66?"MODERATE CANDIDATE":"EARLY CANDIDATE";
     let reason;
-    if(c.r1>=.56&&c.r2>=.54&&c.r3>=.50)reason="Historical triggers show follow-through across 1–3 ticks toward the selected setup.";
-    else if(c.r1>=.54&&c.r2>=.52)reason="Historical triggers show immediate reaction and 2-tick continuation toward the selected setup.";
+    if(c.r1>=.56&&c.r2>=.54&&c.r3>=.50)reason="Historical triggers show follow-through across 1–3 ticks; this is descriptive, not a proven edge.";
+    else if(c.r1>=.54&&c.r2>=.52)reason="Historical triggers show immediate reaction and 2-tick continuation; profitability is unverified.";
     else if(c.r1>=.54)reason="Historical triggers show immediate reaction; longer continuation is less consistent.";
     else reason="Historical triggers show favorable 2-tick continuation despite weaker immediate reaction.";
-    const prediction=c.predictedRate>=c.baseline+.06?"FAVORABLE OUTLOOK":c.predictedRate>=c.baseline-.02?"MIXED OUTLOOK":"WEAK OUTLOOK";
-    const predictionText="Historical estimate "+Math.round(c.predictedRate*100)+"% • "+prediction+" • context sample "+c.contextN+" • sample support "+c.predictionConfidence+"% (not calibrated)";
-    return {digit:c.candidate,score,status,reason,evidence:c.total+" historical triggers; "+c.recentTotal+" recent triggers",prediction,predictedRate:c.predictedRate,predictionConfidence:c.predictionConfidence,predictionText};
+    const outlook=c.conservativeRate>=c.baseline+.03?"ABOVE BASELINE IN SAMPLE":c.observedRate>=c.baseline-.02?"NEAR BASELINE IN SAMPLE":"BELOW BASELINE IN SAMPLE";
+    const observationText="Observed next-tick hit rate "+Math.round(c.r1*100)+"% ("+c.n1+" samples); observed 2-tick consecutive rate "+Math.round(c.r2*100)+"% ("+c.n2+" samples); conservative estimate "+Math.round(c.conservativeRate*100)+"% (95% Wilson lower-bound blend; not calibrated)";
+    return {digit:c.candidate,score,status,reason,evidence:c.total+" historical triggers; "+c.recentTotal+" recent triggers",prediction:outlook,predictedRate:c.observedRate,predictionConfidence:c.support,predictionText:observationText};
   });
-  return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.map(e=>"Digit "+e.digit+": rank "+e.score+"/100; "+e.predictionText).join(" • "),status:entries.length===2?"2 PREDICTIVE CANDIDATES":"1 PREDICTIVE CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason+" "+e.predictionText).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence+"; "+e.predictionText).join(" • "),entries};
+  return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.map(e=>"Digit "+e.digit+": rank "+e.score+"/100; "+e.predictionText).join(" • "),status:entries.length===2?"2 HISTORICAL CANDIDATES":"1 HISTORICAL CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason+" "+e.predictionText).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence+"; "+e.predictionText).join(" • "),entries};
 }
 function renderParityControls(){
   document.querySelectorAll(".parity-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.parity===state.selectedParity)); const label=$("paritySetupLabel"); if(label)label.textContent=state.selectedParity;
