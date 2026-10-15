@@ -783,7 +783,7 @@ test('already-triggered Even/Odd validation continues under its original engine 
     ({run:processOtherValidationTick,state})
   `;
   const test = vm.runInNewContext(harness);
-  test.run(3, 100.3, 100.2);
+  test.run(4, 100.3, 100.2);
   const rec = test.state.otherValidation.book['R_100|evenodd|EVEN'];
   assert.equal(rec[2].n, 1);
   assert.equal(rec[2].hits, 1);
