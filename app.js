@@ -9,14 +9,15 @@ function renderOverUnder(root,d,c,last,n){
   let reason;
   if(e.probabilityConflict)reason="Paired-setup comparison is blocking this setup because the paired historical rate is more than 4 percentage points higher. This is a custom filter, not a true probability complement.";
   else if(e.signal==="AVOID")reason="The selected setup does not have enough aligned A-Setup evidence.";
-  else if(e.signal==="WAIT")reason="The selected setup is still building enough independent evidence across the required analysis windows.";
+  else if(e.signal==="WAIT")reason=e.developmentN<750?"Collect at least 1,000 live ticks before the signal engine can evaluate a setup.":"The reserved recent validation window has not passed the conservative 95% Wilson lower-bound check against the uniform reference. No active entry is allowed.";
   else if(e.signal==="STRONG SIGNAL")reason="Heuristic evidence is aligned for "+setup+". This is not a calibrated win probability or a guarantee of profitability.";
   else reason="The selected setup has sufficient multi-factor evidence, but the evidence is not strong enough for a STRONG SIGNAL.";
   const entryDisplay=activeSignal?(entry||{main:"NO VALID ENTRY",confidence:"—",status:"NO ENTRY",reason:"No candidate digit passed the required sample-size, transition, reaction and consistency checks.",evidence:"Candidate evaluation completed"}):{main:"NO ACTIVE ENTRY",confidence:"—",status:"INACTIVE",reason:"Entry Engine activates only when the selected Final Signal is SIGNAL or STRONG SIGNAL.",evidence:"Waiting for an active signal"};
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
     "Selected setup: "+setup,
     "Paired-setup filter (not true complementary probabilities): "+Math.round(e.selectedRate*100)+"% vs paired historical rate "+Math.round(e.oppositeRate*100)+"% • uniform reference "+Math.round(e.baseline*100)+"%",
-    "Windows 20/50/100/250/500: "+[e.recentRate,e.short50,e.mediumRate,e.mid250,e.longRate].map(x=>Math.round(x*100)+"%").join(" / "),
+    "Development windows 20/50/100/250/500: "+[e.recentRate,e.short50,e.mediumRate,e.mid250,e.longRate].map(x=>Math.round(x*100)+"%").join(" / ")+" • "+e.developmentN+" training ticks",
+    "Reserved recent check: "+Math.round(e.holdoutRate*100)+"% hit rate across "+e.holdoutN+" ticks • 95% Wilson lower bound "+Math.round(e.holdoutLower*100)+"% vs "+Math.round(e.baseline*100)+"% uniform reference • "+(e.holdoutPass?"PASS":"NOT PASSED"),
     "Heuristic score components (not win probabilities): rate-fit "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentum*100)+" • trend "+Math.round(e.trend*100)+" • transitions "+Math.round(e.transition*100),
     "Reaction "+Math.round(e.reaction*100)+" • clustering "+Math.round(e.cluster*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
     "Historical fit "+Math.round(e.historical*100)+" • current context "+Math.round(e.context*100)+" • combined heuristic score "+Math.round(e.evidence*100),
@@ -555,13 +556,23 @@ function ouStats(d,digit,side){
 }
 function overUnderEvidence(d,selectedDigit,selectedSide){
   const n=d.length;
-  const oppositeDigit=9-selectedDigit;
-  const selected=ouStats(d,selectedDigit,selectedSide);
-  const opposite=ouStats(d,oppositeDigit,selectedSide==="OVER"?"UNDER":"OVER");
-  const selectedRate=ouRate(d,selectedDigit,selectedSide);
-  const oppositeRate=ouRate(d,oppositeDigit,selectedSide==="OVER"?"UNDER":"OVER");
-  const probabilityConflict=oppositeRate>selectedRate+.04;
   const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
+  // Reserve the latest 250 ticks as a rolling forward-check window. Build the
+  // heuristic only from older ticks so the same observations do not both score
+  // and validate the setup. This is still a rolling check, not a formal backtest.
+  const holdoutSize=250;
+  const hasHoldout=n>=1000;
+  const development=hasHoldout?d.slice(0,-holdoutSize):d;
+  const holdout=hasHoldout?d.slice(-holdoutSize):[];
+  const oppositeDigit=9-selectedDigit;
+  const selected=ouStats(development,selectedDigit,selectedSide);
+  const opposite=ouStats(development,oppositeDigit,selectedSide==="OVER"?"UNDER":"OVER");
+  const selectedRate=ouRate(development,selectedDigit,selectedSide);
+  const oppositeRate=ouRate(development,oppositeDigit,selectedSide==="OVER"?"UNDER":"OVER");
+  const holdoutRate=holdout.length?ouRate(holdout,selectedDigit,selectedSide):0;
+  const holdoutLower=holdout.length?ouWilsonLowerBound(holdoutRate,holdout.length):0;
+  const holdoutPass=hasHoldout&&holdoutLower>baseline;
+  const probabilityConflict=oppositeRate>selectedRate+.04;
   const probability=Math.max(0,Math.min(1,.5+(selectedRate-baseline)*4));
   const momentumScore=Math.max(0,Math.min(1,.5+selected.momentum*4));
   const trendScore=Math.max(0,Math.min(1,.5+selected.trend*18));
@@ -573,13 +584,16 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   const reaction=selected.transitions>=8?Math.max(0,Math.min(1,.5+(selected.transitionRate-baseline)*2.5)):0;
   const evidence=probability*.20+momentumScore*.10+trendScore*.08+transition*.14+selected.cluster*.08+reaction*.10+recency*.10+consistency*.08+historical*.07+context*.05;
   let signal="WAIT";
-  // Heuristic score thresholds are intentionally conservative; none are a calibrated win probability.
-  if(n<500)signal="WAIT";
+  // Scores remain heuristics. A signal requires both a large development sample
+  // and a 95% Wilson lower bound above the uniform reference in the reserved
+  // recent window; this is a conservative filter, not proof of future profit.
+  if(n<1000)signal="WAIT";
   else if(probabilityConflict)signal="AVOID";
-  else if(evidence>=.72&&selectedRate>=baseline-.02&&selected.weightedTransitionRate>=Math.max(.50,baseline-.03)&&consistency>=.62&&n>=1000)signal="STRONG SIGNAL";
-  else if(evidence>=.57&&selectedRate>=baseline-.05&&consistency>=.50&&n>=500)signal="SIGNAL";
   else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
-  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
+  else if(!holdoutPass)signal="WAIT";
+  else if(evidence>=.72&&selectedRate>=baseline-.02&&selected.weightedTransitionRate>=Math.max(.50,baseline-.03)&&consistency>=.62)signal="STRONG SIGNAL";
+  else if(evidence>=.57&&selectedRate>=baseline-.05&&consistency>=.50)signal="SIGNAL";
+  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak,developmentN:development.length,holdoutN:holdout.length,holdoutRate,holdoutLower,holdoutPass};
 }
 function ouWilsonLowerBound(rate,n,z=1.96){
   if(!Number.isFinite(rate)||!Number.isFinite(n)||n<=0)return 0;
