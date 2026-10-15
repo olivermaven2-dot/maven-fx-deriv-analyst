@@ -800,17 +800,18 @@ test('bot entry display does not claim a 95 percent calibration requirement', ()
 });
 
 
+
 test('real-account execution remains blocked until demo safety validation is complete', () => {
   const canStartAt = appSource.indexOf('function autoTradeCanStart');
-  const canStartEnd = appSource.indexOf('\\nfunction ', canStartAt + 10);
+  const canStartEnd = appSource.indexOf('\nfunction ', canStartAt + 10);
   assert.notEqual(canStartAt, -1, 'autoTradeCanStart must exist');
   const guard = appSource.slice(canStartAt, canStartEnd);
-  assert.match(guard, /autoTrade\\.account\\.is_virtual===true/);
+  assert.match(guard, /autoTrade\.account\.is_virtual===true/);
 
   const startAt = appSource.indexOf('function autoTradeStart');
-  const startEnd = appSource.indexOf('\\nfunction ', startAt + 10);
+  const startEnd = appSource.indexOf('\nfunction ', startAt + 10);
   assert.notEqual(startAt, -1, 'autoTradeStart must exist');
-  assert.match(appSource.slice(startAt, startEnd), /if\\(!autoTradeCanStart\\(\\)\\)/);
+  assert.match(appSource.slice(startAt, startEnd), /if\(!autoTradeCanStart\(\)\)/);
 
   assert.match(appSource, /Real-account trading is disabled during safety validation/);
   assert.match(html, /Real-account trading is disabled in this safety-validation version/);
