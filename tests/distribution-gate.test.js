@@ -320,6 +320,45 @@ test('signal validation uses the monotonic live sequence after the tick buffer i
   assert.equal(Object.keys(stale.state.signalValidation.book).length, 0);
 });
 
+test('validation snapshots are discarded when the active engine changes before the next tick', () => {
+  const signalStart = appSource.indexOf('function processSignalValidationTick');
+  const signalEnd = appSource.indexOf('\nfunction ', signalStart + 10);
+  const signalSource = appSource.slice(signalStart, signalEnd);
+  const signalHarness = `
+    const state = {
+      symbol: 'R_100', engine: 'risefall', liveTickSequence: 101,
+      signalValidation: {snapshot: {active: true, market: 'R_100', engine: 'evenodd', target: 'EVEN', tickCount: 100, confidence: .8}, book: {}},
+      validationDirty: false
+    };
+    const signalValidationKey = (engine,target,market) => market+'|'+engine+'|'+target;
+    ${signalSource}
+    ({run:processSignalValidationTick,state})
+  `;
+  const signal = vm.runInNewContext(signalHarness);
+  signal.run(2, 101, 100);
+  assert.equal(Object.keys(signal.state.signalValidation.book).length, 0);
+  assert.equal(signal.state.signalValidation.snapshot, null);
+
+  const otherStart = appSource.indexOf('function processOtherValidationTick');
+  const otherEnd = appSource.indexOf('\nfunction ', otherStart + 10);
+  const otherSource = appSource.slice(otherStart, otherEnd);
+  const otherHarness = `
+    const state = {
+      symbol: 'R_100', engine: 'risefall', liveTickSequence: 101,
+      otherValidation: {snapshot: {active: true, market: 'R_100', engine: 'evenodd', target: 'EVEN', tickCount: 100, confidence: .8}, pending: [], book: {}},
+      validationDirty: false
+    };
+    const otherValidationKey = (engine,target,market) => market+'|'+engine+'|'+target;
+    const scoreOtherValidationPending = () => { throw new Error('no pending forecast should be scored'); };
+    ${otherSource}
+    ({run:processOtherValidationTick,state})
+  `;
+  const other = vm.runInNewContext(otherHarness);
+  other.run(2, 101, 100);
+  assert.equal(Object.keys(other.state.otherValidation.book).length, 0);
+  assert.equal(other.state.otherValidation.snapshot, null);
+});
+
 test('bot entry validation refuses an incomplete or duplicated entry pair', () => {
   const start = appSource.indexOf('function autoTradeReadyToEnter');
   assert.notEqual(start, -1, 'autoTradeReadyToEnter must exist');
