@@ -1663,6 +1663,30 @@ function autoTradeCanStart(){
   // Maven FX Bot is demo-only; real-account execution remains disabled.
   return !!autoTrade.authorized&&!!autoTrade.account&&autoTrade.account.is_virtual===true;
 }
+function autoTradeUpdateRealConfirmation(){
+  const check=$("autoTradeRealCheck"),phrase=$("autoTradeRealPhrase"),gate=$("autoTradeRealGate");
+  if(!check||!phrase||!gate)return false;
+  const matches=phrase.value.trim()==="TRADE REAL";
+  autoTrade.realConfirmed=!!check.checked&&matches;
+  let status=$("autoTradeRealConfirmStatus");
+  if(!status){
+    status=document.createElement("small");
+    status.id="autoTradeRealConfirmStatus";
+    status.className="auto-trade-real-confirm-status";
+    status.setAttribute("role","status");
+    status.setAttribute("aria-live","polite");
+    gate.appendChild(status);
+  }
+  status.textContent=autoTrade.realConfirmed
+    ?"Confirmation recorded. Live-money execution is still disabled in this build."
+    :!check.checked
+      ?"Tick the acknowledgement and type TRADE REAL exactly to complete confirmation."
+      :matches
+        ?"Phrase matches. Tick the acknowledgement to complete confirmation."
+        ?"Type TRADE REAL exactly to complete confirmation.";
+  status.classList.toggle("confirmed",autoTrade.realConfirmed);
+  return autoTrade.realConfirmed;
+}
 function autoTradeRenderPnL(){
   const el=$("autoTradePnL");if(!el)return;
   const pnl=Number(autoTrade.sessionProfit)||0;
@@ -1729,6 +1753,7 @@ function autoTradeRender(){
   if($("autoTradeNextStake"))$("autoTradeNextStake").textContent=autoTrade.nextStake.toFixed(2)+" "+(autoTrade.currency||"");
   if($("autoTradeRunProgress"))$("autoTradeRunProgress").textContent=autoTrade.runSymbol?(autoTrade.runSettled+"/2 settled"):autoTrade.enabled?"Waiting for entry":"Idle";
   const gate=$("autoTradeRealGate");if(gate)gate.hidden=!autoTrade.account||autoTrade.account.is_virtual;
+  autoTradeUpdateRealConfirmation();
   autoTradeStatus(autoTrade.enabled?"RUNNING":autoTrade.authorized?(autoTrade.account?.is_virtual?"DEMO CONNECTED":"REAL ACCOUNT LOCKED"):"DISCONNECTED",autoTrade.enabled?"running":autoTrade.authorized?"connected":"");
 }
 function autoTradeUpdateLiveFields(){
@@ -2164,8 +2189,8 @@ function autoTradeDisconnect(){
   demoTestButton.type="button";demoTestButton.id="autoTradeDemoOneShotTest";demoTestButton.className=$("autoTradeStart").className;demoTestButton.textContent="One-contract DEMO test";demoTestButton.style.marginTop="8px";demoTestButton.addEventListener("click",autoTradeRunDemoTradeTest);
   $("autoTradeStart").parentElement.insertBefore(demoTestButton,$("autoTradeStart").nextSibling);
   $("autoTradeStop").addEventListener("click",()=>autoTradePause("paused by user"));
-  $("autoTradeRealCheck").addEventListener("change",()=>{autoTradeRender()});
-  $("autoTradeRealPhrase").addEventListener("input",()=>{autoTradeRender()});
+  $("autoTradeRealCheck").addEventListener("change",()=>{autoTradeUpdateRealConfirmation();autoTradeRender()});
+  $("autoTradeRealPhrase").addEventListener("input",()=>{autoTradeUpdateRealConfirmation();autoTradeRender()});
   const savedToken=(()=>{try{return localStorage.getItem("mavenFxDerivApiToken")||""}catch{return ""}})();
   if(savedToken){$("autoTradeToken").value=savedToken;$("autoTradeRemember").checked=true}
   $("autoTradeRemember").addEventListener("change",()=>{if(!$("autoTradeRemember").checked){try{localStorage.removeItem("mavenFxDerivApiToken")}catch{}}});
