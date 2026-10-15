@@ -253,6 +253,21 @@ test('spike-risk refresh uses a removable note marker to avoid stacking warnings
 });
 
 
+test('Wilson intervals expose uncertainty and remain bounded for live hit rates', () => {
+  const start = appSource.indexOf('function wilsonInterval');
+  assert.notEqual(start, -1);
+  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const wilsonInterval = vm.runInNewContext(appSource.slice(start, end) + '\\nwilsonInterval');
+  const small = wilsonInterval(5, 10);
+  assert.ok(small.low > 0.2 && small.low < 0.3);
+  assert.ok(small.high > 0.7 && small.high < 0.8);
+  assert.ok(small.low < 0.5 && small.high > 0.5);
+  assert.equal(wilsonInterval(0, 0), null);
+  assert.equal(wilsonInterval(11, 10), null);
+  const perfect = wilsonInterval(10, 10);
+  assert.ok(perfect.low < 1 && perfect.high <= 1);
+});
+
 test('Over/Under validation scores only a candidate triggered immediately after its analysis snapshot', () => {
   const start = appSource.indexOf('function recordOUValidationTrigger');
   assert.notEqual(start, -1);
