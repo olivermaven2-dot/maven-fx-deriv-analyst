@@ -4,9 +4,9 @@ function renderOverUnder(root,d,c,last,n){
   const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const rawEntry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
   const entry=mavenAIReviewEntry("overunder",rawEntry,e.aiDecision);
-  state.ouEntrySnapshot={key:ouValidationKey(),tickCount:state.ticks.length,active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[],validationDigits:entry?entry.entries.map(x=>x.digit):[],confidence:Number(e.aiDecision?.confidence)};
+  state.ouEntrySnapshot={key:ouValidationKey(),tickCount:state.liveTickSequence,active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[],validationDigits:entry?entry.entries.map(x=>x.digit):[],confidence:Number(e.aiDecision?.confidence)};
   state.ouSignalSnapshot={key:ouValidationKey(),active:activeSignal&&!e.probabilityConflict,signal:e.signal,probabilityConflict:!!e.probabilityConflict,tickCount:state.digits.length};
-  setSignalValidationForecast("overunder",state.selectedSide+" "+state.selectedDigit,e.probabilityConflict?"WAIT":e.signal,state.digits.length,e.aiDecision?.confidence,{selectedDigit:state.selectedDigit,side:state.selectedSide});
+  setSignalValidationForecast("overunder",state.selectedSide+" "+state.selectedDigit,e.probabilityConflict?"WAIT":e.signal,state.liveTickSequence,e.aiDecision?.confidence,{selectedDigit:state.selectedDigit,side:state.selectedSide});
   autoTradeUpdateLiveFields();
   let reason;
   if(e.aiDecision)reason=e.aiDecision.reason+" "+(e.probabilityConflict?"Probability Comparison also blocks the entry until complementary evidence aligns.":"");
@@ -42,7 +42,7 @@ function shouldRenderEngineForCurrentTick(){
   lastMobileEngineRenderAt=now;
   return true;
 }
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],lastTickSignature:"",primarySubscriptionId:null,primarySubscriptionSymbol:"",primaryHistoryRequests:{},primarySubscribeRequests:{},lastPongAt:0,engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,otherValidation:{snapshot:null,pending:[],book:{}},signalValidation:{snapshot:null,book:{}},validationDirty:false,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],liveTickSequence:0,lastTickSignature:"",primarySubscriptionId:null,primarySubscriptionSymbol:"",primaryHistoryRequests:{},primarySubscribeRequests:{},lastPongAt:0,engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,otherValidation:{snapshot:null,pending:[],book:{}},signalValidation:{snapshot:null,book:{}},validationDirty:false,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
 
 const VALIDATION_STORAGE_KEY="mavenFx.validationStats.v1";
 function cleanValidationBook(value,kind){
@@ -524,7 +524,7 @@ function recordOUValidationTrigger(digit){
   const snap=state.ouEntrySnapshot;
   // Only score a candidate from the analysis snapshot rendered for this exact live tick.
   // Mobile render throttling and engine switches must not reuse stale entry candidates.
-  if(state.engine!=="overunder"||!snap||snap.tickCount!==state.ticks.length-1||!snap.active||snap.key!==ouValidationKey()||!(Array.isArray(snap.validationDigits)?snap.validationDigits:snap.digits).includes(digit))return;
+  if(state.engine!=="overunder"||!snap||snap.tickCount!==state.liveTickSequence-1||!snap.active||snap.key!==ouValidationKey()||!(Array.isArray(snap.validationDigits)?snap.validationDigits:snap.digits).includes(digit))return;
   const signature=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|"+digit+"|"+state.ticks.length;
   const key=ouValidationRecordKey(state.symbol,state.selectedDigit,state.selectedSide,digit);
   if(!state.ouValidationBook[key]){
@@ -546,7 +546,7 @@ function setSignalValidationForecast(engine,target,signal,tickCount,confidence,e
 }
 function processSignalValidationTick(digit,quote,previousQuote){
   const sv=state.signalValidation,snap=sv.snapshot;sv.snapshot=null;
-  if(!snap||!snap.active||snap.market!==state.symbol||snap.tickCount>=state.ticks.length)return;
+  if(!snap||!snap.active||snap.market!==state.symbol||snap.tickCount!==state.liveTickSequence-1)return;
   let hit=false;
   if(snap.engine==="overunder")hit=snap.side==="OVER"?digit>snap.selectedDigit:digit<snap.selectedDigit;
   else if(snap.engine==="evenodd")hit=(digit%2===0?"EVEN":"ODD")===snap.target;
@@ -585,7 +585,7 @@ function processOtherValidationTick(digit,quote,previousQuote){
   }
   const snap=ov.snapshot;
   ov.snapshot=null;
-  if(!snap||!snap.active||snap.market!==state.symbol||snap.tickCount>=state.ticks.length)return;
+  if(!snap||!snap.active||snap.market!==state.symbol||snap.tickCount!==state.liveTickSequence-1)return;
   const key=otherValidationKey(snap.engine,snap.target,snap.market);
   if(!ov.book[key])ov.book[key]={market:snap.market,engine:snap.engine,target:snap.target,triggers:0,confidenceSum:0,confidenceN:0,1:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},lastUpdated:Date.now()};
   ov.book[key].triggers++;state.validationDirty=true;
@@ -691,6 +691,7 @@ function receiveTick(t){
   const digit=digitFromQuote(quote,state.pipSize);if(!Number.isInteger(digit))return;
 
   state.lastTickSignature=signature;
+  state.liveTickSequence++;
   state.ticks.push({quote:Number(quote),epoch});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
   state.lastTickAt=Date.now();
@@ -1393,8 +1394,8 @@ function renderEvenOdd(root,d,last,n){
   const entryActive=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const rawEntry=entryActive?selectParityEntry(d,state.selectedParity):null;
   const entry=mavenAIReviewEntry("evenodd",rawEntry,e.aiDecision);
-  setOtherValidationForecast("evenodd",state.selectedParity,e.signal,!!entry,n,e.aiDecision?.confidence);
-  setSignalValidationForecast("evenodd",state.selectedParity,e.signal,n,e.aiDecision?.confidence);
+  setOtherValidationForecast("evenodd",state.selectedParity,e.signal,!!entry,state.liveTickSequence,e.aiDecision?.confidence);
+  setSignalValidationForecast("evenodd",state.selectedParity,e.signal,state.liveTickSequence,e.aiDecision?.confidence);
   const entryDisplay=entry||{main:entryActive?"NO STRONG ENTRY":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No trigger has enough conditional lift toward the selected Final Signal.":"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."};
   const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
   const reason=e.conflict?"WAIT: recent and longer-window parity behaviour conflict. The AI will wait for stronger agreement.":e.signal==="STRONG SIGNAL"?"Multiple parity evidence layers are aligned for "+state.selectedParity+".":e.signal==="SIGNAL"?"The selected parity has sufficient multi-factor evidence, but it is not at STRONG SIGNAL level.":e.signal==="AVOID"?"The selected parity has unfavorable evidence.":"Evidence for the selected parity is still developing.";
@@ -1533,8 +1534,8 @@ function renderRiseFall(root,last,n){
   }
   const rawEntry=riseFallEntry(prices,a);
   const entry=mavenAIReviewEntry("risefall",rawEntry,a.aiDecision);
-  setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,n,a.aiDecision?.confidence);
-  setSignalValidationForecast("risefall",state.selectedRiseFall,a.signal,n,a.aiDecision?.confidence);
+  setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,state.liveTickSequence,a.aiDecision?.confidence);
+  setSignalValidationForecast("risefall",state.selectedRiseFall,a.signal,state.liveTickSequence,a.aiDecision?.confidence);
   const entryDisplay=entry||{
     main:a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"?"NO CONFIRMED ENTRY":"NO ACTIVE ENTRY",
     confidence:"—",
