@@ -1637,7 +1637,7 @@ function renderSubscribedMarketStatus(mode="switching"){
 
 /* Auto Trade: separate authenticated trading socket; never shares the public tick socket. */
 const autoTrade={
-  socket:null,tradingHeartbeatTimer:null,sessionToken:null,authorized:false,account:null,availableAccounts:[],accountBalances:{},enabled:false,speedMode:"STANDARD",realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
+  socket:null,tradingHeartbeatTimer:null,sessionToken:null,authorized:false,account:null,availableAccounts:[],accountBalances:{},enabled:false,speedMode:"STANDARD",stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,nextEntryAllowedAt:0,entryCooldownMs:5000,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryMode:"SMART_NET",recoveryBalance:0,recoveryPairProfit:0,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,recoverySide1:"DEFAULT",recoverySide2:"DEFAULT",
   activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,fastTickQueue:[],fastTickQueueLimit:500,fastTickQueueStaleMs:3000,fastTickQueueDrainActive:false,logLines:[],lastManualBlockReason:"",lastManualLoggedReason:"",demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
@@ -1669,30 +1669,6 @@ function autoTradeSwitchAccount(){
   if(!autoTrade.sessionToken){autoTradeLog("Reconnect with your Deriv token to switch accounts. No token is stored in this page session.");return}
   $("autoTradeToken").value=autoTrade.sessionToken;
   autoTradeConnect();
-}
-function autoTradeUpdateRealConfirmation(){
-  const check=$("autoTradeRealCheck"),phrase=$("autoTradeRealPhrase"),gate=$("autoTradeRealGate");
-  if(!check||!phrase||!gate)return false;
-  const matches=phrase.value.trim()==="TRADE REAL";
-  autoTrade.realConfirmed=!!check.checked&&matches;
-  let status=$("autoTradeRealConfirmStatus");
-  if(!status){
-    status=document.createElement("small");
-    status.id="autoTradeRealConfirmStatus";
-    status.className="auto-trade-real-confirm-status";
-    status.setAttribute("role","status");
-    status.setAttribute("aria-live","polite");
-    gate.appendChild(status);
-  }
-  status.textContent=autoTrade.realConfirmed
-    ?"Confirmation recorded. Live-money execution is still disabled in this build."
-    :!check.checked
-      ?"Tick the acknowledgement and type TRADE REAL exactly to complete confirmation."
-      :matches
-        ?"Phrase matches. Tick the acknowledgement to complete confirmation."
-        ?"Type TRADE REAL exactly to complete confirmation.";
-  status.classList.toggle("confirmed",autoTrade.realConfirmed);
-  return autoTrade.realConfirmed;
 }
 function autoTradeRenderPnL(){
   const el=$("autoTradePnL");if(!el)return;
@@ -1759,8 +1735,6 @@ function autoTradeRender(){
   autoTradeRenderPnL();
   if($("autoTradeNextStake"))$("autoTradeNextStake").textContent=autoTrade.nextStake.toFixed(2)+" "+(autoTrade.currency||"");
   if($("autoTradeRunProgress"))$("autoTradeRunProgress").textContent=autoTrade.runSymbol?(autoTrade.runSettled+"/2 settled"):autoTrade.enabled?"Waiting for entry":"Idle";
-  const gate=$("autoTradeRealGate");if(gate)gate.hidden=!autoTrade.account||autoTrade.account.is_virtual;
-  autoTradeUpdateRealConfirmation();
   autoTradeStatus(autoTrade.enabled?"RUNNING":autoTrade.authorized?(autoTrade.account?.is_virtual?"DEMO CONNECTED":"REAL ACCOUNT LOCKED"):"DISCONNECTED",autoTrade.enabled?"running":autoTrade.authorized?"connected":"");
 }
 function autoTradeUpdateLiveFields(){
@@ -1820,7 +1794,7 @@ function autoTradeSetSpeedMode(mode,logChange=true){
   if(logChange&&$("autoTradeLog"))autoTradeLog(autoTrade.speedMode==="FAST"?"FAST EXECUTION ON · incoming live ticks are checked immediately; same entry, risk and two-run rules as Standard mode.":"Execution speed set to STANDARD.");
 }
 function autoTradeStart(){
-  if(!autoTradeCanStart()){autoTradeLog("Start blocked: connect an account; real accounts additionally require the checkbox and exact phrase TRADE REAL.");autoTradeRender();return}
+  if(!autoTradeCanStart()){autoTradeLog("Start blocked: connect a Demo account. Real-account execution is not enabled in this build.");autoTradeRender();return}
   const stake=Number($("autoTradeStake").value),mg=Number($("autoTradeMartingale").value),tp=Number($("autoTradeTP").value),sl=Number($("autoTradeSL").value);
   if(!(stake>=0.35&&stake<=100&&mg>=1&&mg<=10&&tp>0&&sl>0)){autoTradeLog("Invalid risk settings. Stake must be 0.35–100, multiplier 1–10, and take-profit/stop-loss must be positive.");return}
   const recoveryMode=$("autoTradeRecoveryMode")?.value||"SMART_NET";
@@ -2161,7 +2135,7 @@ async function autoTradeConnect(){
         if(autoTrade.socket!==ws||ws.readyState!==WebSocket.OPEN){clearInterval(autoTrade.tradingHeartbeatTimer);autoTrade.tradingHeartbeatTimer=null;return}
         try{ws.send(JSON.stringify({ping:1}))}catch(e){autoTradeLog("Trading heartbeat send failed: "+(e.message||e));try{ws.close()}catch{}}
       },15000);
-      if(!chosen.demo)autoTradeLog("REAL account selected. Trading remains locked until the in-panel TRADE REAL confirmation is completed.");
+      if(!chosen.demo)autoTradeLog("REAL account connected for account identification and read-only balance checks. Automated live-money execution is not enabled in this build.");
       try{autoTradeReq({balance:1},"connection_test");autoTradeLog("Checking authenticated account response (no trade will be placed)…")}catch(e){autoTradeLog("Connection test could not be sent: "+(e.message||e))}
       autoTradeRender();
     };
@@ -2199,8 +2173,6 @@ function autoTradeDisconnect(){
   demoTestButton.type="button";demoTestButton.id="autoTradeDemoOneShotTest";demoTestButton.className=$("autoTradeStart").className;demoTestButton.textContent="One-contract DEMO test";demoTestButton.style.marginTop="8px";demoTestButton.addEventListener("click",autoTradeRunDemoTradeTest);
   $("autoTradeStart").parentElement.insertBefore(demoTestButton,$("autoTradeStart").nextSibling);
   $("autoTradeStop").addEventListener("click",()=>autoTradePause("paused by user"));
-  $("autoTradeRealCheck").addEventListener("change",()=>{autoTradeUpdateRealConfirmation();autoTradeRender()});
-  $("autoTradeRealPhrase").addEventListener("input",()=>{autoTradeUpdateRealConfirmation();autoTradeRender()});
   const savedToken=(()=>{try{return localStorage.getItem("mavenFxDerivApiToken")||""}catch{return ""}})();
   if(savedToken){$("autoTradeToken").value=savedToken;$("autoTradeRemember").checked=true}
   $("autoTradeRemember").addEventListener("change",()=>{if(!$("autoTradeRemember").checked){try{localStorage.removeItem("mavenFxDerivApiToken")}catch{}}});
