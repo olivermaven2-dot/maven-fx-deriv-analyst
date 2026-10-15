@@ -4,7 +4,7 @@ function renderOverUnder(root,d,c,last,n){
   const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const rawEntry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
   const entry=mavenAIReviewEntry("overunder",rawEntry,e.aiDecision);
-  state.ouEntrySnapshot={key:ouValidationKey(),active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[],confidence:Number(e.aiDecision?.confidence)};
+  state.ouEntrySnapshot={key:ouValidationKey(),active:!!entry,digits:entry?entry.entries.filter(x=>x.targetReady).map(x=>x.digit):[],validationDigits:entry?entry.entries.map(x=>x.digit):[],confidence:Number(e.aiDecision?.confidence)};
   state.ouSignalSnapshot={key:ouValidationKey(),active:activeSignal&&!e.probabilityConflict,signal:e.signal,probabilityConflict:!!e.probabilityConflict,tickCount:state.digits.length};
   setSignalValidationForecast("overunder",state.selectedSide+" "+state.selectedDigit,e.probabilityConflict?"WAIT":e.signal,state.digits.length,e.aiDecision?.confidence,{selectedDigit:state.selectedDigit,side:state.selectedSide});
   autoTradeUpdateLiveFields();
@@ -522,7 +522,7 @@ function processOUValidationTick(digit){
 function recordOUValidationTrigger(digit){
   resetOUValidationIfNeeded();
   const snap=state.ouEntrySnapshot;
-  if(!snap||!snap.active||snap.key!==ouValidationKey()||!snap.digits.includes(digit))return;
+  if(!snap||!snap.active||snap.key!==ouValidationKey()||!(Array.isArray(snap.validationDigits)?snap.validationDigits:snap.digits).includes(digit))return;
   const signature=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|"+digit+"|"+state.ticks.length;
   const key=ouValidationRecordKey(state.symbol,state.selectedDigit,state.selectedSide,digit);
   if(!state.ouValidationBook[key]){
@@ -968,6 +968,11 @@ function distributionBarFlags(d){
     percentages:freq.map(count=>windowDigits.length?count/windowDigits.length*100:0)
   };
 }
+function ouWilsonLowerBound(hits,n,z=1.96){
+  if(!n)return 0;
+  const p=hits/n,z2=z*z,den=1+z2/n;
+  return Math.max(0,(p+z2/(2*n)-z*Math.sqrt((p*(1-p)/n)+(z2/(4*n*n))))/den);
+}
 function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
   const candidates=[];
   const entryBars=distributionBarFlags(d);
@@ -985,8 +990,8 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
     const recent1=Array.isArray(validation?.recentOutcomes?.[1])?validation.recentOutcomes[1]:[];
     const recentHits1=recent1.filter(Boolean).length;
     const observedRate=smooth(h1.hits,h1.n);
+    const rawObservedRate=h1.n?h1.hits/h1.n:0;
     const recentRate=smooth(recentHits1,recent1.length,baseline,5);
-    // Enough live, out-of-sample failures override older historical strength.
     if(recent1.length>=12&&recentRate<baseline-.06)continue;
     if(h1.n>=20&&observedRate<baseline-.07)continue;
     if(recent1.length>=8&&h1.failureStreak>=5&&recentRate<baseline)continue;
@@ -1001,28 +1006,35 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
     const validationWeight=recent1.length>=12?.16:recent1.length>=6?.10:0;
     const recentWeight=.12-validationWeight;
     const score=Math.round(100*(directionalLift*.25+recentLift*.20+secondLift*.13+thirdLift*.07+stability*.10+consistency*.07+sample*.06+validationLift*validationWeight+Math.min(1,t.recentTotal/40)*recentWeight));
-    candidates.push({...t,candidate,baseline,score,stability,consistency,validation:{n:h1.n,hits:h1.hits,rate:observedRate,recentN:recent1.length,recentRate,failureStreak:h1.failureStreak}});
+    const recentObservedRate=recent1.length?recentHits1/recent1.length:0;
+    const targetReady=h1.n>=100&&recent1.length>=30&&rawObservedRate>=.95&&recentObservedRate>=.95&&ouWilsonLowerBound(h1.hits,h1.n)>=.90;
+    candidates.push({...t,candidate,baseline,score,stability,consistency,targetReady,validation:{n:h1.n,hits:h1.hits,rate:observedRate,observedRate:rawObservedRate,recentN:recent1.length,recentHits:recentHits1,recentRate,recentObservedRate,failureStreak:h1.failureStreak,lowerBound:ouWilsonLowerBound(h1.hits,h1.n)}});
   }
   candidates.sort((a,b)=>b.score-a.score);
   if(!candidates.length)return null;
-  const qualified=candidates.filter(c=>{
+  const watchCandidates=candidates.filter(c=>{
     const hasDirectionalReaction=c.r1>=baseline-.04&&c.recentRate>=baseline-.05;
     const hasContinuation=c.r2>=baseline-.06||c.r1>=baseline+.015;
-    const validationOkay=c.validation.recentN<12||c.validation.recentRate>=baseline-.06;
-    return c.total>=30&&c.recentTotal>=8&&hasDirectionalReaction&&hasContinuation&&validationOkay&&c.stability>=.42&&c.consistency>=.30&&c.score>=55;
+    return c.total>=30&&c.recentTotal>=8&&hasDirectionalReaction&&hasContinuation&&c.stability>=.42&&c.consistency>=.30&&c.score>=55;
   }).slice(0,2);
-  if(!qualified.length)return null;
-  const entries=qualified.map(c=>{
-    const validationText=c.validation.n>=10
-      ?"Live validation "+Math.round(c.validation.rate*100)+"% across "+c.validation.n+" scored triggers"+(c.validation.recentN>=5?"; recent "+Math.round(c.validation.recentRate*100)+"%":"")
-      :"Live validation still collecting ("+c.validation.n+" scored triggers)";
+  if(!watchCandidates.length)return null;
+  const entries=watchCandidates.map(c=>{
+    const validationText=c.validation.n>=1
+      ?"Live validation "+Math.round(c.validation.observedRate*100)+"% ("+c.validation.hits+"/"+c.validation.n+")"+(c.validation.recentN>=5?"; last "+c.validation.recentN+": "+Math.round(c.validation.recentObservedRate*100)+"%":"")
+      :"Live validation collecting — 0 scored triggers";
     let reason;
     if(c.r1>=baseline+.04&&c.r2>=baseline+.02)reason="Historical 1-tick reaction and conditional continuation both exceed the setup baseline.";
     else if(c.r1>=baseline-.02&&c.r2>=baseline+.03)reason="Immediate reaction is near baseline; conditional 2-tick follow-through is stronger.";
-    else reason="Passed conservative recent reaction, continuation and consistency checks.";
-    return {digit:c.candidate,score:c.score,status:c.score>=72?"VALIDATED CANDIDATE":c.score>=62?"QUALIFIED CANDIDATE":"PROVISIONAL CANDIDATE",reason,evidence:c.total+" historical triggers; recent transition rate "+Math.round(c.recentRate*100)+"%; "+validationText,validation:c.validation};
+    else reason="Passed historical reaction, continuation and consistency checks.";
+    const targetText=c.targetReady
+      ?"Passed 95% target: 100+ live outcomes, recent validation and 90%+ Wilson lower confidence bound."
+      :"Calibration only — auto-entry blocked until 95% target is independently supported (100+ outcomes, 95% observed overall and recent, 90%+ Wilson lower bound).";
+    return {digit:c.candidate,score:c.score,targetReady:c.targetReady,status:c.targetReady?"95% TARGET PASSED":"CALIBRATING — NOT TRADE-ELIGIBLE",reason,evidence:c.total+" historical triggers; recent transition rate "+Math.round(c.recentRate*100)+"%; "+validationText+"; "+targetText,validation:c.validation};
   });
-  return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.length===2?"Digit "+entries[0].digit+": rank score "+entries[0].score+"/100 • Digit "+entries[1].digit+": rank score "+entries[1].score+"/100":"Digit "+entries[0].digit+": rank score "+entries[0].score+"/100 • Second digit: no other candidate passed validation. Rank scores are not win probabilities.",status:entries.length===2?"2 QUALIFIED CANDIDATES":"1 QUALIFIED CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
+  const eligible=entries.filter(e=>e.targetReady);
+  const main=entries.map(e=>String(e.digit)).join("  •  ");
+  const meta=entries.map(e=>"Digit "+e.digit+": "+(e.targetReady?"95% target passed":"calibration only")+"; rank "+e.score+"/100").join(" • ")+" • Rank scores are not win probabilities.";
+  return {main,meta,status:eligible.length?eligible.length+" TARGET-QUALIFIED ENTRY"+(eligible.length===1?"":" DIGITS"):"95% TARGET CALIBRATION — AUTO ENTRY BLOCKED",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
 }
 function autoTradeEntrySelection(){
   if(!$("autoTradeManualEntriesEnabled")?.checked){autoTrade.lastManualBlockReason="";return state.ouEntrySnapshot?.active&&Array.isArray(state.ouEntrySnapshot.digits)?state.ouEntrySnapshot.digits:[];}
