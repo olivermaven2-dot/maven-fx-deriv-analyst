@@ -1590,7 +1590,7 @@ function renderSubscribedMarketStatus(mode="switching"){
 
 /* Auto Trade: separate authenticated trading socket; never shares the public tick socket. */
 const autoTrade={
-  socket:null,tradingHeartbeatTimer:null,authorized:false,account:null,enabled:false,speedMode:"STANDARD",realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
+  socket:null,tradingHeartbeatTimer:null,authorized:false,account:null,availableAccounts:[],accountBalances:{},enabled:false,speedMode:"STANDARD",realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,nextEntryAllowedAt:0,entryCooldownMs:5000,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,recoverySide1:"DEFAULT",recoverySide2:"DEFAULT",
   activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,fastTickQueue:[],fastTickQueueLimit:500,fastTickQueueStaleMs:3000,fastTickQueueDrainActive:false,logLines:[],lastManualBlockReason:"",lastManualLoggedReason:"",demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
@@ -1625,6 +1625,45 @@ function autoTradeRenderPnL(){
   el.classList.toggle("pnl-neutral",pnl===0);
   el.setAttribute("aria-label",(pnl>0?"Profit":pnl<0?"Loss":"No profit or loss")+", session P/L "+pnl.toFixed(2)+" "+(autoTrade.currency||""));
 }
+function autoTradeRenderBalances(){
+  const host=$("autoTradeBalances");if(!host)return;
+  const accounts=autoTrade.availableAccounts||[];
+  if(!accounts.length){host.innerHTML='<div class="balance-empty">Connect a token with access to your Demo and Real accounts to view available balances.</div>';return}
+  host.innerHTML=accounts.map(a=>{
+    const entry=autoTrade.accountBalances[a.id]||{status:"pending"};
+    const kind=a.demo?"DEMO":"REAL";
+    let value=entry.status==="loaded"?(Number(entry.balance).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})+" "+(entry.currency||a.currency||"")):entry.status==="pending"?"Checking balance…":entry.status==="unavailable"?"Unavailable for this token":"Waiting for account";
+    return '<div class="balance-card '+(a.demo?"demo":"real")+'"><div><strong>'+kind+'</strong><small>'+esc(a.id)+'</small></div><span>'+esc(value)+'</span></div>';
+  }).join("");
+}
+async function autoTradeFetchOtherBalances(token,headers,accounts,selectedId){
+  for(const account of accounts){
+    if(account.id===selectedId)continue;
+    autoTrade.accountBalances[account.id]={status:"pending"};autoTradeRenderBalances();
+    try{
+      const response=await fetch("https://api.derivws.com/trading/v1/options/accounts/"+encodeURIComponent(account.id)+"/otp",{method:"POST",headers});
+      let payload={};try{payload=await response.json()}catch{}
+      if(!response.ok)throw new Error("OTP unavailable");
+      const url=payload?.data?.url||payload?.url;
+      if(typeof url!=="string"||!url.startsWith("wss://api.derivws.com/trading/v1/options/ws/"))throw new Error("Invalid balance connection URL");
+      await new Promise((resolve)=>{
+        let done=false, ws=null;
+        const finish=(entry)=>{if(done)return;done=true;clearTimeout(timer);if(ws){ws.onmessage=null;ws.onerror=null;ws.onclose=null;try{ws.close()}catch{}}autoTrade.accountBalances[account.id]=entry;autoTradeRenderBalances();resolve()};
+        const timer=setTimeout(()=>finish({status:"unavailable"}),10000);
+        try{
+          ws=new WebSocket(url);
+          ws.onopen=()=>{try{ws.send(JSON.stringify({balance:1,req_id:1}))}catch{finish({status:"unavailable"})}};
+          ws.onmessage=(event)=>{let data;try{data=JSON.parse(event.data)}catch{return}
+            if(data.error){finish({status:"unavailable"});return}
+            if(data.balance){finish({status:"loaded",balance:Number(data.balance.balance),currency:data.balance.currency||account.currency});return}
+          };
+          ws.onerror=()=>finish({status:"unavailable"});
+          ws.onclose=()=>{if(!done)finish({status:"unavailable"})};
+        }catch{finish({status:"unavailable"})}
+      });
+    }catch{autoTrade.accountBalances[account.id]={status:"unavailable"};autoTradeRenderBalances()}
+  }
+}
 function autoTradeRender(){
   const market=$("autoTradeMarket"),setup=$("autoTradeSetup"),entries=$("autoTradeEntries");
   if(market)market.textContent=state.symbol+" · "+state.marketName;
@@ -1633,6 +1672,7 @@ function autoTradeRender(){
   if($("autoTradeCurrency"))$("autoTradeCurrency").textContent=autoTrade.currency||"account currency";
   document.querySelectorAll(".autoTradeCurrencyText").forEach(x=>x.textContent=autoTrade.currency||"account currency");
   if($("autoTradeAccount"))$("autoTradeAccount").textContent=autoTrade.account?(autoTrade.account.loginid+" · "+(autoTrade.account.is_virtual?"DEMO":"REAL")+" · "+autoTrade.currency):"No account connected";
+  autoTradeRenderBalances();
   autoTradeRenderPnL();
   if($("autoTradeNextStake"))$("autoTradeNextStake").textContent=autoTrade.nextStake.toFixed(2)+" "+(autoTrade.currency||"");
   if($("autoTradeRunProgress"))$("autoTradeRunProgress").textContent=autoTrade.runSymbol?(autoTrade.runSettled+"/2 settled"):autoTrade.enabled?"Waiting for entry":"Idle";
@@ -1814,6 +1854,10 @@ function autoTradeHandleMessage(d){
     autoTradeRender();return;
   }
   const kind=autoTrade.requests[d.req_id];if(kind)delete autoTrade.requests[d.req_id];
+  if(d.balance){
+    const accountId=autoTrade.account?.accountId||autoTrade.account?.loginid;
+    if(accountId){autoTrade.accountBalances[accountId]={status:"loaded",balance:Number(d.balance.balance),currency:d.balance.currency||autoTrade.currency};autoTradeRenderBalances()}
+  }
   if(kind==="connection_test"&&d.balance){
     autoTradeLog("BOT CONNECTION TEST PASSED · authenticated account responded. No trade was placed.");
     autoTradeRunProposalTest();autoTradeRender();return
@@ -1977,6 +2021,9 @@ async function autoTradeConnect(){
       return {id:String(id||""),raw:a,demo,currency:a.currency||a.currency_code||"USD",label:(demo?"DEMO":"REAL")+" · "+(id||"Account ID unavailable")+" · "+(a.currency||a.currency_code||"currency")};
     };
     const choices=accounts.map(accountLabel).filter(a=>a.id);
+    autoTrade.availableAccounts=choices.map(a=>({id:a.id,demo:a.demo,currency:a.currency,label:a.label}));
+    autoTrade.accountBalances={};
+    autoTradeRenderBalances();
     if(!choices.length)throw new Error("Deriv returned accounts, but no account IDs were found. No connection was made.");
     const chosen=await autoTradeChooseAccount(choices);
     if(!chosen){autoTradeStatus("DISCONNECTED");autoTradeLog("Account selection cancelled.");return}
@@ -2013,6 +2060,7 @@ async function autoTradeConnect(){
     ws.onmessage=e=>{try{autoTradeHandleMessage(JSON.parse(e.data))}catch(err){autoTradeLog("Trading response handling error: "+(err.message||err))}};
     ws.onerror=()=>{if(!settled){clearTimeout(timeout);settled=true;autoTrade.authorized=false;autoTradeStatus("CONNECTION FAILED");autoTradeLog("Authenticated WebSocket failed to open. Check network access and reconnect.")}else autoTradeLog("Trading WebSocket reported a network error.")};
     ws.onclose=()=>{clearTimeout(timeout);if(autoTrade.tradingHeartbeatTimer){clearInterval(autoTrade.tradingHeartbeatTimer);autoTrade.tradingHeartbeatTimer=null}if(autoTrade.socket===ws){autoTrade.authorized=false;if(autoTrade.enabled)autoTradePause("trading connection closed");autoTradeStatus("DISCONNECTED");autoTradeRender();autoTradeLog("Trading WebSocket closed. Reconnect before starting the bot.")}};
+    autoTradeFetchOtherBalances(token,headers,choices,chosen.id);
   }catch(e){
     autoTrade.authorized=false;autoTrade.account=null;autoTradeStatus("CONNECTION FAILED");
     autoTradeLog("PAT connection failed: "+(e.message||e));
