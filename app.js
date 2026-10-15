@@ -524,7 +524,7 @@ function recordOUValidationTrigger(digit){
   const snap=state.ouEntrySnapshot;
   // Only score a candidate from the analysis snapshot rendered for this exact live tick.
   // Mobile render throttling and engine switches must not reuse stale entry candidates.
-  if(state.engine!=="overunder"||!snap||snap.tickCount!==state.ticks.length||!snap.active||snap.key!==ouValidationKey()||!(Array.isArray(snap.validationDigits)?snap.validationDigits:snap.digits).includes(digit))return;
+  if(state.engine!=="overunder"||!snap||snap.tickCount!==state.ticks.length-1||!snap.active||snap.key!==ouValidationKey()||!(Array.isArray(snap.validationDigits)?snap.validationDigits:snap.digits).includes(digit))return;
   const signature=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|"+digit+"|"+state.ticks.length;
   const key=ouValidationRecordKey(state.symbol,state.selectedDigit,state.selectedSide,digit);
   if(!state.ouValidationBook[key]){
@@ -1801,7 +1801,7 @@ function autoTradeReadyToEnter(digit){
   if(risk.level==="UNKNOWN"||risk.level==="HIGH")return {ok:false,reason:risk.title};
   if(risk.level==="MODERATE"&&state.ouSignalSnapshot.signal!=="STRONG SIGNAL")return {ok:false,reason:"moderate spike risk requires STRONG SIGNAL"};
   const selectedEntries=autoTradeEntrySelection();
-  if(selectedEntries.length<1||selectedEntries.length>2||new Set(selectedEntries).size!==selectedEntries.length)return {ok:false,reason:manualEntriesEnabled?"neither manual digit currently passes the red/green distribution-bar rule":"no entry digit passed the updated reliability checks"};
+  if((manualEntriesEnabled?(selectedEntries.length<1||selectedEntries.length>2):(selectedEntries.length!==2))||new Set(selectedEntries).size!==selectedEntries.length)return {ok:false,reason:manualEntriesEnabled?"neither manual digit currently passes the red/green distribution-bar rule":"exactly two distinct validated entry digits are required"};
   if(!selectedEntries.includes(digit))return {ok:false,reason:manualEntriesEnabled?"digit is not an eligible manual entry digit":"digit is not a current Entry Engine candidate"};
   return {ok:true};
 }
