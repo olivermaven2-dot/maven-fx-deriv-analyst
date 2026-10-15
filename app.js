@@ -1700,7 +1700,12 @@ function autoTradeRender(){
   const market=$("autoTradeMarket"),setup=$("autoTradeSetup"),entries=$("autoTradeEntries");
   if(market)market.textContent=state.symbol+" · "+state.marketName;
   if(setup)setup.textContent=state.selectedSide+" "+state.selectedDigit;
-  if(entries){const chosen=autoTradeEntrySelection();entries.textContent=chosen.length===2?chosen.join(" / "):$("autoTradeManualEntriesEnabled")?.checked?(autoTrade.lastManualBlockReason||"Manual digits not qualified"):"No valid entry";}
+  if(entries){
+    const chosen=autoTradeEntrySelection();
+    const manual=$("autoTradeManualEntriesEnabled")?.checked;
+    const candidates=state.ouEntrySnapshot?.active&&Array.isArray(state.ouEntrySnapshot.validationDigits)?state.ouEntrySnapshot.validationDigits:[];
+    entries.textContent=chosen.length?chosen.join(" / "):manual?(autoTrade.lastManualBlockReason||"Manual digits not qualified"):candidates.length?"Calibrating digits: "+candidates.join(" / ")+" · auto-entry locked until 95% validation":"No validated entry digits yet";
+  }
   if($("autoTradeCurrency"))$("autoTradeCurrency").textContent=autoTrade.currency||"account currency";
   document.querySelectorAll(".autoTradeCurrencyText").forEach(x=>x.textContent=autoTrade.currency||"account currency");
   if($("autoTradeAccount"))$("autoTradeAccount").textContent=autoTrade.account?(autoTrade.account.loginid+" · "+(autoTrade.account.is_virtual?"DEMO":"REAL")+" · "+autoTrade.currency):"No account connected";
@@ -1716,7 +1721,12 @@ function autoTradeUpdateLiveFields(){
   const market=$("autoTradeMarket"),setup=$("autoTradeSetup"),entries=$("autoTradeEntries");
   if(market)market.textContent=state.symbol+" · "+state.marketName;
   if(setup)setup.textContent=state.selectedSide+" "+state.selectedDigit;
-  if(entries){const chosen=autoTradeEntrySelection();entries.textContent=chosen.length===2?chosen.join(" / "):$("autoTradeManualEntriesEnabled")?.checked?(autoTrade.lastManualBlockReason||"Manual digits not qualified"):state.ouEntrySnapshot?.active&&state.ouEntrySnapshot.digits?.length?state.ouEntrySnapshot.digits.join(" / "):"No valid entry";}
+  if(entries){
+    const chosen=autoTradeEntrySelection();
+    const manual=$("autoTradeManualEntriesEnabled")?.checked;
+    const candidates=state.ouEntrySnapshot?.active&&Array.isArray(state.ouEntrySnapshot.validationDigits)?state.ouEntrySnapshot.validationDigits:[];
+    entries.textContent=chosen.length?chosen.join(" / "):manual?(autoTrade.lastManualBlockReason||"Manual digits not qualified"):candidates.length?"Calibrating digits: "+candidates.join(" / ")+" · auto-entry locked until 95% validation":"No validated entry digits yet";
+  }
 }
 function autoTradeMarketChanged(){
   autoTrade.lastDigit=null;
