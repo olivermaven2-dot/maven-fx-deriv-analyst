@@ -10,16 +10,16 @@ function renderOverUnder(root,d,c,last,n){
   if(e.probabilityConflict)reason="Probability Comparison is blocking the selected setup because the complementary setup has stronger live probability evidence.";
   else if(e.signal==="AVOID")reason="The selected setup does not have enough aligned A-Setup evidence.";
   else if(e.signal==="WAIT")reason="The selected setup is still building enough independent evidence across the required analysis windows.";
-  else if(e.signal==="STRONG SIGNAL")reason="Probability, momentum, trend, transitions, reaction behavior, recency, consistency and context are aligned for "+setup+".";
+  else if(e.signal==="STRONG SIGNAL")reason="Heuristic evidence is aligned for "+setup+". This is not a calibrated win probability or a guarantee of profitability.";
   else reason="The selected setup has sufficient multi-factor evidence, but the evidence is not strong enough for a STRONG SIGNAL.";
   const entryDisplay=activeSignal?(entry||{main:"NO VALID ENTRY",confidence:"—",status:"NO ENTRY",reason:"No candidate digit passed the required sample-size, transition, reaction and consistency checks.",evidence:"Candidate evaluation completed"}):{main:"NO ACTIVE ENTRY",confidence:"—",status:"INACTIVE",reason:"Entry Engine activates only when the selected Final Signal is SIGNAL or STRONG SIGNAL.",evidence:"Waiting for an active signal"};
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
     "Selected setup: "+setup,
-    "Probability Comparison: "+Math.round(e.selectedRate*100)+"% vs complement "+Math.round(e.oppositeRate*100)+"% • baseline "+Math.round(e.baseline*100)+"%",
+    "Pair filter (heuristic, not true opposite outcomes): "+Math.round(e.selectedRate*100)+"% vs paired setup "+Math.round(e.oppositeRate*100)+"% • reference rate "+Math.round(e.baseline*100)+"%",
     "Windows 20/50/100/250/500: "+[e.recentRate,e.short50,e.mediumRate,e.mid250,e.longRate].map(x=>Math.round(x*100)+"%").join(" / "),
-    "A-Setup alignment: probability "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentum*100)+" • trend "+Math.round(e.trend*100)+" • transitions "+Math.round(e.transition*100),
+    "Heuristic score components (not win probabilities): rate-fit "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentum*100)+" • trend "+Math.round(e.trend*100)+" • transitions "+Math.round(e.transition*100),
     "Reaction "+Math.round(e.reaction*100)+" • clustering "+Math.round(e.cluster*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
-    "Historical "+Math.round(e.historical*100)+" • current context "+Math.round(e.context*100)+" • evidence "+Math.round(e.evidence*100),
+    "Historical fit "+Math.round(e.historical*100)+" • current context "+Math.round(e.context*100)+" • combined heuristic score "+Math.round(e.evidence*100),
     e.probabilityConflict?"× Complementary probability conflict — selected setup blocked":entry?"✓ Entry candidates "+entry.main+" passed historical reaction filters":"× Entry candidates remain inactive or did not pass validation",
     ouValidationSummary()
   ],n);
