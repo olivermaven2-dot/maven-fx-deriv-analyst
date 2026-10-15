@@ -1012,8 +1012,7 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
     const recentWeight=.12-validationWeight;
     const score=Math.round(100*(directionalLift*.25+recentLift*.20+secondLift*.13+thirdLift*.07+stability*.10+consistency*.07+sample*.06+validationLift*validationWeight+Math.min(1,t.recentTotal/40)*recentWeight));
     const recentObservedRate=recent1.length?recentHits1/recent1.length:0;
-    const targetReady=h1.n>=100&&recent1.length>=30&&rawObservedRate>=.95&&recentObservedRate>=.95&&ouWilsonLowerBound(h1.hits,h1.n)>=.90;
-    candidates.push({...t,candidate,baseline,score,stability,consistency,targetReady,validation:{n:h1.n,hits:h1.hits,rate:observedRate,observedRate:rawObservedRate,recentN:recent1.length,recentHits:recentHits1,recentRate,recentObservedRate,failureStreak:h1.failureStreak,lowerBound:ouWilsonLowerBound(h1.hits,h1.n)}});
+    candidates.push({...t,candidate,baseline,score,stability,consistency,validation:{n:h1.n,hits:h1.hits,rate:observedRate,observedRate:rawObservedRate,recentN:recent1.length,recentHits:recentHits1,recentRate,recentObservedRate,failureStreak:h1.failureStreak,lowerBound:ouWilsonLowerBound(h1.hits,h1.n)}});
   }
   candidates.sort((a,b)=>b.score-a.score);
   if(!candidates.length)return null;
@@ -1031,15 +1030,11 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
     if(c.r1>=baseline+.04&&c.r2>=baseline+.02)reason="Historical 1-tick reaction and conditional continuation both exceed the setup baseline.";
     else if(c.r1>=baseline-.02&&c.r2>=baseline+.03)reason="Immediate reaction is near baseline; conditional 2-tick follow-through is stronger.";
     else reason="Passed historical reaction, continuation and consistency checks.";
-    const targetText=c.targetReady
-      ?"Passed 95% target: 100+ live outcomes, recent validation and 90%+ Wilson lower confidence bound."
-      :"Calibration only — auto-entry blocked until 95% target is independently supported (100+ outcomes, 95% observed overall and recent, 90%+ Wilson lower bound).";
-    return {digit:c.candidate,score:c.score,targetReady:c.targetReady,status:c.targetReady?"95% TARGET PASSED":"CALIBRATING — NOT TRADE-ELIGIBLE",reason,evidence:c.total+" historical triggers; recent transition rate "+Math.round(c.recentRate*100)+"%; "+validationText+"; "+targetText,validation:c.validation};
+    return {digit:c.candidate,score:c.score,targetReady:true,status:"ENTRY CANDIDATE",reason,evidence:c.total+" historical triggers; recent transition rate "+Math.round(c.recentRate*100)+"%; "+validationText,validation:c.validation};
   });
-  const eligible=entries.filter(e=>e.targetReady);
   const main=entries.map(e=>String(e.digit)).join("  •  ");
-  const meta=entries.map(e=>"Digit "+e.digit+": "+(e.targetReady?"95% target passed":"calibration only")+"; rank "+e.score+"/100").join(" • ")+" • Rank scores are not win probabilities.";
-  return {main,meta,status:eligible.length?eligible.length+" TARGET-QUALIFIED ENTRY"+(eligible.length===1?"":" DIGITS"):"95% TARGET CALIBRATION — AUTO ENTRY BLOCKED",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
+  const meta=entries.map(e=>"Digit "+e.digit+": entry score "+e.score+"/100").join(" • ")+" • Rank scores are not win probabilities.";
+  return {main,meta,status:entries.length+" ENTRY CANDIDATE"+(entries.length===1?"":" DIGITS"),reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
 }
 function autoTradeEntrySelection(){
   if(!$("autoTradeManualEntriesEnabled")?.checked){autoTrade.lastManualBlockReason="";const snap=state.ouEntrySnapshot;return snap?.active&&Array.isArray(snap.validationDigits)?snap.validationDigits:(snap?.active&&Array.isArray(snap.digits)?snap.digits:[]);}
