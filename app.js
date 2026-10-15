@@ -687,7 +687,18 @@ function receiveTick(t){
   persistValidationData();
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
-  $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream(true);if(shouldRenderEngineForCurrentTick())renderEngine();else renderOUValidationPanel();if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);
+  $("diagTicks").textContent=state.ticks.length;
+  const fastExecution=autoTrade.enabled&&autoTrade.speedMode==="FAST"&&state.engine==="overunder";
+  if(fastExecution){
+    // Run after required signal/entry analysis but before noncritical history display work.
+    if(shouldRenderEngineForCurrentTick())renderEngine();else renderOUValidationPanel();
+    processAutoTradeTick(digit);
+    updateQuality();renderStream(true);
+  }else{
+    updateQuality();renderStream(true);
+    if(shouldRenderEngineForCurrentTick())renderEngine();else renderOUValidationPanel();
+    if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);
+  }
 }
 function updateQuality(){
   const n=state.digits.length,pill=$("qualityPill");
@@ -1581,7 +1592,7 @@ function renderSubscribedMarketStatus(mode="switching"){
 
 /* Auto Trade: separate authenticated trading socket; never shares the public tick socket. */
 const autoTrade={
-  socket:null,authorized:false,account:null,enabled:false,realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
+  socket:null,authorized:false,account:null,enabled:false,speedMode:"STANDARD",realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,recoverySide1:"DEFAULT",recoverySide2:"DEFAULT",
   activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,logLines:[],lastManualBlockReason:"",lastManualLoggedReason:"",demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
@@ -1659,6 +1670,13 @@ function autoTradeSetupChanged(){
 function autoTradePause(reason){
   autoTrade.enabled=false;autoTrade.runRemaining=0;autoTrade.runSymbol="";
   autoTradeStatus("PAUSED");autoTradeLog("BOT PAUSED · "+reason);autoTradeRender();
+}
+function autoTradeSetSpeedMode(mode,logChange=true){
+  autoTrade.speedMode=mode==="FAST"?"FAST":"STANDARD";
+  const button=$("autoTradeSpeedToggle");
+  if(button){button.textContent=autoTrade.speedMode==="FAST"?"FAST EXECUTION: ON":"FAST EXECUTION: OFF";button.setAttribute("aria-pressed",autoTrade.speedMode==="FAST"?"true":"false");button.classList.toggle("fast-active",autoTrade.speedMode==="FAST");}
+  const note=$("autoTradeSpeedNote");if(note)note.textContent=autoTrade.speedMode==="FAST"?"Fast mode runs the bot immediately after required signal checks, before noncritical history display updates. Market tick speed and Deriv network response time are unchanged.":"Standard mode updates the live display before processing the bot. Both modes keep the same entry, risk and two-run rules.";
+  if(logChange&&$("autoTradeLog"))autoTradeLog("Execution speed set to "+(autoTrade.speedMode==="FAST"?"FAST":"STANDARD")+". This changes local processing order only; it cannot accelerate Deriv ticks or network response.");
 }
 function autoTradeStart(){
   if(!autoTradeCanStart()){autoTradeLog("Start blocked: connect an account; real accounts additionally require the checkbox and exact phrase TRADE REAL.");autoTradeRender();return}
@@ -1968,6 +1986,7 @@ function autoTradeDisconnect(){
   $("autoTradeConnect").addEventListener("click",autoTradeConnect);
   $("autoTradeDisconnect").addEventListener("click",autoTradeDisconnect);
   $("autoTradeStart").addEventListener("click",autoTradeStart);
+  $("autoTradeSpeedToggle").addEventListener("click",()=>autoTradeSetSpeedMode(autoTrade.speedMode==="FAST"?"STANDARD":"FAST"));
   const demoTestButton=document.createElement("button");
   demoTestButton.type="button";demoTestButton.id="autoTradeDemoOneShotTest";demoTestButton.className=$("autoTradeStart").className;demoTestButton.textContent="One-contract DEMO test";demoTestButton.style.marginTop="8px";demoTestButton.addEventListener("click",autoTradeRunDemoTradeTest);
   $("autoTradeStart").parentElement.insertBefore(demoTestButton,$("autoTradeStart").nextSibling);
