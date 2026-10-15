@@ -1065,7 +1065,8 @@ function autoTradeEntrySelection(){
   const blocked=[first,second].filter(digit=>bars.most[digit]||bars.least[digit]).map(digit=>"digit "+digit+(bars.most[digit]&&bars.least[digit]?" has a red and green distribution bar":bars.most[digit]?" has a green distribution bar":" has a red distribution bar"));
   if(!valid.length){autoTrade.lastManualBlockReason=blocked.join("; ")+". No manual digit is eligible until it has neither bar.";return [];}
   const prediction=overUnderEntry(state.digits,state.selectedDigit,state.selectedSide,valid);
-  const qualified=intersectPredictiveEntryCandidates(valid,prediction?.entries);
+  const reviewedPrediction=mavenAIReviewEntry("overunder",prediction,{signal:state.ouSignalSnapshot?.signal,confidence:state.ouEntrySnapshot?.confidence});
+  const qualified=intersectPredictiveEntryCandidates(valid,reviewedPrediction?.entries);
   const unqualified=valid.filter(digit=>!qualified.includes(digit)).map(digit=>"digit "+digit+" failed predictive Entry Engine qualification");
   const reasons=[...blocked,...unqualified];
   autoTrade.lastManualBlockReason=reasons.length?reasons.join("; ")+(qualified.length?". Using only the remaining predictive, distribution-eligible digit(s).":". No manual digit currently passes all entry-quality checks."):"";
