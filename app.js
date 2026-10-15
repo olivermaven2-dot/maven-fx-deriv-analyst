@@ -4,9 +4,9 @@ function renderOverUnder(root,d,c,last,n){
   const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const rawEntry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
   const entry=mavenAIReviewEntry("overunder",rawEntry,e.aiDecision);
-  state.ouEntrySnapshot={key:ouValidationKey(),active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[],validationDigits:entry?entry.entries.map(x=>x.digit):[],confidence:Number(e.aiDecision?.confidence)};
+  state.ouEntrySnapshot={key:ouValidationKey(),tickCount:state.liveTickSequence,active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[],validationDigits:entry?entry.entries.map(x=>x.digit):[],confidence:Number(e.aiDecision?.confidence)};
   state.ouSignalSnapshot={key:ouValidationKey(),active:activeSignal&&!e.probabilityConflict,signal:e.signal,probabilityConflict:!!e.probabilityConflict,tickCount:state.digits.length};
-  setSignalValidationForecast("overunder",state.selectedSide+" "+state.selectedDigit,e.probabilityConflict?"WAIT":e.signal,state.digits.length,e.aiDecision?.confidence,{selectedDigit:state.selectedDigit,side:state.selectedSide});
+  setSignalValidationForecast("overunder",state.selectedSide+" "+state.selectedDigit,e.probabilityConflict?"WAIT":e.signal,state.liveTickSequence,e.aiDecision?.confidence,{selectedDigit:state.selectedDigit,side:state.selectedSide});
   autoTradeUpdateLiveFields();
   let reason;
   if(e.aiDecision)reason=e.aiDecision.reason+" "+(e.probabilityConflict?"Probability Comparison also blocks the entry until complementary evidence aligns.":"");
@@ -42,7 +42,7 @@ function shouldRenderEngineForCurrentTick(){
   lastMobileEngineRenderAt=now;
   return true;
 }
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],lastTickSignature:"",primarySubscriptionId:null,primarySubscriptionSymbol:"",primaryHistoryRequests:{},primarySubscribeRequests:{},lastPongAt:0,engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,otherValidation:{snapshot:null,pending:[],book:{}},signalValidation:{snapshot:null,book:{}},validationDirty:false,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
+const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],liveTickSequence:0,lastTickSignature:"",primarySubscriptionId:null,primarySubscriptionSymbol:"",primaryHistoryRequests:{},primarySubscribeRequests:{},lastPongAt:0,engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,otherValidation:{snapshot:null,pending:[],book:{}},signalValidation:{snapshot:null,book:{}},validationDirty:false,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
 
 const VALIDATION_STORAGE_KEY="mavenFx.validationStats.v1";
 function cleanValidationBook(value,kind){
@@ -522,7 +522,9 @@ function processOUValidationTick(digit){
 function recordOUValidationTrigger(digit){
   resetOUValidationIfNeeded();
   const snap=state.ouEntrySnapshot;
-  if(!snap||!snap.active||snap.key!==ouValidationKey()||!(Array.isArray(snap.validationDigits)?snap.validationDigits:snap.digits).includes(digit))return;
+  // Only score a candidate from the analysis snapshot rendered for this exact live tick.
+  // Mobile render throttling and engine switches must not reuse stale entry candidates.
+  if(state.engine!=="overunder"||!snap||snap.tickCount!==state.liveTickSequence-1||!snap.active||snap.key!==ouValidationKey()||!(Array.isArray(snap.validationDigits)?snap.validationDigits:snap.digits).includes(digit))return;
   const signature=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|"+digit+"|"+state.ticks.length;
   const key=ouValidationRecordKey(state.symbol,state.selectedDigit,state.selectedSide,digit);
   if(!state.ouValidationBook[key]){
@@ -544,7 +546,7 @@ function setSignalValidationForecast(engine,target,signal,tickCount,confidence,e
 }
 function processSignalValidationTick(digit,quote,previousQuote){
   const sv=state.signalValidation,snap=sv.snapshot;sv.snapshot=null;
-  if(!snap||!snap.active||snap.market!==state.symbol||snap.tickCount>=state.ticks.length)return;
+  if(!snap||!snap.active||snap.market!==state.symbol||snap.engine!==state.engine||snap.tickCount!==state.liveTickSequence-1)return;
   let hit=false;
   if(snap.engine==="overunder")hit=snap.side==="OVER"?digit>snap.selectedDigit:digit<snap.selectedDigit;
   else if(snap.engine==="evenodd")hit=(digit%2===0?"EVEN":"ODD")===snap.target;
@@ -583,7 +585,7 @@ function processOtherValidationTick(digit,quote,previousQuote){
   }
   const snap=ov.snapshot;
   ov.snapshot=null;
-  if(!snap||!snap.active||snap.market!==state.symbol||snap.tickCount>=state.ticks.length)return;
+  if(!snap||!snap.active||snap.market!==state.symbol||snap.engine!==state.engine||snap.tickCount!==state.liveTickSequence-1)return;
   const key=otherValidationKey(snap.engine,snap.target,snap.market);
   if(!ov.book[key])ov.book[key]={market:snap.market,engine:snap.engine,target:snap.target,triggers:0,confidenceSum:0,confidenceN:0,1:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},lastUpdated:Date.now()};
   ov.book[key].triggers++;state.validationDirty=true;
@@ -639,12 +641,19 @@ function validationReliabilityNote(engine){
   if(v.forecasts<30)return "AI feedback: early sample ("+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate). Keep confidence provisional; this is not a profitability guarantee."+calibration+learning;
   return "AI feedback: "+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate."+calibration+learning+" Historical sample is saved in this browser and does not guarantee future results.";
 }
+function wilsonInterval(hits,total,z=1.96){
+  if(!Number.isFinite(hits)||!Number.isFinite(total)||total<=0||hits<0||hits>total)return null;
+  const p=hits/total,z2=z*z,den=1+z2/total,center=(p+z2/(2*total))/den;
+  const margin=z*Math.sqrt((p*(1-p)+z2/(4*total))/total)/den;
+  return {low:Math.max(0,center-margin),high:Math.min(1,center+margin)};
+}
 function signalEntryMetricsMarkup(engine){
   const signal=getSignalValidationReliability(engine),entry=getValidationReliability(engine);
   const pct=x=>x===null||x===undefined?"Collecting":Math.round(x*100)+"%";
   const falseSignal=signal.rate===null?null:1-signal.rate,falseEntry=entry.rate===null?null:1-entry.rate;
   const sampleNote=n=>n<10?"Small sample — learning neutral":n<30?"Early sample — treat cautiously":"Scored live outcomes";
-  return '<div class="signal-entry-metrics"><div class="signal-entry-metric"><strong>FALSE-SIGNAL RATE</strong><b>'+pct(falseSignal)+'</b><span>'+signal.forecasts+' scored</span><small>'+esc(sampleNote(signal.forecasts))+'</small></div><div class="signal-entry-metric"><strong>FALSE-ENTRY RATE</strong><b>'+pct(falseEntry)+'</b><span>'+entry.forecasts+' scored</span><small>'+esc(sampleNote(entry.forecasts))+'</small></div></div><div class="ou-validation-note">Signal learning adjusts Final Signal confidence from signal-only outcomes. Entry learning adjusts entry strength/ranking from entry outcomes. False rates are not profitability measures.</div>';
+  const ci=(v)=>{const x=v.forecasts?wilsonInterval(v.hits,v.forecasts):null;return x?Math.round(x.low*100)+"–"+Math.round(x.high*100)+"% 95% interval":"95% interval unavailable";};
+  return '<div class="signal-entry-metrics"><div class="signal-entry-metric"><strong>FALSE-SIGNAL RATE</strong><b>'+pct(falseSignal)+'</b><span>'+signal.forecasts+' scored</span><small>'+esc(sampleNote(signal.forecasts))+'</small><small>Hit-rate uncertainty: '+esc(ci(signal))+'</small></div><div class="signal-entry-metric"><strong>FALSE-ENTRY RATE</strong><b>'+pct(falseEntry)+'</b><span>'+entry.forecasts+' scored</span><small>'+esc(sampleNote(entry.forecasts))+'</small><small>Hit-rate uncertainty: '+esc(ci(entry))+'</small></div></div><div class="ou-validation-note">95% Wilson intervals show sampling uncertainty; they do not guarantee future outcomes. Signal learning adjusts Final Signal confidence from signal-only outcomes. Entry learning adjusts entry strength/ranking from entry outcomes. False rates are not profitability measures.</div>';
 }
 function renderOUValidationPanel(){
   const card=$("ouValidationCard"),out=$("ouValidationResults"),payoutControl=$("ouPayoutControl");
@@ -667,8 +676,10 @@ function renderOUValidationPanel(){
   const breakeven=100/(1+payout/100);
   const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"—";
   const roi=x=>x.n?(((x.hits*payout-(x.n-x.hits)*100)/x.n)>=0?"+":"")+(((x.hits*payout-(x.n-x.hits)*100)/x.n).toFixed(1))+"%":"—";
+  const entryStats=getValidationReliability("overunder"),entryCI=entryStats.forecasts?wilsonInterval(entryStats.hits,entryStats.forecasts):null;
+  const edgeAssessment=!entryCI?"Not enough scored entries to assess the break-even threshold.":entryCI.low*100>breakeven?"Observed lower 95% bound is above assumed break-even; keep validating on unseen data.":entryCI.high*100<breakeven?"Observed upper 95% bound is below assumed break-even; current sample is unfavourable at this assumed payout.":"The 95% interval overlaps assumed break-even; edge is not established.";
   out.innerHTML=signalEntryMetricsMarkup("overunder")+'<div class="ou-validation-note">Saved locally in this browser • only live entry-digit triggers count • no trades are placed. Assumed win profit is editable and is a what-if estimate, not Deriv live payout.</div><div class="ou-validation-breakeven">'+esc(validationReliabilityNote("overunder"))+'</div>'+
-    '<div class="ou-validation-breakeven">Assumed profit per win: <strong>'+payout.toFixed(1)+'%</strong> of stake • break-even hit rate: <strong>'+breakeven.toFixed(1)+'%</strong></div>'+
+    '<div class="ou-validation-breakeven">Assumed profit per win: <strong>'+payout.toFixed(1)+'%</strong> of stake • break-even hit rate: <strong>'+breakeven.toFixed(1)+'%</strong><br>'+esc(edgeAssessment)+'</div>'+
     (rows.length?'<div class="ou-validation-table"><div class="ou-validation-row ou-validation-head"><span>ENTRY</span><span>TRIGGERS</span><span>1 TICK</span><span>2 IN A ROW</span><span>3 IN A ROW</span><span>MAX FAILS</span><span>EST. ROI*</span></div>'+rows.map(r=>{const selected=[1,2,3].reduce((best,h)=>r[h].n>best.n?r[h]:best,r[1]);return '<div class="ou-validation-row"><strong>'+r.candidate+'</strong><span>'+r.triggers+'</span><span>'+fmt(r[1])+'</span><span>'+fmt(r[2])+'</span><span>'+fmt(r[3])+'</span><span>'+((selected.maxFailureStreak||0))+'</span><span>'+roi(selected)+'</span></div>'}).join("")+'</div><div class="ou-validation-note">*ROI uses the best-sampled horizon for that digit, assumes the entered profit rate and a 100% stake loss on misses. Change payout assumption to match a real quoted contract before interpreting it.</div>':'<div class="ou-validation-empty">No qualifying entry-digit triggers recorded for '+esc(state.symbol)+' • '+state.selectedSide+' '+state.selectedDigit+' yet. Keep the live stream running; the table fills as entry digits trigger and their next ticks complete.</div>');
 }
 function receiveTick(t){
@@ -680,6 +691,7 @@ function receiveTick(t){
   const digit=digitFromQuote(quote,state.pipSize);if(!Number.isInteger(digit))return;
 
   state.lastTickSignature=signature;
+  state.liveTickSequence++;
   state.ticks.push({quote:Number(quote),epoch});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
   state.lastTickAt=Date.now();
@@ -1382,8 +1394,8 @@ function renderEvenOdd(root,d,last,n){
   const entryActive=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const rawEntry=entryActive?selectParityEntry(d,state.selectedParity):null;
   const entry=mavenAIReviewEntry("evenodd",rawEntry,e.aiDecision);
-  setOtherValidationForecast("evenodd",state.selectedParity,e.signal,!!entry,n,e.aiDecision?.confidence);
-  setSignalValidationForecast("evenodd",state.selectedParity,e.signal,n,e.aiDecision?.confidence);
+  setOtherValidationForecast("evenodd",state.selectedParity,e.signal,!!entry,state.liveTickSequence,e.aiDecision?.confidence);
+  setSignalValidationForecast("evenodd",state.selectedParity,e.signal,state.liveTickSequence,e.aiDecision?.confidence);
   const entryDisplay=entry||{main:entryActive?"NO STRONG ENTRY":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No trigger has enough conditional lift toward the selected Final Signal.":"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."};
   const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
   const reason=e.conflict?"WAIT: recent and longer-window parity behaviour conflict. The AI will wait for stronger agreement.":e.signal==="STRONG SIGNAL"?"Multiple parity evidence layers are aligned for "+state.selectedParity+".":e.signal==="SIGNAL"?"The selected parity has sufficient multi-factor evidence, but it is not at STRONG SIGNAL level.":e.signal==="AVOID"?"The selected parity has unfavorable evidence.":"Evidence for the selected parity is still developing.";
@@ -1522,8 +1534,8 @@ function renderRiseFall(root,last,n){
   }
   const rawEntry=riseFallEntry(prices,a);
   const entry=mavenAIReviewEntry("risefall",rawEntry,a.aiDecision);
-  setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,n,a.aiDecision?.confidence);
-  setSignalValidationForecast("risefall",state.selectedRiseFall,a.signal,n,a.aiDecision?.confidence);
+  setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,state.liveTickSequence,a.aiDecision?.confidence);
+  setSignalValidationForecast("risefall",state.selectedRiseFall,a.signal,state.liveTickSequence,a.aiDecision?.confidence);
   const entryDisplay=entry||{
     main:a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"?"NO CONFIRMED ENTRY":"NO ACTIVE ENTRY",
     confidence:"—",
@@ -1719,7 +1731,7 @@ function autoTradeUpdateLiveFields(){
     const chosen=autoTradeEntrySelection();
     const manual=$("autoTradeManualEntriesEnabled")?.checked;
     const candidates=state.ouEntrySnapshot?.active&&Array.isArray(state.ouEntrySnapshot.validationDigits)?state.ouEntrySnapshot.validationDigits:[];
-    entries.textContent=chosen.length?chosen.join(" / "):manual?(autoTrade.lastManualBlockReason||"Manual digits not qualified"):candidates.length?"Calibrating digits: "+candidates.join(" / ")+" · auto-entry locked until 95% validation":"No validated entry digits yet";
+    entries.textContent=chosen.length?chosen.join(" / "):manual?(autoTrade.lastManualBlockReason||"Manual digits not qualified"):candidates.length?"Entry digits: "+candidates.join(" / "):"No validated entry digits yet";
   }
 }
 function autoTradeMarketChanged(){
@@ -1799,7 +1811,7 @@ function autoTradeReadyToEnter(digit){
   if(risk.level==="UNKNOWN"||risk.level==="HIGH")return {ok:false,reason:risk.title};
   if(risk.level==="MODERATE"&&state.ouSignalSnapshot.signal!=="STRONG SIGNAL")return {ok:false,reason:"moderate spike risk requires STRONG SIGNAL"};
   const selectedEntries=autoTradeEntrySelection();
-  if(selectedEntries.length<1||selectedEntries.length>2||new Set(selectedEntries).size!==selectedEntries.length)return {ok:false,reason:manualEntriesEnabled?"neither manual digit currently passes the red/green distribution-bar rule":"no entry digit passed the updated reliability checks"};
+  if((manualEntriesEnabled?(selectedEntries.length<1||selectedEntries.length>2):(selectedEntries.length!==2))||new Set(selectedEntries).size!==selectedEntries.length)return {ok:false,reason:manualEntriesEnabled?"neither manual digit currently passes the red/green distribution-bar rule":"exactly two distinct validated entry digits are required"};
   if(!selectedEntries.includes(digit))return {ok:false,reason:manualEntriesEnabled?"digit is not an eligible manual entry digit":"digit is not a current Entry Engine candidate"};
   return {ok:true};
 }

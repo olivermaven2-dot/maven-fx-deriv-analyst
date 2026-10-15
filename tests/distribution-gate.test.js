@@ -106,6 +106,7 @@ test('distribution failure forces Final Signal to AVOID in the existing evidence
       cluster: .5, streak: 2, transitions: 10, transitionRate: .6
     });
     const ouRate = () => .5;
+    const mavenAIDecisionLayer = (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,adjustedAlignment:alignment,adjustedEvidence:Number(evidence)||0,reason:"test harness"});
     ${gateSource}
     ${evidenceSource}
     overUnderEvidence
@@ -127,6 +128,7 @@ test('complementary probability conflict still blocks a distribution-passing set
       cluster: .5, streak: 2, transitions: 10, transitionRate: .6
     });
     const ouRate = (d, digit, side) => digit === 7 && side === 'UNDER' ? .7 : .5;
+    const mavenAIDecisionLayer = (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,adjustedAlignment:alignment,adjustedEvidence:Number(evidence)||0,reason:"test harness"});
     ${gateSource}
     ${evidenceSource}
     overUnderEvidence
@@ -135,7 +137,7 @@ test('complementary probability conflict still blocks a distribution-passing set
   const result = runEvidence(overPassTicks, 2, 'OVER');
   assert.equal(result.distribution.pass, true);
   assert.equal(result.probabilityConflict, true);
-  assert.equal(result.signal, 'AVOID');
+  assert.equal(result.signal, 'WAIT');
 });
 
 test('distributionBarFlags matches the displayed MOST and LEAST bars', () => {
@@ -215,6 +217,7 @@ test('complementary Over/Under digit mapping is symmetric for all five pairs', (
       cluster: .5, streak: 2, transitions: 10, transitionRate: .6
     });
     const ouRate = () => .5;
+    const mavenAIDecisionLayer = (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,adjustedAlignment:alignment,adjustedEvidence:Number(evidence)||0,reason:"test harness"});
     ${gateSource}
     ${evidenceSource}
     overUnderEvidence
@@ -249,6 +252,112 @@ test('spike-risk refresh uses a removable note marker to avoid stacking warnings
   assert.match(source, /className="spike-risk-note"/);
 });
 
+
+test('Wilson intervals expose uncertainty and remain bounded for live hit rates', () => {
+  const start = appSource.indexOf('function wilsonInterval');
+  assert.notEqual(start, -1);
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const wilsonInterval = vm.runInNewContext(appSource.slice(start, end) + '\nwilsonInterval');
+  const small = wilsonInterval(5, 10);
+  assert.ok(small.low > 0.2 && small.low < 0.3);
+  assert.ok(small.high > 0.7 && small.high < 0.8);
+  assert.ok(small.low < 0.5 && small.high > 0.5);
+  assert.equal(wilsonInterval(0, 0), null);
+  assert.equal(wilsonInterval(11, 10), null);
+  const perfect = wilsonInterval(10, 10);
+  assert.ok(perfect.low < 1 && perfect.high <= 1);
+});
+
+test('Over/Under validation scores only a candidate triggered immediately after its analysis snapshot', () => {
+  const start = appSource.indexOf('function recordOUValidationTrigger');
+  assert.notEqual(start, -1);
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const makeHarness = tickCount => `
+    const state = {
+      engine: 'overunder', symbol: 'R_100', selectedDigit: 2, selectedSide: 'OVER',
+      ticks: Array(100).fill({ quote: 100 }), liveTickSequence: 100, validationDirty: false,
+      ouEntrySnapshot: { key: 'R_100|2|OVER', tickCount: ${tickCount}, active: true, digits: [4], validationDigits: [4], confidence: .8 },
+      ouValidation: { pending: [], lastTrigger: '' }, ouValidationBook: {}
+    };
+    const resetOUValidationIfNeeded = () => {};
+    const ouValidationKey = () => 'R_100|2|OVER';
+    const ouValidationRecordKey = () => 'R_100|2|OVER|4';
+    ${source}
+    ({run:recordOUValidationTrigger,state})
+  `;
+  const fresh = vm.runInNewContext(makeHarness(99)); fresh.run(4);
+  const stale = vm.runInNewContext(makeHarness(98)); stale.run(4);
+  assert.equal(fresh.state.ouValidation.pending.length, 1);
+  assert.equal(stale.state.ouValidation.pending.length, 0);
+});
+
+test('signal validation uses the monotonic live sequence after the tick buffer is full', () => {
+  const start = appSource.indexOf('function processSignalValidationTick');
+  assert.notEqual(start, -1);
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const makeHarness = snapshotTick => `
+    const state = {
+      symbol: 'R_100', engine: 'overunder', liveTickSequence: 5001,
+      ticks: Array(2000).fill({quote: 100}), selectedDigit: 2, selectedSide: 'OVER',
+      signalValidation: {
+        snapshot: {active: true, market: 'R_100', engine: 'overunder', target: 'OVER 2', side: 'OVER', selectedDigit: 2, tickCount: ${snapshotTick}, confidence: .8},
+        book: {}
+      }, validationDirty: false
+    };
+    const signalValidationKey = (engine,target,market) => market+'|'+engine+'|'+target;
+    ${source}
+    ({run:processSignalValidationTick,state})
+  `;
+  const fresh = vm.runInNewContext(makeHarness(5000));
+  fresh.run(4, 101, 100);
+  const rec = fresh.state.signalValidation.book['R_100|overunder|OVER 2'];
+  assert.equal(rec.n, 1);
+  assert.equal(rec.hits, 1);
+  const stale = vm.runInNewContext(makeHarness(4999));
+  stale.run(4, 101, 100);
+  assert.equal(Object.keys(stale.state.signalValidation.book).length, 0);
+});
+
+test('validation snapshots are discarded when the active engine changes before the next tick', () => {
+  const signalStart = appSource.indexOf('function processSignalValidationTick');
+  const signalEnd = appSource.indexOf('\nfunction ', signalStart + 10);
+  const signalSource = appSource.slice(signalStart, signalEnd);
+  const signalHarness = `
+    const state = {
+      symbol: 'R_100', engine: 'risefall', liveTickSequence: 101,
+      signalValidation: {snapshot: {active: true, market: 'R_100', engine: 'evenodd', target: 'EVEN', tickCount: 100, confidence: .8}, book: {}},
+      validationDirty: false
+    };
+    const signalValidationKey = (engine,target,market) => market+'|'+engine+'|'+target;
+    ${signalSource}
+    ({run:processSignalValidationTick,state})
+  `;
+  const signal = vm.runInNewContext(signalHarness);
+  signal.run(2, 101, 100);
+  assert.equal(Object.keys(signal.state.signalValidation.book).length, 0);
+  assert.equal(signal.state.signalValidation.snapshot, null);
+
+  const otherStart = appSource.indexOf('function processOtherValidationTick');
+  const otherEnd = appSource.indexOf('\nfunction ', otherStart + 10);
+  const otherSource = appSource.slice(otherStart, otherEnd);
+  const otherHarness = `
+    const state = {
+      symbol: 'R_100', engine: 'risefall', liveTickSequence: 101,
+      otherValidation: {snapshot: {active: true, market: 'R_100', engine: 'evenodd', target: 'EVEN', tickCount: 100, confidence: .8}, pending: [], book: {}},
+      validationDirty: false
+    };
+    const otherValidationKey = (engine,target,market) => market+'|'+engine+'|'+target;
+    const scoreOtherValidationPending = () => { throw new Error('no pending forecast should be scored'); };
+    ${otherSource}
+    ({run:processOtherValidationTick,state})
+  `;
+  const other = vm.runInNewContext(otherHarness);
+  other.run(2, 101, 100);
+  assert.equal(Object.keys(other.state.otherValidation.book).length, 0);
+  assert.equal(other.state.otherValidation.snapshot, null);
+});
 
 test('bot entry validation refuses an incomplete or duplicated entry pair', () => {
   const start = appSource.indexOf('function autoTradeReadyToEnter');
@@ -290,7 +399,7 @@ test('Even/Odd waits for at least 100 observed digits before issuing a signal', 
   assert.notEqual(start, -1, 'parityStats must exist');
   const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
-  const run = vm.runInNewContext(source + '\nparityStats');
+  const run = vm.runInNewContext(source + '\nparityStats', {mavenAIDecisionLayer:(engine,baseSignal,evidence,alignment,conflict,hardGate,sample)=>({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,adjustedAlignment:alignment,adjustedEvidence:Number(evidence)||0,reason:'test harness'})});
   const result = run(Array(99).fill(2), 'EVEN');
   assert.equal(result.signal, 'WAIT');
 });
@@ -326,16 +435,17 @@ test('Even/Odd renderer only activates entry validation for SIGNAL or STRONG SIG
   assert.match(source, /entryActive\?selectParityEntry/);
 });
 
-test('Rise/Fall waits for 100 prices before issuing a signal', () => {
+test('Rise/Fall waits for its minimum 30 price observations before analysis', () => {
   const start = appSource.indexOf('function riseFallAnalysis');
   assert.notEqual(start, -1, 'riseFallAnalysis must exist');
   const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
   const run = vm.runInNewContext(source + '\nriseFallAnalysis', {
-    state: { selectedRiseFall: 'RISE' }
+    state: { selectedRiseFall: 'RISE' },
+    mavenAIDecisionLayer: (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,reason:'test harness'})
   });
-  const result = run(Array.from({ length: 99 }, (_, i) => i + 100));
-  assert.equal(result.signal, 'WAIT');
+  const result = run(Array.from({ length: 29 }, (_, i) => i + 100));
+  assert.equal(result, null);
 });
 
 test('Rise/Fall entry rejects inactive signals and requires current pattern follow-through', () => {
@@ -354,8 +464,11 @@ test('Rise/Fall renderer only activates entry validation for SIGNAL or STRONG SI
   assert.notEqual(start, -1);
   const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
-  assert.match(source, /const entry=riseFallEntry\(prices,a\)/);
-  assert.ok(source.includes('a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"'));
+  assert.match(source, /const rawEntry=riseFallEntry\(prices,a\)/);
+  assert.ok(source.includes('setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,state.liveTickSequence'));
+  const validationStart = appSource.indexOf('function setOtherValidationForecast');
+  const validationEnd = appSource.indexOf('\nfunction ', validationStart + 10);
+  assert.match(appSource.slice(validationStart, validationEnd), /const active=\(signal==="SIGNAL"\|\|signal==="STRONG SIGNAL"\)&&hasEntry/);
 });
 
 test('shared spike-risk protection blocks entry display without replacing any engine Final Signal', () => {
@@ -473,14 +586,14 @@ test('recovery OFF keeps running through two runs after a loss and waits for a f
   assert.match(lossBranch, /autoTrade\.recoveryPhase=0;autoTrade\.nextStake=autoTrade\.stake;runFinished=true/);
   assert.doesNotMatch(lossBranch, /autoTradePause\(/);
   assert.match(source, /RUN 1 COMPLETE · starting RUN 2/);
-  assert.match(source, /RUN 2 COMPLETE · two-run entry finished\. Waiting for a fresh analysis-approved entry trigger/);
+  assert.match(source, /RUN 2 COMPLETE · two-run entry finished\. Cooling down for 5 seconds; then waiting for a fresh live entry-digit hit/);
   assert.match(source, /autoTrade\.sessionProfit>=autoTrade\.takeProfit/);
   assert.match(source, /autoTrade\.sessionProfit<=-autoTrade\.stopLoss/);
 });
 
 test('recovery-OFF UI explains two-run entry cycles and fresh-entry waiting', () => {
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
-  assert.match(html, /OFF = wait for the next valid entry after a loss/);
+  assert.match(html, /With recovery OFF, a loss ends that attempt at base stake/);
   assert.match(html, /One valid manual digit is enough to trigger the normal two-run entry cycle/);
   assert.match(html, /current entry still completes its two-run cycle; after run 2 the bot waits for a fresh entry/);
   assert.match(html, /Only session take-profit or stop-loss pauses the bot/);
@@ -573,3 +686,115 @@ test('bot session P/L is colored green for profit and red for loss', () => {
   assert.match(styles, /#autoTradePnL\.pnl-negative\{color:#ef4444/);
 });
 
+
+
+test('signal validation scores a live forecast exactly once', () => {
+  const start = appSource.indexOf('function processSignalValidationTick');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const harness = `
+    const state = {
+      symbol: 'R_100', engine: 'overunder', liveTickSequence: 101,
+      signalValidation: {
+        snapshot: {active: true, market: 'R_100', engine: 'overunder', target: 'OVER 2', side: 'OVER', selectedDigit: 2, tickCount: 100, confidence: .8},
+        book: {}
+      }, validationDirty: false
+    };
+    const signalValidationKey = (engine,target,market) => market+'|'+engine+'|'+target;
+    ${source}
+    ({run:processSignalValidationTick,state})
+  `;
+  const test = vm.runInNewContext(harness);
+  test.run(4, 101, 100);
+  test.run(4, 102, 101);
+  const rec = test.state.signalValidation.book['R_100|overunder|OVER 2'];
+  assert.equal(rec.n, 1);
+  assert.equal(rec.hits, 1);
+});
+
+test('signal validation discards a snapshot after a market switch', () => {
+  const start = appSource.indexOf('function processSignalValidationTick');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const harness = `
+    const state = {
+      symbol: 'R_75', engine: 'overunder', liveTickSequence: 101,
+      signalValidation: {
+        snapshot: {active: true, market: 'R_100', engine: 'overunder', target: 'OVER 2', side: 'OVER', selectedDigit: 2, tickCount: 100, confidence: .8},
+        book: {}
+      }, validationDirty: false
+    };
+    const signalValidationKey = (engine,target,market) => market+'|'+engine+'|'+target;
+    ${source}
+    ({run:processSignalValidationTick,state})
+  `;
+  const test = vm.runInNewContext(harness);
+  test.run(4, 101, 100);
+  assert.equal(Object.keys(test.state.signalValidation.book).length, 0);
+  assert.equal(test.state.signalValidation.snapshot, null);
+});
+
+test('multi-tick Over/Under validation discards pending outcomes from a previous market', () => {
+  const start = appSource.indexOf('function processOUValidationTick');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const harness = `
+    const state = {
+      symbol: 'R_75', selectedDigit: 2, selectedSide: 'OVER', validationDirty: false,
+      ouValidation: {key: 'R_75|2|OVER', pending: [{market:'R_100', selectedDigit:2, side:'OVER', candidate:4, steps:0, hits:[]}], completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}}},
+      ouValidationBook: {}
+    };
+    const resetOUValidationIfNeeded = () => {};
+    const ouValidationKey = () => 'R_75|2|OVER';
+    const ouValidationRecordKey = (market,digit,side,candidate) => market+'|'+digit+'|'+side+'|'+candidate;
+    ${source}
+    ({run:processOUValidationTick,state})
+  `;
+  const test = vm.runInNewContext(harness);
+  test.run(4);
+  assert.equal(test.state.ouValidation.pending.length, 0);
+  assert.equal(Object.keys(test.state.ouValidationBook).length, 0);
+});
+
+
+test('already-triggered Even/Odd validation continues under its original engine after an engine switch', () => {
+  const start = appSource.indexOf('function scoreOtherValidationPending');
+  const end = appSource.indexOf('\nfunction ouValidationSummary', start);
+  const source = appSource.slice(start, end);
+  const harness = `
+    const state = {
+      symbol: 'R_100', engine: 'risefall', liveTickSequence: 102, validationDirty: false,
+      otherValidation: {
+        snapshot: null,
+        pending: [{market:'R_100', engine:'evenodd', target:'EVEN', steps:1, hits:[true], confidence:.7}],
+        book: {
+          'R_100|evenodd|EVEN': {
+            market:'R_100', engine:'evenodd', target:'EVEN', triggers:1,
+            confidenceSum:.7, confidenceN:1,
+            1:{n:1,hits:1,failureStreak:0,maxFailureStreak:0},
+            2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},
+            3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0}
+          }
+        }
+      }
+    };
+    const otherValidationKey = (engine,target,market) => market+'|'+engine+'|'+target;
+    ${source}
+    ({run:processOtherValidationTick,state})
+  `;
+  const test = vm.runInNewContext(harness);
+  test.run(4, 100.3, 100.2);
+  const rec = test.state.otherValidation.book['R_100|evenodd|EVEN'];
+  assert.equal(rec[2].n, 1);
+  assert.equal(rec[2].hits, 1);
+  assert.equal(test.state.otherValidation.pending[0].engine, 'evenodd');
+  assert.equal(test.state.otherValidation.pending[0].steps, 2);
+});
+
+
+test('bot entry display does not claim a 95 percent calibration requirement', () => {
+  assert.doesNotMatch(appSource, /Calibrating digits:|auto-entry locked until 95% validation/);
+  const start = appSource.indexOf('function autoTradeUpdateLiveFields');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  assert.match(appSource.slice(start, end), /"Entry digits: "/);
+});
