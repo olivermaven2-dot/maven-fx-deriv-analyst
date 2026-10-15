@@ -585,7 +585,7 @@ function processOtherValidationTick(digit,quote,previousQuote){
   }
   const snap=ov.snapshot;
   ov.snapshot=null;
-  if(!snap||!snap.active||snap.market!==state.symbol||snap.tickCount!==state.liveTickSequence-1)return;
+  if(!snap||!snap.active||snap.market!==state.symbol||snap.engine!==state.engine||snap.tickCount!==state.liveTickSequence-1)return;
   const key=otherValidationKey(snap.engine,snap.target,snap.market);
   if(!ov.book[key])ov.book[key]={market:snap.market,engine:snap.engine,target:snap.target,triggers:0,confidenceSum:0,confidenceN:0,1:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},lastUpdated:Date.now()};
   ov.book[key].triggers++;state.validationDirty=true;
