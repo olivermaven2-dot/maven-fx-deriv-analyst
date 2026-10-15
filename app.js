@@ -1043,7 +1043,7 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
   return {main,meta,status:eligible.length?eligible.length+" TARGET-QUALIFIED ENTRY"+(eligible.length===1?"":" DIGITS"):"95% TARGET CALIBRATION — AUTO ENTRY BLOCKED",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
 }
 function autoTradeEntrySelection(){
-  if(!$("autoTradeManualEntriesEnabled")?.checked){autoTrade.lastManualBlockReason="";return state.ouEntrySnapshot?.active&&Array.isArray(state.ouEntrySnapshot.digits)?state.ouEntrySnapshot.digits:[];}
+  if(!$("autoTradeManualEntriesEnabled")?.checked){autoTrade.lastManualBlockReason="";const snap=state.ouEntrySnapshot;return snap?.active&&Array.isArray(snap.validationDigits)?snap.validationDigits:(snap?.active&&Array.isArray(snap.digits)?snap.digits:[]);}
   const firstRaw=$("autoTradeManualDigit1")?.value,secondRaw=$("autoTradeManualDigit2")?.value;
   if(firstRaw==null||String(firstRaw).trim()===""||secondRaw==null||String(secondRaw).trim()===""){autoTrade.lastManualBlockReason="Enter both manual entry digits.";return [];}
   const first=Number(firstRaw),second=Number(secondRaw);
