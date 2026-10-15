@@ -299,7 +299,7 @@ test('signal validation uses the monotonic live sequence after the tick buffer i
   const source = appSource.slice(start, end);
   const makeHarness = snapshotTick => `
     const state = {
-      symbol: 'R_100', liveTickSequence: 5001,
+      symbol: 'R_100', engine: 'overunder', liveTickSequence: 5001,
       ticks: Array(2000).fill({quote: 100}), selectedDigit: 2, selectedSide: 'OVER',
       signalValidation: {
         snapshot: {active: true, market: 'R_100', engine: 'overunder', target: 'OVER 2', side: 'OVER', selectedDigit: 2, tickCount: ${snapshotTick}, confidence: .8},
