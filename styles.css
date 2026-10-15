@@ -534,3 +534,5 @@ button:focus-visible,select:focus-visible,input:focus-visible,.ou-digit:focus-vi
   .live-card .price-grid div:last-child strong{font-size:clamp(28px,8vw,36px)}
   .live-card .live-meta{gap:4px 10px;margin-top:5px;font-size:9px;line-height:1.2}
 }
+
+.signal-entry-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:10px 0}.signal-entry-metric{display:flex;flex-direction:column;gap:5px;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--panel2);min-width:0}.signal-entry-metric strong{font-size:10px;letter-spacing:.04em;color:var(--muted)}.signal-entry-metric b{font-size:22px;line-height:1.15;font-variant-numeric:tabular-nums}.signal-entry-metric span{font-size:11px}.signal-entry-metric small{font-size:10px;color:var(--muted);line-height:1.35}@media(max-width:360px){.signal-entry-metrics{grid-template-columns:1fr}}
