@@ -790,3 +790,11 @@ test('already-triggered Even/Odd validation continues under its original engine 
   assert.equal(test.state.otherValidation.pending[0].engine, 'evenodd');
   assert.equal(test.state.otherValidation.pending[0].steps, 2);
 });
+
+
+test('bot entry display does not claim a 95 percent calibration requirement', () => {
+  assert.doesNotMatch(appSource, /Calibrating digits:|auto-entry locked until 95% validation/);
+  const start = appSource.indexOf('function autoTradeUpdateLiveFields');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  assert.match(appSource.slice(start, end), /"Entry digits: "/);
+});
