@@ -1674,17 +1674,13 @@ function autoTradeIsExecutionBusy(){
 }
 function autoTradeDrainFastTickQueue(){
   if(autoTrade.fastTickQueueDrainActive||!autoTrade.enabled||autoTrade.speedMode!=="FAST"||state.engine!=="overunder"||autoTradeIsExecutionBusy())return;
-  autoTrade.fastTickQueueDrainActive=true;
-  try{
-    let processed=0,stale=0;
-    while(autoTrade.fastTickQueue.length&&autoTrade.enabled&&!autoTradeIsExecutionBusy()&&processed<autoTrade.fastTickQueueLimit){
-      const tick=autoTrade.fastTickQueue.shift();processed++;
-      if(Date.now()-tick.receivedAt>autoTrade.fastTickQueueStaleMs){stale++;continue;}
-      // Process each still-fresh queued live tick in arrival order; never place a trade from stale queued data.
-      processAutoTradeTick(tick.digit);
-    }
-    if(stale&&autoTrade.enabled)autoTradeLog("FAST QUEUE · processed "+processed+" queued ticks in order; "+stale+" were too old to trigger a new trade safely.");
-  }finally{autoTrade.fastTickQueueDrainActive=false}
+  // Queued ticks happened while the approved two-run sequence was busy. They update analysis as received,
+  // but replaying them now could create a late entry or bypass the rule to wait for a new digit hit.
+  const waiting=autoTrade.fastTickQueue.length;
+  if(waiting){
+    autoTrade.fastTickQueue.length=0;
+    autoTradeLog("FAST EXECUTION · cleared "+waiting+" ticks received while a contract/entry cycle was busy; waiting for the next live entry-digit hit after the cycle.");
+  }
 }
 function autoTradePause(reason){
   autoTrade.enabled=false;autoTrade.runRemaining=0;autoTrade.runSymbol="";autoTrade.fastTickQueue.length=0;
@@ -1924,9 +1920,12 @@ function autoTradeHandleMessage(d){
       if(autoTrade.runSettled<2){
         autoTrade.runRemaining=1;autoTradeRender();autoTradePlaceNext();
       }else{
+        // Ticks received before this cycle completed cannot become delayed entry triggers.
+        // The next entry must be confirmed by a new live tick after the two-run cycle ends.
+        const waitingTicks=autoTrade.fastTickQueue.length;
+        autoTrade.fastTickQueue.length=0;
         autoTradeRender();
-        // A completed two-run cycle releases the FIFO queue for the next still-fresh entry tick.
-        autoTradeDrainFastTickQueue();
+        if(waitingTicks&&autoTrade.speedMode==="FAST")autoTradeLog("FAST EXECUTION · accounted for live ticks during the completed run; cleared "+waitingTicks+" pre-completion ticks so none can cause a delayed/duplicate entry. Waiting for a fresh live entry-digit hit.");
       }
     }else{autoTradeRender()}
   }}
