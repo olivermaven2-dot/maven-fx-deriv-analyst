@@ -918,8 +918,14 @@ function mavenAIReviewEntry(engine,entry,signalDecision){
   const note="Maven AI entry review: "+Math.round(combined*100)+"% combined entry/evidence score; "+Math.round(entryStrength*100)+"% entry strength and "+Math.round(confidence*100)+"% signal confidence.";
   if(Array.isArray(entry.entries)){
     entry={...entry,entries:entry.entries.map(x=>({...x,aiScore:Math.max(0,Math.min(100,Math.round((Number(x.score)||0)*.65+confidence*35+validationAdjustment*32.5)))})).sort((a,b)=>b.aiScore-a.aiScore)};
-    entry.main=entry.entries.map(x=>String(x.digit)).join("  •  ");
-    entry.meta=entry.entries.map(x=>"Digit "+x.digit+": AI score "+x.aiScore+"/100").join(" • ");
+    if(engine==="overunder"){
+      const eligible=entry.entries.filter(x=>x.targetReady);
+      entry.main=eligible.length?eligible.map(x=>String(x.digit)).join("  •  "):"CALIBRATING: "+entry.entries.map(x=>String(x.digit)).join("  •  ");
+      entry.meta=eligible.length?eligible.map(x=>"Digit "+x.digit+": 95% target passed; AI rank "+x.aiScore+"/100").join(" • "):"Calibration candidates only; automatic entries remain blocked until live validation proves the target.";
+    }else{
+      entry.main=entry.entries.map(x=>String(x.digit)).join("  •  ");
+      entry.meta=entry.entries.map(x=>"Digit "+x.digit+": AI score "+x.aiScore+"/100").join(" • ");
+    }
   }
   return {...entry,aiReview:{entryStrength,confidence,combined,adaptiveAdjustment:validationAdjustment,validationForecasts:entryValidation.forecasts},reason:(entry.reason?entry.reason+" ":"")+note,evidence:(entry.evidence?entry.evidence+" • ":"")+note};
 }
