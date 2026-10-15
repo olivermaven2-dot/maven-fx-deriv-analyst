@@ -12,9 +12,9 @@ const distributionGate = vm.runInNewContext(gateSource + '\ndistributionGate');
 
 const predictiveGateStart = appSource.indexOf('function intersectPredictiveEntryCandidates');
 assert.notEqual(predictiveGateStart, -1, 'intersectPredictiveEntryCandidates must exist in app.js');
-const predictiveGateEnd = appSource.indexOf('\\nfunction ', predictiveGateStart + 10);
+const predictiveGateEnd = appSource.indexOf('\nfunction ', predictiveGateStart + 10);
 const predictiveGateSource = appSource.slice(predictiveGateStart, predictiveGateEnd);
-const intersectPredictiveEntryCandidates = vm.runInNewContext(predictiveGateSource + '\\nintersectPredictiveEntryCandidates');
+const intersectPredictiveEntryCandidates = vm.runInNewContext(predictiveGateSource + '\nintersectPredictiveEntryCandidates');
 
 test('manual entry digits must be among predictively qualified candidates', () => {
   const result = intersectPredictiveEntryCandidates([2, 5], [{ digit: 5, score: 74 }]);
