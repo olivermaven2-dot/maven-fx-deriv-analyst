@@ -16,16 +16,7 @@ function renderOverUnder(root,d,c,last,n){
   else if(e.signal==="WAIT")reason="The selected setup is still building enough independent evidence across the required analysis windows.";
   else if(e.signal==="STRONG SIGNAL")reason="Probability, momentum, trend, transitions, reaction behavior, recency, consistency and context are aligned for "+setup+".";
   else reason="The selected setup has sufficient multi-factor evidence, but the evidence is not strong enough for a STRONG SIGNAL.";
-  const qualifiedEntries=entry&&Array.isArray(entry.entries)?entry.entries.filter(x=>x.targetReady):[];
-  const calibrationCount=entry&&Array.isArray(entry.entries)?entry.entries.length:0;
-  const entryDisplay=activeSignal?(entry?{
-    ...entry,
-    main:qualifiedEntries.length?qualifiedEntries.map(x=>String(x.digit)).join("  •  "):"NO 95% QUALIFIED DIGITS",
-    status:qualifiedEntries.length?qualifiedEntries.length+" FULLY QUALIFIED 95% ENTRY"+(qualifiedEntries.length===1?" DIGIT":" DIGITS"):"CALIBRATION IN PROGRESS — AUTO ENTRY BLOCKED",
-    meta:qualifiedEntries.length?qualifiedEntries.map(x=>"Digit "+x.digit+": 95% target passed; AI rank "+(x.aiScore??x.score)+"/100").join(" • "):"No entry digit currently meets every 95% qualification rule. "+calibrationCount+" candidate"+(calibrationCount===1?" is":"s are")+" still calibrating; unqualified digits are hidden from this display.",
-    reason:qualifiedEntries.length?qualifiedEntries.map(x=>"Digit "+x.digit+" independently passed the 95% validation gate.").join(" "):"Only digits with 100+ live outcomes, at least 95% observed overall and recent accuracy, and a Wilson lower confidence bound of at least 90% are displayed as qualified.",
-    evidence:qualifiedEntries.length?qualifiedEntries.map(x=>"Digit "+x.digit+" — "+x.evidence).join(" • "):"Calibration candidates are not shown as qualified entries."
-  }:{main:"NO 95% QUALIFIED DIGITS",confidence:"—",status:"CALIBRATION IN PROGRESS — AUTO ENTRY BLOCKED",reason:"No candidate digit passed the minimum sample, directional reaction and consistency checks.",evidence:"Candidate evaluation completed"}):{main:"NO ACTIVE ENTRY",confidence:"—",status:"INACTIVE",reason:"Entry Engine activates only when the selected Final Signal is SIGNAL or STRONG SIGNAL.",evidence:"Waiting for an active signal"};
+  const entryDisplay=activeSignal?(entry||{main:"NO VALID ENTRY",confidence:"—",status:"NO ENTRY",reason:"No candidate digit passed the current entry-selection checks.",evidence:"Candidate evaluation completed"}):{main:"NO ACTIVE ENTRY",confidence:"—",status:"INACTIVE",reason:"Entry Engine activates only when the selected Final Signal is SIGNAL or STRONG SIGNAL.",evidence:"Waiting for an active signal"};
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
     "Selected setup: "+setup,
     "Probability Comparison: "+Math.round(e.selectedRate*100)+"% vs complement "+Math.round(e.oppositeRate*100)+"% • baseline "+Math.round(e.baseline*100)+"%",
@@ -928,9 +919,8 @@ function mavenAIReviewEntry(engine,entry,signalDecision){
   if(Array.isArray(entry.entries)){
     entry={...entry,entries:entry.entries.map(x=>({...x,aiScore:Math.max(0,Math.min(100,Math.round((Number(x.score)||0)*.65+confidence*35+validationAdjustment*32.5)))})).sort((a,b)=>b.aiScore-a.aiScore)};
     if(engine==="overunder"){
-      const eligible=entry.entries.filter(x=>x.targetReady);
-      entry.main=eligible.length?eligible.map(x=>String(x.digit)).join("  •  "):"CALIBRATING: "+entry.entries.map(x=>String(x.digit)).join("  •  ");
-      entry.meta=eligible.length?eligible.map(x=>"Digit "+x.digit+": 95% target passed; AI rank "+x.aiScore+"/100").join(" • "):"Calibration candidates only; automatic entries remain blocked until live validation proves the target.";
+      entry.main=entry.entries.map(x=>String(x.digit)).join("  •  ");
+      entry.meta=entry.entries.map(x=>"Digit "+x.digit+": AI score "+x.aiScore+"/100").join(" • ");
     }else{
       entry.main=entry.entries.map(x=>String(x.digit)).join("  •  ");
       entry.meta=entry.entries.map(x=>"Digit "+x.digit+": AI score "+x.aiScore+"/100").join(" • ");
