@@ -1731,7 +1731,7 @@ function autoTradeUpdateLiveFields(){
     const chosen=autoTradeEntrySelection();
     const manual=$("autoTradeManualEntriesEnabled")?.checked;
     const candidates=state.ouEntrySnapshot?.active&&Array.isArray(state.ouEntrySnapshot.validationDigits)?state.ouEntrySnapshot.validationDigits:[];
-    entries.textContent=chosen.length?chosen.join(" / "):manual?(autoTrade.lastManualBlockReason||"Manual digits not qualified"):candidates.length?"Calibrating digits: "+candidates.join(" / ")+" · auto-entry locked until 95% validation":"No validated entry digits yet";
+    entries.textContent=chosen.length?chosen.join(" / "):manual?(autoTrade.lastManualBlockReason||"Manual digits not qualified"):candidates.length?"Entry digits: "+candidates.join(" / "):"No validated entry digits yet";
   }
 }
 function autoTradeMarketChanged(){
