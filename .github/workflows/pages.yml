@@ -28,6 +28,9 @@ jobs:
           mkdir -p icons
           rsvg-convert -w 192 -h 192 maven-fx-icon.svg -o icons/icon-192.png
           rsvg-convert -w 512 -h 512 maven-fx-icon.svg -o icons/icon-512.png
+          test -s icons/icon-192.png
+          test -s icons/icon-512.png
+          file icons/icon-192.png icons/icon-512.png
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
