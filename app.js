@@ -389,9 +389,9 @@ function renderOUValidationPanel(){
   const breakeven=100/(1+payout/100);
   const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"—";
   const roi=x=>x.n?(((x.hits*payout-(x.n-x.hits)*100)/x.n)>=0?"+":"")+(((x.hits*payout-(x.n-x.hits)*100)/x.n).toFixed(1))+"%":"—";
-  out.innerHTML='<div class="ou-validation-note">Session-only tracking • only live entry-digit triggers count • no trades are placed. Assumed win profit is editable and is a what-if estimate, not Deriv live payout.</div>'+
+  out.innerHTML='<div class="ou-validation-note">Session-only forward tracking. A trigger is counted once per observed live tick; the next 1/2/3 tick outcomes are recorded after the trigger. This is not a walk-forward backtest or proof of profitability.</div>'+
     '<div class="ou-validation-breakeven">Assumed profit per win: <strong>'+payout.toFixed(1)+'%</strong> of stake • break-even hit rate: <strong>'+breakeven.toFixed(1)+'%</strong></div>'+
-    (rows.length?'<div class="ou-validation-table"><div class="ou-validation-row ou-validation-head"><span>ENTRY</span><span>TRIGGERS</span><span>1 TICK</span><span>2 IN A ROW</span><span>3 IN A ROW</span><span>EST. ROI*</span></div>'+rows.map(r=>{const selected=[1,2,3].reduce((best,h)=>r[h].n>best.n?r[h]:best,r[1]);return '<div class="ou-validation-row"><strong>'+r.candidate+'</strong><span>'+r.triggers+'</span><span>'+fmt(r[1])+'</span><span>'+fmt(r[2])+'</span><span>'+fmt(r[3])+'</span><span>'+roi(selected)+'</span></div>'}).join("")+'</div><div class="ou-validation-note">*ROI uses the best-sampled horizon for that digit, assumes the entered profit rate and a 100% stake loss on misses. Change payout assumption to match a real quoted contract before interpreting it.</div>':'<div class="ou-validation-empty">No qualifying entry-digit triggers recorded for '+esc(state.symbol)+' • '+state.selectedSide+' '+state.selectedDigit+' yet. Keep the live stream running; the table fills as entry digits trigger and their next ticks complete.</div>');
+    (rows.length?'<div class="ou-validation-table"><div class="ou-validation-row ou-validation-head"><span>ENTRY</span><span>TRIGGERS</span><span>1 TICK</span><span>2 IN A ROW</span><span>3 IN A ROW</span><span>EST. ROI*</span></div>'+rows.map(r=>'<div class="ou-validation-row"><strong>'+r.candidate+'</strong><span>'+r.triggers+'</span><span>'+fmt(r[1])+'</span><span>'+fmt(r[2])+'</span><span>'+fmt(r[3])+'</span><span>'+roi(r[1])+'</span></div>').join("")+'</div><div class="ou-validation-note">*ROI is a one-tick what-if only, based on your assumed payout, not an actual Deriv contract quote. Multi-tick results are consecutive-tick hit rates, not one-tick contract wins. Small samples are noisy; this is not proof of profitability.</div>':'<div class="ou-validation-empty">No qualifying entry-digit triggers recorded for '+esc(state.symbol)+' • '+state.selectedSide+' '+state.selectedDigit+' yet. Keep the live stream running; the table fills as entry digits trigger and their next ticks complete.</div>');
 }
 function receiveTick(t){
   if(!t||t.symbol!==state.symbol)return;
@@ -405,6 +405,9 @@ function receiveTick(t){
   state.ticks.push({quote:Number(quote),epoch});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
   state.lastTickAt=Date.now();
+  // Resolve pending forward outcomes first, then register this tick as a new trigger.
+  processOUValidationTick(digit);
+  recordOUValidationTrigger(digit);
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
   $("diagTicks").textContent=state.ticks.length;updateQuality();renderStream(true);if(shouldRenderEngineForCurrentTick())renderEngine();if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);
@@ -502,22 +505,21 @@ function ouClusterScore(arr,digit,side){
 }
 function ouTransitionStats(d,candidate,selectedDigit,selectedSide){
   const qualifies=x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit;
-  const windows=[500,250,100,50];
   let total=0,favorable=0,weighted=0,weightTotal=0;
-  const recent={total:0,favorable:0},matrix=Array(10).fill(null).map(()=>Array(10).fill(0));
+  const recent={total:0,favorable:0};
   for(let i=0;i<d.length-1;i++){
     if(d[i]!==candidate)continue;
     const next=d[i+1],ok=qualifies(next),age=d.length-1-i;
     total++;if(ok)favorable++;
     const w=age<=50?1.6:age<=100?1.35:age<=250?1.15:1;
-    weighted+=ok?w:0;weightTotal+=w;matrix[candidate][next]++;
+    weighted+=ok?w:0;weightTotal+=w;
     if(age<=250){recent.total++;if(ok)recent.favorable++}
   }
   const recentRate=recent.total?recent.favorable/recent.total:(total?favorable/total:0);
   const rate=total?favorable/total:0;
   const weightedRate=weightTotal?weighted/weightTotal:rate;
   const persistence=ouReactionDepth(d,candidate,selectedDigit,selectedSide);
-  return {total,favorable,rate,weightedRate,recentRate,recentTotal:recent.total,matrixRow:matrix[candidate],...persistence};
+  return {total,favorable,rate,weightedRate,recentRate,recentTotal:recent.total,...persistence};
 }
 function ouReactionDepth(d,candidate,selectedDigit,selectedSide){
   const qualifies=x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit;
@@ -569,10 +571,11 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   const reaction=selected.transitions>=8?Math.max(0,Math.min(1,.5+(selected.transitionRate-baseline)*2.5)):0;
   const evidence=probability*.20+momentumScore*.10+trendScore*.08+transition*.14+selected.cluster*.08+reaction*.10+recency*.10+consistency*.08+historical*.07+context*.05;
   let signal="WAIT";
-  if(n<100)signal="WAIT";
+  // Heuristic score thresholds are intentionally conservative; none are a calibrated win probability.
+  if(n<500)signal="WAIT";
   else if(probabilityConflict)signal="AVOID";
-  else if(evidence>=.68&&selectedRate>=baseline-.03&&selected.weightedTransitionRate>=Math.max(.48,baseline-.05)&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
-  else if(evidence>=.54&&selectedRate>=baseline-.07&&consistency>=.45)signal="SIGNAL";
+  else if(evidence>=.72&&selectedRate>=baseline-.02&&selected.weightedTransitionRate>=Math.max(.50,baseline-.03)&&consistency>=.62&&n>=1000)signal="STRONG SIGNAL";
+  else if(evidence>=.57&&selectedRate>=baseline-.05&&consistency>=.50&&n>=500)signal="SIGNAL";
   else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
   return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
 }
@@ -583,8 +586,8 @@ function overUnderEntry(d,selectedDigit,selectedSide){
     // Exclude spike-prone extreme entry digits for the selected direction.
     if((selectedSide==="UNDER"&&(candidate===0||candidate===1))||(selectedSide==="OVER"&&(candidate===8||candidate===9)))continue;
     const t=ouTransitionStats(d,candidate,selectedDigit,selectedSide);
-    if(t.total<20||t.recentTotal<5)continue;
-    const sample=Math.min(1,t.total/100),recentWeight=Math.min(1,t.recentTotal/40);
+    if(t.total<50||t.recentTotal<10)continue;
+    const sample=Math.min(1,t.total/150),recentWeight=Math.min(1,t.recentTotal/50);
     const continuation=t.r1*.45+t.r2*.35+t.r3*.20;
     const immediateAdvantage=Math.max(0,Math.min(1,.5+(t.r1-baseline)*3.5));
     const twoTickAdvantage=Math.max(0,Math.min(1,.5+(t.r2-baseline)*3));
@@ -596,7 +599,7 @@ function overUnderEntry(d,selectedDigit,selectedSide){
     // Predictive layer: condition past reactions on the market context immediately
     // before this entry digit. This adds a forward-looking estimate, not just raw history.
     const priorDigit=d.length?d[d.length-1]:null;
-    let contextN=0,contextOne=0,contextTwo=0,contextRecentN=0,contextRecentOne=0;
+    let contextN=0,contextOne=0,contextTwo=0,contextTwoN=0,contextRecentN=0,contextRecentOne=0;
     const contextStart=Math.max(1,d.length-500);
     for(let i=contextStart;i<d.length-1;i++){
       if(d[i]!==candidate||d[i-1]!==priorDigit)continue;
@@ -604,13 +607,14 @@ function overUnderEntry(d,selectedDigit,selectedSide){
       const one=qualifies(d[i+1]);
       contextN++;if(one)contextOne++;
       if(age<=150){contextRecentN++;if(one)contextRecentOne++;}
-      if(i+2<d.length&&one&&qualifies(d[i+2]))contextTwo++;
+      if(i+2<d.length){contextTwoN++;if(one&&qualifies(d[i+2]))contextTwo++;}
     }
     const contextRate=contextN?contextOne/contextN:t.weightedRate;
     const contextRecentRate=contextRecentN?contextRecentOne/contextRecentN:contextRate;
-    const contextTwoRate=contextN?contextTwo/contextN:t.r2;
-    const predictionSample=Math.min(1,contextN/12);
-    const predictionConfidence=Math.round(100*(.45*Math.min(1,contextN/20)+.30*Math.min(1,t.recentTotal/30)+.25*Math.min(1,t.total/80)));
+    const contextTwoRate=contextTwoN?contextTwo/contextTwoN:t.r2;
+    const predictionSample=Math.min(1,contextN/30);
+    // This is a support score from sample counts, not a calibrated probability.
+    const predictionConfidence=Math.round(100*(.45*Math.min(1,contextN/30)+.30*Math.min(1,t.recentTotal/50)+.25*Math.min(1,t.total/100)));
     const predictedRate=.50*contextRate+.30*contextRecentRate+.20*contextTwoRate;
     const predictionScore=Math.max(0,Math.min(1,.5+(predictedRate-baseline)*3));
     const score=Math.round(100*(directionalAdvantage*.19+recentAdvantage*.14+continuation*.23+immediateAdvantage*.08+twoTickAdvantage*.06+threeTickAdvantage*.02+stability*.05+consistency*.03+sample*.01+recentWeight*.01+predictionScore*.12+predictionSample*.06));
@@ -635,7 +639,7 @@ function overUnderEntry(d,selectedDigit,selectedSide){
     else if(c.r1>=.54)reason="Historical triggers show immediate reaction; longer continuation is less consistent.";
     else reason="Historical triggers show favorable 2-tick continuation despite weaker immediate reaction.";
     const prediction=c.predictedRate>=c.baseline+.06?"FAVORABLE OUTLOOK":c.predictedRate>=c.baseline-.02?"MIXED OUTLOOK":"WEAK OUTLOOK";
-    const predictionText="Forward estimate "+Math.round(c.predictedRate*100)+"% • "+prediction+" • context sample "+c.contextN+" • model confidence "+c.predictionConfidence+"%";
+    const predictionText="Historical estimate "+Math.round(c.predictedRate*100)+"% • "+prediction+" • context sample "+c.contextN+" • sample support "+c.predictionConfidence+"% (not calibrated)";
     return {digit:c.candidate,score,status,reason,evidence:c.total+" historical triggers; "+c.recentTotal+" recent triggers",prediction,predictedRate:c.predictedRate,predictionConfidence:c.predictionConfidence,predictionText};
   });
   return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.map(e=>"Digit "+e.digit+": rank "+e.score+"/100; "+e.predictionText).join(" • "),status:entries.length===2?"2 PREDICTIVE CANDIDATES":"1 PREDICTIVE CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason+" "+e.predictionText).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence+"; "+e.predictionText).join(" • "),entries};
