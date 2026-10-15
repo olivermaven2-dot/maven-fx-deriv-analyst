@@ -638,14 +638,15 @@ test('recovery side selectors default to existing logic and allow independent Ov
 });
 
 
-test('manual entry digits bypass Entry Engine filters but must have neither red nor green distribution bars', () => {
+test('manual entry digits must pass predictive Entry Engine filters and avoid red/green bars', () => {
   const start = appSource.indexOf('function autoTradeEntrySelection');
   const end = appSource.indexOf('function renderParityControls', start);
   assert.notEqual(start, -1);
   const source = appSource.slice(start, end);
   assert.ok(source.includes('distributionBarFlags(state.digits)'));
   assert.ok(source.includes('bars.most[digit]||bars.least[digit]'));
-  assert.doesNotMatch(source, /overUnderEntry/);
+  assert.match(source, /overUnderEntry\(state\.digits,state\.selectedDigit,state\.selectedSide,valid\)/);
+  assert.match(source, /mavenAIReviewEntry\("overunder",prediction/);
   assert.ok(appSource.includes('neither manual digit currently passes the red/green distribution-bar rule'));
   assert.ok(appSource.includes('digit is not an eligible manual entry digit'));
   assert.ok(appSource.includes('automaticEntryIsCurrent=manualEntriesEnabled||'));
@@ -655,15 +656,16 @@ test('manual entry digits bypass Entry Engine filters but must have neither red 
   assert.ok(html.includes('Final Signal, probability comparison, live-data and spike-risk checks still apply'));
 });
 
-test('manual entry mode does not depend on the automatic Entry Engine snapshot and reports red/green-bar blocks', () => {
+test('manual entry mode applies predictive qualification and reports blocked digits', () => {
   const start = appSource.indexOf('function autoTradeEntrySelection');
   const end = appSource.indexOf('function renderParityControls', start);
   const selectionSource = appSource.slice(start, end);
-  assert.match(selectionSource, /Manual digits bypass every Entry Engine candidate filter/);
+  assert.match(selectionSource, /Manual digits must pass both the visible distribution-bar rule and the same predictive qualification/);
+  assert.match(selectionSource, /intersectPredictiveEntryCandidates\(valid,reviewedPrediction\?\.entries\)/);
   assert.match(selectionSource, /distributionBarFlags\(state\.digits\)/);
   assert.match(selectionSource, /autoTrade\.lastManualBlockReason/);
   assert.match(selectionSource, /const valid=\[first,second\]\.filter\(digit=>!bars\.most\[digit\]&&!bars\.least\[digit\]\)/);
-  assert.match(selectionSource, /Using the remaining eligible manual digit/);
+  assert.match(selectionSource, /Using only the remaining predictive, distribution-eligible digit/);
 
   const readyStart = appSource.indexOf('function autoTradeReadyToEnter');
   const readyEnd = appSource.indexOf('\nfunction ', readyStart + 10);
