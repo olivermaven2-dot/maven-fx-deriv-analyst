@@ -9,7 +9,7 @@ function renderOverUnder(root,d,c,last,n){
   let reason;
   if(e.probabilityConflict)reason="Paired-setup comparison is blocking this setup because the paired historical rate is more than 4 percentage points higher. This is a custom filter, not a true probability complement.";
   else if(e.signal==="AVOID")reason="The selected setup does not have enough aligned A-Setup evidence.";
-  else if(e.signal==="WAIT")reason=e.developmentN<750?"Collect at least 1,000 live ticks before the signal engine can evaluate a setup.":"The reserved recent validation window has not passed the conservative 95% Wilson lower-bound check against the uniform reference. No active entry is allowed.";
+  else if(e.signal==="WAIT")reason=e.tickCount<1000?"Collect at least 1,000 live ticks before the signal engine can evaluate a setup.":"The reserved recent validation window has not passed the conservative 95% Wilson lower-bound check against the uniform reference. No active entry is allowed.";
   else if(e.signal==="STRONG SIGNAL")reason="Heuristic evidence is aligned for "+setup+". This is not a calibrated win probability or a guarantee of profitability.";
   else reason="The selected setup has sufficient multi-factor evidence, but the evidence is not strong enough for a STRONG SIGNAL.";
   const entryDisplay=activeSignal?(entry||{main:"NO VALID ENTRY",confidence:"—",status:"NO ENTRY",reason:"No candidate digit passed the required sample-size, transition, reaction and consistency checks.",evidence:"Candidate evaluation completed"}):{main:"NO ACTIVE ENTRY",confidence:"—",status:"INACTIVE",reason:"Entry Engine activates only when the selected Final Signal is SIGNAL or STRONG SIGNAL.",evidence:"Waiting for an active signal"};
@@ -593,7 +593,7 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   else if(!holdoutPass)signal="WAIT";
   else if(evidence>=.72&&selectedRate>=baseline-.02&&selected.weightedTransitionRate>=Math.max(.50,baseline-.03)&&consistency>=.62)signal="STRONG SIGNAL";
   else if(evidence>=.57&&selectedRate>=baseline-.05&&consistency>=.50)signal="SIGNAL";
-  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak,developmentN:development.length,holdoutN:holdout.length,holdoutRate,holdoutLower,holdoutPass};
+  return {oppositeDigit,selectedRate,oppositeRate,baseline,probability,momentum:momentumScore,trend:trendScore,transition,cluster:selected.cluster,reaction,recency,consistency,historical,context,evidence,probabilityConflict,signal,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak,tickCount:n,developmentN:development.length,holdoutN:holdout.length,holdoutRate,holdoutLower,holdoutPass};
 }
 function ouWilsonLowerBound(rate,n,z=1.96){
   if(!Number.isFinite(rate)||!Number.isFinite(n)||n<=0)return 0;
