@@ -1640,7 +1640,7 @@ const autoTrade={
   socket:null,tradingHeartbeatTimer:null,authorized:false,account:null,availableAccounts:[],accountBalances:{},enabled:false,speedMode:"STANDARD",realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,nextEntryAllowedAt:0,entryCooldownMs:5000,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryMode:"SMART_NET",recoveryBalance:0,recoveryPairProfit:0,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,recoverySide1:"DEFAULT",recoverySide2:"DEFAULT",
-  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,fastTickQueue:[],fastTickQueueLimit:500,fastTickQueueStaleMs:3000,fastTickQueueDrainActive:false,logLines:[],lastManualBlockReason:"",lastManualLoggedReason:"",demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
+  activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,runsPerEntry:2,waitingForFreshData:false,fastTickQueue:[],fastTickQueueLimit:500,fastTickQueueStaleMs:3000,fastTickQueueDrainActive:false,logLines:[],lastManualBlockReason:"",lastManualLoggedReason:"",demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
 };
 function autoTradeLog(message){
   const stamp=new Date().toLocaleTimeString();
@@ -1727,7 +1727,7 @@ function autoTradeRender(){
   autoTradeRenderBalances();
   autoTradeRenderPnL();
   if($("autoTradeNextStake"))$("autoTradeNextStake").textContent=autoTrade.nextStake.toFixed(2)+" "+(autoTrade.currency||"");
-  if($("autoTradeRunProgress"))$("autoTradeRunProgress").textContent=autoTrade.runSymbol?(autoTrade.runSettled+"/2 settled"):autoTrade.enabled?"Waiting for entry":"Idle";
+  if($("autoTradeRunProgress"))$("autoTradeRunProgress").textContent=autoTrade.runSymbol?(autoTrade.runSettled+"/"+autoTrade.runsPerEntry+" settled"):autoTrade.enabled?"Waiting for entry":"Idle";
   const gate=$("autoTradeRealGate");if(gate)gate.hidden=!autoTrade.account||autoTrade.account.is_virtual;
   autoTradeStatus(autoTrade.enabled?"RUNNING":autoTrade.authorized?(autoTrade.account?.is_virtual?"DEMO CONNECTED":"REAL ACCOUNT LOCKED"):"DISCONNECTED",autoTrade.enabled?"running":autoTrade.authorized?"connected":"");
 }
@@ -1784,13 +1784,13 @@ function autoTradeSetSpeedMode(mode,logChange=true){
   const button=$("autoTradeSpeedToggle");
   if(button){button.textContent=autoTrade.speedMode==="FAST"?"FAST EXECUTION: ON":"FAST EXECUTION: OFF";button.setAttribute("aria-pressed",autoTrade.speedMode==="FAST"?"true":"false");button.classList.toggle("fast-active",autoTrade.speedMode==="FAST");}
   if(autoTrade.speedMode!=="FAST"&&autoTrade.fastTickQueue.length){const cleared=autoTrade.fastTickQueue.length;autoTrade.fastTickQueue.length=0;if(logChange)autoTradeLog("FAST QUEUE CLEARED · "+cleared+" waiting ticks discarded because Standard mode was selected.");}
-  const note=$("autoTradeSpeedNote");if(note)note.textContent=autoTrade.speedMode==="FAST"?"Checks each incoming live tick immediately using the same entry rules as Standard mode. Ticks arriving while a quote/contract or two-run cycle is busy cannot trigger late entries; Deriv/network speed itself is unchanged.":"Standard mode processes the current live tick directly. Both modes keep the same entry, risk and two-run rules.";
-  if(logChange&&$("autoTradeLog"))autoTradeLog(autoTrade.speedMode==="FAST"?"FAST EXECUTION ON · incoming live ticks are checked immediately; same entry, risk and two-run rules as Standard mode.":"Execution speed set to STANDARD.");
+  const note=$("autoTradeSpeedNote");if(note)note.textContent=autoTrade.speedMode==="FAST"?"Checks each incoming live tick immediately using the same entry rules as Standard mode. Ticks arriving while a quote/contract or two-run cycle is busy cannot trigger late entries; Deriv/network speed itself is unchanged.":"Standard mode processes the current live tick directly. Both modes keep the same entry, risk and configured run-count rules.";
+  if(logChange&&$("autoTradeLog"))autoTradeLog(autoTrade.speedMode==="FAST"?"FAST EXECUTION ON · incoming live ticks are checked immediately; same entry, risk and configured run-count rules as Standard mode.":"Execution speed set to STANDARD.");
 }
 function autoTradeStart(){
   if(!autoTradeCanStart()){autoTradeLog("Start blocked: connect an account; real accounts additionally require the checkbox and exact phrase TRADE REAL.");autoTradeRender();return}
-  const stake=Number($("autoTradeStake").value),mg=Number($("autoTradeMartingale").value),tp=Number($("autoTradeTP").value),sl=Number($("autoTradeSL").value);
-  if(!(stake>=0.35&&stake<=100&&mg>=1&&mg<=10&&tp>0&&sl>0)){autoTradeLog("Invalid risk settings. Stake must be 0.35–100, multiplier 1–10, and take-profit/stop-loss must be positive.");return}
+  const stake=Number($("autoTradeStake").value),mg=Number($("autoTradeMartingale").value),tp=Number($("autoTradeTP").value),sl=Number($("autoTradeSL").value),runsPerEntry=Number($("autoTradeRunsPerEntry")?.value||2);
+  if(!(stake>=0.35&&stake<=100&&mg>=1&&mg<=10&&tp>0&&sl>0&&Number.isInteger(runsPerEntry)&&runsPerEntry>=1&&runsPerEntry<=20)){autoTradeLog("Invalid settings. Stake must be 0.35–100, multiplier 1–10, positive take-profit/stop-loss, and runs per entry must be a whole number from 1 to 20.");return}
   const recoveryMode=$("autoTradeRecoveryMode")?.value||"SMART_NET";
   if(!["SMART_NET","CLASSIC"].includes(recoveryMode)){autoTradeLog("Choose a valid recovery mode.");return}
   // Smart Net Recovery is always active; the checkbox only enables Classic Recovery.
@@ -1803,7 +1803,7 @@ function autoTradeStart(){
   const recoverySide1=$("autoTradeRecoverySide1").value,recoverySide2=$("autoTradeRecoverySide2").value;
   if(!Number.isInteger(digit1)||digit1<0||digit1>9||!Number.isInteger(digit2)||digit2<0||digit2>9){autoTradeLog("Recovery digits must be whole numbers from 0 to 9.");return}
   if(!["DEFAULT","OVER","UNDER"].includes(recoverySide1)||!["DEFAULT","OVER","UNDER"].includes(recoverySide2)){autoTradeLog("Choose a valid side for each recovery attempt.");return}
-  autoTrade.stake=stake;autoTrade.martingale=mg;autoTrade.takeProfit=tp;autoTrade.stopLoss=sl;autoTrade.nextStake=stake;
+  autoTrade.stake=stake;autoTrade.martingale=mg;autoTrade.takeProfit=tp;autoTrade.stopLoss=sl;autoTrade.runsPerEntry=runsPerEntry;autoTrade.nextStake=stake;
   autoTrade.recoveryEnabled=recoveryEnabled;autoTrade.recoveryMode=recoveryMode;autoTrade.recoveryBalance=0;autoTrade.recoveryPairProfit=0;autoTrade.recoveryPhase=0;autoTrade.recoveryDigit1=digit1;autoTrade.recoveryDigit2=digit2;autoTrade.recoverySide1=recoverySide1;autoTrade.recoverySide2=recoverySide2;
   autoTrade.sessionProfit=0;autoTrade.wins=0;autoTrade.losses=0;autoTrade.settled=new Set();autoTrade.enabled=true;autoTrade.armed=true;autoTrade.lastDigit=null;autoTrade.startedAt=Date.now();
   autoTradeLog("Bot started on "+state.symbol+" · "+state.selectedSide+" "+state.selectedDigit+" · entry digits "+(manualEntriesEnabled?"MANUAL":"AUTOMATIC")+" · stake "+stake+" "+autoTrade.currency+" · recovery "+(recoveryEnabled?"ON":"OFF")+" · mode "+(recoveryMode==="SMART_NET"?"SMART NET (base stake, combined P/L)":"CLASSIC (multiplier and custom recovery digits)")+".");
@@ -1852,8 +1852,8 @@ function processAutoTradeTick(digit){
   if(!autoTrade.armed){autoTrade.lastDigit=digit;return}
   const check=autoTradeReadyToEnter(digit);
   if(!check.ok){autoTradeLog("Entry blocked · "+check.reason);autoTrade.lastDigit=digit;return}
-  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=1;autoTrade.runSettled=0;autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;autoTrade.runSide=state.selectedSide;autoTrade.runSelectedDigit=state.selectedDigit;if(autoTrade.recoveryMode!=="SMART_NET")autoTrade.recoveryPhase=0;autoTrade.recoveryPairProfit=0;
-  autoTradeLog("ENTRY TRIGGER · "+state.symbol+" digit "+digit+" · "+state.selectedSide+" "+state.selectedDigit+" · starting the two-run entry cycle at base stake.");
+  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=1;autoTrade.runSettled=0;autoTrade.runsPerEntry=Math.max(1,Math.min(20,Math.floor(Number($("autoTradeRunsPerEntry")?.value)||2)));autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;autoTrade.runSide=state.selectedSide;autoTrade.runSelectedDigit=state.selectedDigit;if(autoTrade.recoveryMode!=="SMART_NET")autoTrade.recoveryPhase=0;autoTrade.recoveryPairProfit=0;
+  autoTradeLog("ENTRY TRIGGER · "+state.symbol+" digit "+digit+" · "+state.selectedSide+" "+state.selectedDigit+" · starting the "+autoTrade.runsPerEntry+"-run entry cycle at base stake.");
   autoTradePlaceNext();
 }
 function autoTradePlaceNext(){
@@ -1992,15 +1992,15 @@ function autoTradeHandleMessage(d){
       autoTrade.recoveryPairProfit=Number((autoTrade.recoveryPairProfit+profit).toFixed(2));
       autoTrade.nextStake=autoTrade.stake;
       runFinished=true;
-      if(autoTrade.runSettled===1){
+      if(autoTrade.runSettled===autoTrade.runsPerEntry-1){
         const pairNet=autoTrade.recoveryPairProfit;
         // Smart Net is unconditional in SMART_NET mode, regardless of the Classic toggle.
         autoTrade.recoveryBalance=Number(Math.max(0,autoTrade.recoveryBalance-pairNet).toFixed(2));
         autoTrade.recoveryPhase=autoTrade.recoveryBalance>0?1:0;
-        autoTradeLog("TWO-RUN NET RESULT · "+(pairNet>=0?"+":"")+pairNet.toFixed(2)+" "+autoTrade.currency+" · outstanding Smart Net recovery "+autoTrade.recoveryBalance.toFixed(2)+" "+autoTrade.currency+". "+(autoTrade.recoveryBalance>0?"Wait for a fresh qualified entry digit; next pair stays at base stake.":"Smart Net balance cleared; normal entries continue."));
+        autoTradeLog("ENTRY-CYCLE NET RESULT · "+(pairNet>=0?"+":"")+pairNet.toFixed(2)+" "+autoTrade.currency+" · outstanding Smart Net recovery "+autoTrade.recoveryBalance.toFixed(2)+" "+autoTrade.currency+". "+(autoTrade.recoveryBalance>0?"Wait for a fresh qualified entry digit; next pair stays at base stake.":"Smart Net balance cleared; normal entries continue."));
         autoTrade.recoveryPairProfit=0;
       }else{
-        autoTradeLog((profit>=0?"RUN 1 CONTRACT SETTLED WIN":"RUN 1 CONTRACT SETTLED LOSS")+" · "+profit.toFixed(2)+" "+autoTrade.currency+" · completing the second contract before calculating the pair result.");
+        autoTradeLog((profit>=0?"RUN "+(autoTrade.runSettled+1)+" CONTRACT SETTLED WIN":"RUN "+(autoTrade.runSettled+1)+" CONTRACT SETTLED LOSS")+" · "+profit.toFixed(2)+" "+autoTrade.currency+" · continuing the entry cycle before calculating its net result.");
       }
     }else if(profit>=0){
       autoTrade.wins++;autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;
@@ -2010,7 +2010,7 @@ function autoTradeHandleMessage(d){
       autoTrade.losses++;
       if(!autoTrade.recoveryEnabled){
         autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;runFinished=true;
-        autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · recovery OFF; this attempt is finished at base stake. Continuing the two-run entry cycle unless a session limit is reached.");
+        autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · recovery OFF; this attempt is finished at base stake. Continuing the configured entry cycle unless a session limit is reached.");
       }
       if(wasRecovery<2){
         autoTrade.recoveryPhase=wasRecovery+1;
@@ -2026,18 +2026,19 @@ function autoTradeHandleMessage(d){
     autoTrade.runRemaining=0;
     if(autoTrade.enabled){
       if(runFinished){
-        if(autoTrade.runSettled===0){
-          autoTrade.runSettled=1;autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;
-          autoTradeLog("RUN 1 COMPLETE · starting RUN 2 at the base stake for the same entry trigger.");
+        if(autoTrade.runSettled<autoTrade.runsPerEntry-1){
+          autoTrade.runSettled++;
+          if(autoTrade.recoveryMode==="SMART_NET"){autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;}
+          autoTradeLog("RUN "+autoTrade.runSettled+" COMPLETE · starting RUN "+(autoTrade.runSettled+1)+" at the base stake for the same entry trigger.");
         }else{
-          autoTrade.runSettled=2;
+          autoTrade.runSettled=autoTrade.runsPerEntry;
           autoTrade.runSymbol="";if(autoTrade.recoveryMode!=="SMART_NET")autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;autoTrade.recoveryPairProfit=0;autoTrade.armed=true;
           autoTrade.nextEntryAllowedAt=Date.now()+autoTrade.entryCooldownMs;
           autoTrade.lastDigit=state.digits.length?state.digits[state.digits.length-1]:autoTrade.lastDigit;
-          autoTradeLog("RUN 2 COMPLETE · two-run entry finished. Cooling down for 5 seconds; then waiting for a fresh live entry-digit hit.");
+          autoTradeLog("ENTRY CYCLE COMPLETE · "+autoTrade.runsPerEntry+" runs finished. Cooling down for 5 seconds; then waiting for a fresh live entry-digit hit.");
         }
       }
-      if(autoTrade.runSettled<2){
+      if(autoTrade.runSettled<autoTrade.runsPerEntry){
         autoTrade.runRemaining=1;autoTradeRender();autoTradePlaceNext();
       }else{
         // Ticks received before this cycle completed cannot become delayed entry triggers.
