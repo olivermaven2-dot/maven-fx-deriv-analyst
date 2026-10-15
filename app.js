@@ -641,12 +641,19 @@ function validationReliabilityNote(engine){
   if(v.forecasts<30)return "AI feedback: early sample ("+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate). Keep confidence provisional; this is not a profitability guarantee."+calibration+learning;
   return "AI feedback: "+v.forecasts+" scored 1-tick outcomes, "+Math.round(v.rate*100)+"% hit rate."+calibration+learning+" Historical sample is saved in this browser and does not guarantee future results.";
 }
+function wilsonInterval(hits,total,z=1.96){
+  if(!Number.isFinite(hits)||!Number.isFinite(total)||total<=0||hits<0||hits>total)return null;
+  const p=hits/total,z2=z*z,den=1+z2/total,center=(p+z2/(2*total))/den;
+  const margin=z*Math.sqrt((p*(1-p)+z2/(4*total))/total)/den;
+  return {low:Math.max(0,center-margin),high:Math.min(1,center+margin)};
+}
 function signalEntryMetricsMarkup(engine){
   const signal=getSignalValidationReliability(engine),entry=getValidationReliability(engine);
   const pct=x=>x===null||x===undefined?"Collecting":Math.round(x*100)+"%";
   const falseSignal=signal.rate===null?null:1-signal.rate,falseEntry=entry.rate===null?null:1-entry.rate;
   const sampleNote=n=>n<10?"Small sample — learning neutral":n<30?"Early sample — treat cautiously":"Scored live outcomes";
-  return '<div class="signal-entry-metrics"><div class="signal-entry-metric"><strong>FALSE-SIGNAL RATE</strong><b>'+pct(falseSignal)+'</b><span>'+signal.forecasts+' scored</span><small>'+esc(sampleNote(signal.forecasts))+'</small></div><div class="signal-entry-metric"><strong>FALSE-ENTRY RATE</strong><b>'+pct(falseEntry)+'</b><span>'+entry.forecasts+' scored</span><small>'+esc(sampleNote(entry.forecasts))+'</small></div></div><div class="ou-validation-note">Signal learning adjusts Final Signal confidence from signal-only outcomes. Entry learning adjusts entry strength/ranking from entry outcomes. False rates are not profitability measures.</div>';
+  const ci=(v)=>{const x=v.forecasts?wilsonInterval(v.hits,v.forecasts):null;return x?Math.round(x.low*100)+"–"+Math.round(x.high*100)+"% 95% interval":"95% interval unavailable";};
+  return '<div class="signal-entry-metrics"><div class="signal-entry-metric"><strong>FALSE-SIGNAL RATE</strong><b>'+pct(falseSignal)+'</b><span>'+signal.forecasts+' scored</span><small>'+esc(sampleNote(signal.forecasts))+'</small><small>Hit-rate uncertainty: '+esc(ci(signal))+'</small></div><div class="signal-entry-metric"><strong>FALSE-ENTRY RATE</strong><b>'+pct(falseEntry)+'</b><span>'+entry.forecasts+' scored</span><small>'+esc(sampleNote(entry.forecasts))+'</small><small>Hit-rate uncertainty: '+esc(ci(entry))+'</small></div></div><div class="ou-validation-note">95% Wilson intervals show sampling uncertainty; they do not guarantee future outcomes. Signal learning adjusts Final Signal confidence from signal-only outcomes. Entry learning adjusts entry strength/ranking from entry outcomes. False rates are not profitability measures.</div>';
 }
 function renderOUValidationPanel(){
   const card=$("ouValidationCard"),out=$("ouValidationResults"),payoutControl=$("ouPayoutControl");
@@ -669,8 +676,10 @@ function renderOUValidationPanel(){
   const breakeven=100/(1+payout/100);
   const fmt=x=>x.n?Math.round(x.hits/x.n*100)+"% ("+x.hits+"/"+x.n+")":"—";
   const roi=x=>x.n?(((x.hits*payout-(x.n-x.hits)*100)/x.n)>=0?"+":"")+(((x.hits*payout-(x.n-x.hits)*100)/x.n).toFixed(1))+"%":"—";
+  const entryStats=getValidationReliability("overunder"),entryCI=entryStats.forecasts?wilsonInterval(entryStats.hits,entryStats.forecasts):null;
+  const edgeAssessment=!entryCI?"Not enough scored entries to assess the break-even threshold.":entryCI.low*100>breakeven?"Observed lower 95% bound is above assumed break-even; keep validating on unseen data.":entryCI.high*100<breakeven?"Observed upper 95% bound is below assumed break-even; current sample is unfavourable at this assumed payout.":"The 95% interval overlaps assumed break-even; edge is not established.";
   out.innerHTML=signalEntryMetricsMarkup("overunder")+'<div class="ou-validation-note">Saved locally in this browser • only live entry-digit triggers count • no trades are placed. Assumed win profit is editable and is a what-if estimate, not Deriv live payout.</div><div class="ou-validation-breakeven">'+esc(validationReliabilityNote("overunder"))+'</div>'+
-    '<div class="ou-validation-breakeven">Assumed profit per win: <strong>'+payout.toFixed(1)+'%</strong> of stake • break-even hit rate: <strong>'+breakeven.toFixed(1)+'%</strong></div>'+
+    '<div class="ou-validation-breakeven">Assumed profit per win: <strong>'+payout.toFixed(1)+'%</strong> of stake • break-even hit rate: <strong>'+breakeven.toFixed(1)+'%</strong><br>'+esc(edgeAssessment)+'</div>'+
     (rows.length?'<div class="ou-validation-table"><div class="ou-validation-row ou-validation-head"><span>ENTRY</span><span>TRIGGERS</span><span>1 TICK</span><span>2 IN A ROW</span><span>3 IN A ROW</span><span>MAX FAILS</span><span>EST. ROI*</span></div>'+rows.map(r=>{const selected=[1,2,3].reduce((best,h)=>r[h].n>best.n?r[h]:best,r[1]);return '<div class="ou-validation-row"><strong>'+r.candidate+'</strong><span>'+r.triggers+'</span><span>'+fmt(r[1])+'</span><span>'+fmt(r[2])+'</span><span>'+fmt(r[3])+'</span><span>'+((selected.maxFailureStreak||0))+'</span><span>'+roi(selected)+'</span></div>'}).join("")+'</div><div class="ou-validation-note">*ROI uses the best-sampled horizon for that digit, assumes the entered profit rate and a 100% stake loss on misses. Change payout assumption to match a real quoted contract before interpreting it.</div>':'<div class="ou-validation-empty">No qualifying entry-digit triggers recorded for '+esc(state.symbol)+' • '+state.selectedSide+' '+state.selectedDigit+' yet. Keep the live stream running; the table fills as entry digits trigger and their next ticks complete.</div>');
 }
 function receiveTick(t){
