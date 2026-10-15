@@ -1637,7 +1637,7 @@ function renderSubscribedMarketStatus(mode="switching"){
 
 /* Auto Trade: separate authenticated trading socket; never shares the public tick socket. */
 const autoTrade={
-  socket:null,tradingHeartbeatTimer:null,authorized:false,account:null,availableAccounts:[],accountBalances:{},enabled:false,speedMode:"STANDARD",realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
+  socket:null,tradingHeartbeatTimer:null,sessionToken:null,authorized:false,account:null,availableAccounts:[],accountBalances:{},enabled:false,speedMode:"STANDARD",realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,nextEntryAllowedAt:0,entryCooldownMs:5000,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryMode:"SMART_NET",recoveryBalance:0,recoveryPairProfit:0,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,recoverySide1:"DEFAULT",recoverySide2:"DEFAULT",
   activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,fastTickQueue:[],fastTickQueueLimit:500,fastTickQueueStaleMs:3000,fastTickQueueDrainActive:false,logLines:[],lastManualBlockReason:"",lastManualLoggedReason:"",demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
@@ -1654,14 +1654,21 @@ function autoTradeStatus(text,kind=""){
   if(start)start.disabled=!autoTrade.authorized||autoTrade.enabled||!autoTradeCanStart();
   if(stop)stop.disabled=!autoTrade.enabled;
   const dis=$("autoTradeDisconnect");if(dis)dis.disabled=!autoTrade.socket;
+  const sw=$("autoTradeSwitchAccount");if(sw)sw.disabled=!autoTrade.authorized||autoTrade.enabled||Object.keys(autoTrade.activeContracts||{}).length>0;
 }
 function autoTradeReq(obj,kind){
   if(!autoTrade.socket||autoTrade.socket.readyState!==WebSocket.OPEN)throw new Error("Trading connection is not open");
   const id=++autoTrade.req;autoTrade.requests[id]=kind;obj.req_id=id;autoTrade.socket.send(JSON.stringify(obj));return id;
 }
 function autoTradeCanStart(){
-  // Maven FX Bot is demo-only; real-account execution remains disabled.
+  // Live-money execution is not enabled in this build; account switching is independent.
   return !!autoTrade.authorized&&!!autoTrade.account&&autoTrade.account.is_virtual===true;
+}
+function autoTradeSwitchAccount(){
+  if(autoTrade.enabled||Object.keys(autoTrade.activeContracts||{}).length){autoTradeLog("Pause the bot and wait for all open contracts to settle before switching accounts.");return}
+  if(!autoTrade.sessionToken){autoTradeLog("Reconnect with your Deriv token to switch accounts. No token is stored in this page session.");return}
+  $("autoTradeToken").value=autoTrade.sessionToken;
+  autoTradeConnect();
 }
 function autoTradeUpdateRealConfirmation(){
   const check=$("autoTradeRealCheck"),phrase=$("autoTradeRealPhrase"),gate=$("autoTradeRealGate");
@@ -2097,8 +2104,9 @@ function autoTradeChooseAccount(choices){
   });
 }
 async function autoTradeConnect(){
-  const token=$("autoTradeToken").value.trim()||(function(){try{return localStorage.getItem("mavenFxDerivApiToken")||""}catch{return ""}})();
+  const token=$("autoTradeToken").value.trim()||autoTrade.sessionToken||(function(){try{return localStorage.getItem("mavenFxDerivApiToken")||""}catch{return ""}})();
   if(!token){autoTradeLog("Enter your Deriv Personal Access Token in this popup. Never paste it into chat.");return}
+  autoTrade.sessionToken=token;
   const appId="34Fh3HjvIt4cTAcccHVi2";
   if($("autoTradeRemember").checked){try{localStorage.setItem("mavenFxDerivApiToken",token)}catch{autoTradeLog("Could not save token in this browser; connect for this session only.")}}
   else{try{localStorage.removeItem("mavenFxDerivApiToken")}catch{}}
@@ -2168,6 +2176,7 @@ async function autoTradeConnect(){
   }
 }
 function autoTradeDisconnect(){
+  autoTrade.sessionToken=null;
   if(autoTrade.tradingHeartbeatTimer){clearInterval(autoTrade.tradingHeartbeatTimer);autoTrade.tradingHeartbeatTimer=null}
   autoTradePause("manual disconnect");autoTrade.authorized=false;autoTrade.account=null;
   if(autoTrade.socket){try{autoTrade.socket.close()}catch{}autoTrade.socket=null}
@@ -2183,6 +2192,7 @@ function autoTradeDisconnect(){
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&modal.classList.contains("open"))shut()});
   $("autoTradeConnect").addEventListener("click",autoTradeConnect);
   $("autoTradeDisconnect").addEventListener("click",autoTradeDisconnect);
+  $("autoTradeSwitchAccount").addEventListener("click",autoTradeSwitchAccount);
   $("autoTradeStart").addEventListener("click",autoTradeStart);
   $("autoTradeSpeedToggle").addEventListener("click",()=>autoTradeSetSpeedMode(autoTrade.speedMode==="FAST"?"STANDARD":"FAST"));
   const demoTestButton=document.createElement("button");
