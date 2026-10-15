@@ -1048,6 +1048,10 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
   const meta=entries.map(e=>"Digit "+e.digit+": entry score "+e.score+"/100").join(" • ")+" • Rank scores are not win probabilities.";
   return {main,meta,status:entries.length+" ENTRY CANDIDATE"+(entries.length===1?"":" DIGITS"),reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
 }
+function intersectPredictiveEntryCandidates(manualDigits,predictiveEntries){
+  const qualified=new Set((Array.isArray(predictiveEntries)?predictiveEntries:[]).map(entry=>Number(typeof entry==="object"?entry?.digit:entry)).filter(digit=>Number.isInteger(digit)&&digit>=0&&digit<=9));
+  return (Array.isArray(manualDigits)?manualDigits:[]).filter(digit=>qualified.has(Number(digit)));
+}
 function autoTradeEntrySelection(){
   if(!$("autoTradeManualEntriesEnabled")?.checked){autoTrade.lastManualBlockReason="";const snap=state.ouEntrySnapshot;return snap?.active&&Array.isArray(snap.validationDigits)?snap.validationDigits:(snap?.active&&Array.isArray(snap.digits)?snap.digits:[]);}
   const firstRaw=$("autoTradeManualDigit1")?.value,secondRaw=$("autoTradeManualDigit2")?.value;
@@ -1055,13 +1059,18 @@ function autoTradeEntrySelection(){
   const first=Number(firstRaw),second=Number(secondRaw);
   if(!Number.isInteger(first)||first<0||first>9||!Number.isInteger(second)||second<0||second>9){autoTrade.lastManualBlockReason="Manual entry digits must be whole numbers from 0 to 9.";return [];}
   if(first===second){autoTrade.lastManualBlockReason="Manual entry digits must be different.";return [];}
-  // Manual digits bypass every Entry Engine candidate filter. The only manual-digit filter is the visible red/green distribution-bar rule.
+  // Manual digits must pass both the visible distribution-bar rule and the same predictive qualification used by automatic entries.
   const bars=distributionBarFlags(state.digits);
   const valid=[first,second].filter(digit=>!bars.most[digit]&&!bars.least[digit]);
   const blocked=[first,second].filter(digit=>bars.most[digit]||bars.least[digit]).map(digit=>"digit "+digit+(bars.most[digit]&&bars.least[digit]?" has a red and green distribution bar":bars.most[digit]?" has a green distribution bar":" has a red distribution bar"));
   if(!valid.length){autoTrade.lastManualBlockReason=blocked.join("; ")+". No manual digit is eligible until it has neither bar.";return [];}
-  autoTrade.lastManualBlockReason=blocked.length?blocked.join("; ")+". Using the remaining eligible manual digit.":"";
-  return valid;
+  const prediction=overUnderEntry(state.digits,state.selectedDigit,state.selectedSide,valid);
+  const reviewedPrediction=mavenAIReviewEntry("overunder",prediction,{signal:state.ouSignalSnapshot?.signal,confidence:state.ouEntrySnapshot?.confidence});
+  const qualified=intersectPredictiveEntryCandidates(valid,reviewedPrediction?.entries);
+  const unqualified=valid.filter(digit=>!qualified.includes(digit)).map(digit=>"digit "+digit+" failed predictive Entry Engine qualification");
+  const reasons=[...blocked,...unqualified];
+  autoTrade.lastManualBlockReason=reasons.length?reasons.join("; ")+(qualified.length?". Using only the remaining predictive, distribution-eligible digit(s).":". No manual digit currently passes all entry-quality checks."):"";
+  return qualified;
 }
 function renderParityControls(){
   document.querySelectorAll(".parity-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.parity===state.selectedParity)); const label=$("paritySetupLabel"); if(label)label.textContent=state.selectedParity;

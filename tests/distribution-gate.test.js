@@ -10,6 +10,28 @@ const nextFunction = appSource.indexOf('\nfunction ', gateStart + 10);
 const gateSource = appSource.slice(gateStart, nextFunction);
 const distributionGate = vm.runInNewContext(gateSource + '\ndistributionGate');
 
+const predictiveGateStart = appSource.indexOf('function intersectPredictiveEntryCandidates');
+assert.notEqual(predictiveGateStart, -1, 'intersectPredictiveEntryCandidates must exist in app.js');
+const predictiveGateEnd = appSource.indexOf('\nfunction ', predictiveGateStart + 10);
+const predictiveGateSource = appSource.slice(predictiveGateStart, predictiveGateEnd);
+const intersectPredictiveEntryCandidates = vm.runInNewContext(predictiveGateSource + '\nintersectPredictiveEntryCandidates');
+
+test('manual entry digits must be among predictively qualified candidates', () => {
+  const result = intersectPredictiveEntryCandidates([2, 5], [{ digit: 5, score: 74 }]);
+  assert.deepEqual(Array.from(result), [5]);
+});
+
+test('manual entry digits are blocked when neither passes predictive qualification', () => {
+  const result = intersectPredictiveEntryCandidates([2, 5], []);
+  assert.deepEqual(Array.from(result), []);
+});
+
+test('predictive gate preserves the manual digit order for qualified digits', () => {
+  const result = intersectPredictiveEntryCandidates([5, 2], [{ digit: 2 }, { digit: 5 }]);
+  assert.deepEqual(Array.from(result), [5, 2]);
+});
+
+
 function digitsFromCounts(counts) {
   return counts.flatMap((count, digit) => Array(count).fill(digit));
 }
@@ -73,7 +95,7 @@ test('uses the most recent 1,000 ticks when the input is longer', () => {
   assert.equal(result.pass, true);
 });
 
-test('manual bot entry digits replace automatic digits and only require unbarred distribution digits', () => {
+test('manual bot entry digits must pass predictive qualification and distribution bars', () => {
   assert.ok(appSource.includes('function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null)'));
   assert.ok(appSource.includes('function autoTradeEntrySelection()'));
   const selectionStart = appSource.indexOf('function autoTradeEntrySelection');
@@ -81,7 +103,9 @@ test('manual bot entry digits replace automatic digits and only require unbarred
   const selection = appSource.slice(selectionStart, selectionEnd);
   assert.ok(selection.includes('distributionBarFlags(state.digits)'));
   assert.ok(selection.includes('bars.most[digit]||bars.least[digit]'));
-  assert.ok(!selection.includes('overUnderEntry'));
+  assert.ok(selection.includes('overUnderEntry(state.digits,state.selectedDigit,state.selectedSide,valid)'));
+  assert.ok(selection.includes('mavenAIReviewEntry("overunder",prediction'));
+  assert.ok(selection.includes('intersectPredictiveEntryCandidates(valid,reviewedPrediction?.entries)'));
   assert.ok(appSource.includes('const candidates=autoTradeEntrySelection()'));
   const page = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(page.includes('id="autoTradeManualEntriesEnabled"'));
@@ -594,7 +618,7 @@ test('recovery OFF keeps running through two runs after a loss and waits for a f
 test('recovery-OFF UI explains two-run entry cycles and fresh-entry waiting', () => {
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.match(html, /With recovery OFF, a loss ends that attempt at base stake/);
-  assert.match(html, /One valid manual digit is enough to trigger the normal two-run entry cycle/);
+  assert.match(html, /If neither qualifies, the bot waits for better evidence/);
   assert.match(html, /current entry still completes its two-run cycle; after run 2 the bot waits for a fresh entry/);
   assert.match(html, /Only session take-profit or stop-loss pauses the bot/);
 });
@@ -614,32 +638,35 @@ test('recovery side selectors default to existing logic and allow independent Ov
 });
 
 
-test('manual entry digits bypass Entry Engine filters but must have neither red nor green distribution bars', () => {
+test('manual entry digits must pass predictive Entry Engine filters and avoid red/green bars', () => {
   const start = appSource.indexOf('function autoTradeEntrySelection');
   const end = appSource.indexOf('function renderParityControls', start);
   assert.notEqual(start, -1);
   const source = appSource.slice(start, end);
   assert.ok(source.includes('distributionBarFlags(state.digits)'));
   assert.ok(source.includes('bars.most[digit]||bars.least[digit]'));
-  assert.doesNotMatch(source, /overUnderEntry/);
+  assert.match(source, /overUnderEntry\(state\.digits,state\.selectedDigit,state\.selectedSide,valid\)/);
+  assert.match(source, /mavenAIReviewEntry\("overunder",prediction/);
   assert.ok(appSource.includes('neither manual digit currently passes the red/green distribution-bar rule'));
   assert.ok(appSource.includes('digit is not an eligible manual entry digit'));
   assert.ok(appSource.includes('automaticEntryIsCurrent=manualEntriesEnabled||'));
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
   assert.ok(html.includes('Use my manual entry digits instead of the Entry Engine digits'));
-  assert.ok(html.includes('Each manual digit must avoid a red (least frequent) or green (most frequent) distribution bar. If one has a red/green bar, the bot uses the other eligible manual digit on its own. One valid manual digit is enough to trigger the normal two-run entry cycle.'));
+  assert.ok(html.includes('each must still pass the predictive Entry Engine reaction, continuation, recent-performance, consistency and AI review checks.'));
+  assert.ok(html.includes('If neither qualifies, the bot waits for better evidence.'));
   assert.ok(html.includes('Final Signal, probability comparison, live-data and spike-risk checks still apply'));
 });
 
-test('manual entry mode does not depend on the automatic Entry Engine snapshot and reports red/green-bar blocks', () => {
+test('manual entry mode applies predictive qualification and reports blocked digits', () => {
   const start = appSource.indexOf('function autoTradeEntrySelection');
   const end = appSource.indexOf('function renderParityControls', start);
   const selectionSource = appSource.slice(start, end);
-  assert.match(selectionSource, /Manual digits bypass every Entry Engine candidate filter/);
+  assert.match(selectionSource, /Manual digits must pass both the visible distribution-bar rule and the same predictive qualification/);
+  assert.match(selectionSource, /intersectPredictiveEntryCandidates\(valid,reviewedPrediction\?\.entries\)/);
   assert.match(selectionSource, /distributionBarFlags\(state\.digits\)/);
   assert.match(selectionSource, /autoTrade\.lastManualBlockReason/);
   assert.match(selectionSource, /const valid=\[first,second\]\.filter\(digit=>!bars\.most\[digit\]&&!bars\.least\[digit\]\)/);
-  assert.match(selectionSource, /Using the remaining eligible manual digit/);
+  assert.match(selectionSource, /Using only the remaining predictive, distribution-eligible digit/);
 
   const readyStart = appSource.indexOf('function autoTradeReadyToEnter');
   const readyEnd = appSource.indexOf('\nfunction ', readyStart + 10);
