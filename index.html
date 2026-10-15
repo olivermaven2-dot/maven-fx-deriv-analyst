@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="description" content="Maven FX Deriv Analyst — live market analysis">
 <title>Maven FX Deriv Analyst</title>
-<link rel="stylesheet" href="styles.css?v=20261015-fast-execution-1">
+<link rel="stylesheet" href="styles.css?v=20261015-click-account-chooser-1">
 <link rel="stylesheet" href="desktop-layout.css?v=20261015-remove-workspace-label-1">
 </head>
 <body>
@@ -72,6 +72,7 @@
         <label class="auto-trade-wide">Deriv API token <input id="autoTradeToken" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste a token with trade permission"><small>Remembering stores the token in this browser on this device. Anyone with access to this browser profile may be able to use it. Never enable on a shared device.</small></label>
         <label class="auto-trade-wide"><input id="autoTradeRemember" type="checkbox"> Remember my API token on this device</label>
         <div class="auto-trade-actions"><button id="autoTradeConnect" type="button">CONNECT ACCOUNT</button><button id="autoTradeDisconnect" type="button" class="secondary" disabled>DISCONNECT</button></div>
+        <div id="autoTradeAccountChooser" class="auto-trade-account-chooser auto-trade-wide" hidden aria-live="polite"></div>
         <label>Stake (<span id="autoTradeCurrency">account currency</span>)<input id="autoTradeStake" type="number" min="0.35" max="100" step="0.01" value="0.35" inputmode="decimal"></label>
         <label>Martingale multiplier<input id="autoTradeMartingale" type="number" min="1" max="10" step="0.1" value="2" inputmode="decimal"></label>
         <label>Take profit (<span class="autoTradeCurrencyText">account currency</span>)<input id="autoTradeTP" type="number" min="0.01" step="0.01" value="2" inputmode="decimal"></label>
@@ -167,7 +168,7 @@
     <p class="maven-ai-disclaimer">Statistical guidance only. Signals are not guarantees.</p>
   </section>
 
-<script src="app.js?v=20261015-fast-execution-1"></script>
+<script src="app.js?v=20261015-click-account-chooser-1"></script>
 <script src="maven-ai.js?v=20261015-confidence-calibration-1"></script>
 </body>
 </html>
