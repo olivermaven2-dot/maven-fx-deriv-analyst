@@ -58,9 +58,11 @@ function cleanValidationBook(value,kind){
     rec.triggers=Math.max(0,Math.floor(Number(r.triggers)||0));
     rec.confidenceSum=Math.max(0,Number(r.confidenceSum)||0);
     rec.confidenceN=Math.max(0,Math.floor(Number(r.confidenceN)||0));
+    rec.recentOutcomes={};
     for(const h of [1,2,3]){
       const x=r[h]&&typeof r[h]==="object"?r[h]:{};
       rec[h]={n:Math.max(0,Math.floor(Number(x.n)||0)),hits:Math.max(0,Math.min(Math.floor(Number(x.n)||0),Math.floor(Number(x.hits)||0))),failureStreak:Math.max(0,Math.floor(Number(x.failureStreak)||0)),maxFailureStreak:Math.max(0,Math.floor(Number(x.maxFailureStreak)||0))};
+      rec.recentOutcomes[h]=Array.isArray(r.recentOutcomes?.[h])?r.recentOutcomes[h].slice(-30).map(Boolean):[];
     }
     rec.lastUpdated=Number(r.lastUpdated)||0;
     out[key]=rec;
@@ -486,19 +488,22 @@ function processOUValidationTick(digit){
   const v=state.ouValidation;
   for(let i=v.pending.length-1;i>=0;i--){
     const p=v.pending[i];
-    if(p.market!==state.symbol){v.pending.splice(i,1);continue;}
+    if(p.market!==state.symbol){v.pending.splice(i,1);continue}
     p.steps++;
     p.hits.push(p.side==="OVER"?digit>p.selectedDigit:digit<p.selectedDigit);
     const key=ouValidationRecordKey(p.market,p.selectedDigit,p.side,p.candidate);
     const rec=state.ouValidationBook[key];
     if(rec){
+      if(!rec.recentOutcomes)rec.recentOutcomes={1:[],2:[],3:[]};
       for(const horizon of [1,2,3]){
         if(p.steps===horizon){
           const won=p.hits.slice(0,horizon).every(Boolean);
           rec[horizon].n++;
           if(horizon===1&&Number.isFinite(p.confidence)){rec.confidenceSum=(Number(rec.confidenceSum)||0)+Math.max(0,Math.min(1,p.confidence));rec.confidenceN=(Number(rec.confidenceN)||0)+1;}
-          if(won){rec[horizon].hits++;rec[horizon].failureStreak=0;}
-          else{rec[horizon].failureStreak=(rec[horizon].failureStreak||0)+1;rec[horizon].maxFailureStreak=Math.max(rec[horizon].maxFailureStreak||0,rec[horizon].failureStreak);}
+          if(won){rec[horizon].hits++;rec[horizon].failureStreak=0}
+          else{rec[horizon].failureStreak=(rec[horizon].failureStreak||0)+1;rec[horizon].maxFailureStreak=Math.max(rec[horizon].maxFailureStreak||0,rec[horizon].failureStreak)}
+          const outcomes=rec.recentOutcomes[horizon]||(rec.recentOutcomes[horizon]=[]);
+          outcomes.push(won);if(outcomes.length>30)outcomes.splice(0,outcomes.length-30);
         }
       }
       rec.lastUpdated=Date.now();state.validationDirty=true;
@@ -521,7 +526,7 @@ function recordOUValidationTrigger(digit){
   const signature=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|"+digit+"|"+state.ticks.length;
   const key=ouValidationRecordKey(state.symbol,state.selectedDigit,state.selectedSide,digit);
   if(!state.ouValidationBook[key]){
-    state.ouValidationBook[key]={market:state.symbol,selectedDigit:state.selectedDigit,side:state.selectedSide,candidate:digit,confidenceSum:0,confidenceN:0,1:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},triggers:0,lastUpdated:Date.now()};
+    state.ouValidationBook[key]={market:state.symbol,selectedDigit:state.selectedDigit,side:state.selectedSide,candidate:digit,confidenceSum:0,confidenceN:0,1:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},recentOutcomes:{1:[],2:[],3:[]},triggers:0,lastUpdated:Date.now()};
   }
   state.ouValidationBook[key].triggers++;
   state.ouValidation.pending.push({digit,candidate:digit,selectedDigit:state.selectedDigit,side:state.selectedSide,market:state.symbol,steps:0,hits:[],confidence:Number(snap.confidence),signature});
@@ -812,15 +817,16 @@ function ouTransitionStats(d,candidate,selectedDigit,selectedSide){
 function ouReactionDepth(d,candidate,selectedDigit,selectedSide){
   const qualifies=x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit;
   let occurrences=0,n1=0,n2=0,n3=0,r1=0,r2=0,r3=0,recovery=0;
-  // Score each horizon only when that many future ticks exist. A missing 3-tick
-  // follow-through must never erase valid 1- or 2-tick evidence.
+  // r2/r3 measure conditional continuation after prior favorable ticks, not joint rates.
   for(let i=0;i<d.length;i++){
     if(d[i]!==candidate)continue;
     occurrences++;
-    if(i+1<d.length){n1++;const a=qualifies(d[i+1]);if(a)r1++;
-      if(i+2<d.length){n2++;const b=qualifies(d[i+2]);if(a&&b)r2++;
-        if(i+3<d.length){n3++;const c=qualifies(d[i+3]);if(a&&b&&c)r3++;if(!a&&b&&c)recovery++;}
-      }
+    if(i+1<d.length){
+      n1++;const a=qualifies(d[i+1]);if(a)r1++;
+      if(a&&i+2<d.length){
+        n2++;const b=qualifies(d[i+2]);if(b)r2++;
+        if(b&&i+3<d.length){n3++;if(qualifies(d[i+3]))r3++}
+      }else if(!a&&i+3<d.length&&qualifies(d[i+2])&&qualifies(d[i+3]))recovery++;
     }
   }
   return {occurrences,n1,n2,n3,r1:n1?r1/n1:0,r2:n2?r2/n2:0,r3:n3?r3/n3:0,recovery:n3?recovery/n3:0};
@@ -966,49 +972,57 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
   const candidates=[];
   const entryBars=distributionBarFlags(d);
   const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
+  const smooth=(hits,n,prior=baseline,priorN=8)=>(hits+prior*priorN)/(n+priorN);
   for(let candidate=0;candidate<=9;candidate++){
     if(Array.isArray(onlyCandidates)&&!onlyCandidates.includes(candidate))continue;
-    // Exclude spike-prone extreme entry digits for the selected direction.
     if((selectedSide==="UNDER"&&(candidate===0||candidate===1))||(selectedSide==="OVER"&&(candidate===8||candidate===9)))continue;
-    // Never use a red LEAST or green MOST distribution digit as an entry candidate.
     if(entryBars.most[candidate]||entryBars.least[candidate])continue;
     const t=ouTransitionStats(d,candidate,selectedDigit,selectedSide);
-    if(t.total<20||t.recentTotal<5)continue;
-    const sample=Math.min(1,t.total/100),recentWeight=Math.min(1,t.recentTotal/40);
-    const continuation=t.r1*.45+t.r2*.35+t.r3*.20;
-    const immediateAdvantage=Math.max(0,Math.min(1,.5+(t.r1-baseline)*3.5));
-    const twoTickAdvantage=Math.max(0,Math.min(1,.5+(t.r2-baseline)*3));
-    const threeTickAdvantage=Math.max(0,Math.min(1,.5+(t.r3-baseline)*2.5));
-    const directionalAdvantage=Math.max(0,Math.min(1,.5+(t.weightedRate-baseline)*3));
-    const recentAdvantage=Math.max(0,Math.min(1,.5+(t.recentRate-baseline)*3));
-    const stability=Math.max(0,Math.min(1,1-Math.abs(t.rate-t.recentRate)-Math.abs(t.r1-t.r2)*.35-Math.abs(t.r2-t.r3)*.25));
-    const consistency=Math.max(0,Math.min(1,1-Math.abs(t.r1-t.r2)-Math.abs(t.r2-t.r3)));
-    const score=Math.round(100*(directionalAdvantage*.24+recentAdvantage*.18+continuation*.28+immediateAdvantage*.10+twoTickAdvantage*.07+threeTickAdvantage*.03+stability*.05+consistency*.03+sample*.01+recentWeight*.01));
-    candidates.push({...t,candidate,baseline,score,continuation,stability,consistency});
+    if(t.total<30||t.recentTotal<8)continue;
+    const key=ouValidationRecordKey(state.symbol,selectedDigit,selectedSide,candidate);
+    const validation=state.ouValidationBook[key]||null;
+    const h1=validation?.[1]||{n:0,hits:0,failureStreak:0};
+    const recent1=Array.isArray(validation?.recentOutcomes?.[1])?validation.recentOutcomes[1]:[];
+    const recentHits1=recent1.filter(Boolean).length;
+    const observedRate=smooth(h1.hits,h1.n);
+    const recentRate=smooth(recentHits1,recent1.length,baseline,5);
+    // Enough live, out-of-sample failures override older historical strength.
+    if(recent1.length>=12&&recentRate<baseline-.06)continue;
+    if(h1.n>=20&&observedRate<baseline-.07)continue;
+    if(recent1.length>=8&&h1.failureStreak>=5&&recentRate<baseline)continue;
+    const sample=Math.min(1,t.total/100);
+    const directionalLift=Math.max(0,Math.min(1,.5+(t.r1-baseline)*3.5));
+    const recentLift=Math.max(0,Math.min(1,.5+(t.recentRate-baseline)*3.5));
+    const secondLift=Math.max(0,Math.min(1,.5+(t.r2-baseline)*3));
+    const thirdLift=Math.max(0,Math.min(1,.5+(t.r3-baseline)*2));
+    const validationLift=recent1.length>=6?Math.max(0,Math.min(1,.5+(recentRate-baseline)*3.5)):.5;
+    const stability=Math.max(0,Math.min(1,1-Math.abs(t.rate-t.recentRate)-Math.abs(t.r1-t.r2)*.20-Math.abs(t.r2-t.r3)*.15));
+    const consistency=Math.max(0,Math.min(1,1-Math.abs(t.r1-t.r2)*.7-Math.abs(t.r2-t.r3)*.3));
+    const validationWeight=recent1.length>=12?.16:recent1.length>=6?.10:0;
+    const recentWeight=.12-validationWeight;
+    const score=Math.round(100*(directionalLift*.25+recentLift*.20+secondLift*.13+thirdLift*.07+stability*.10+consistency*.07+sample*.06+validationLift*validationWeight+Math.min(1,t.recentTotal/40)*recentWeight));
+    candidates.push({...t,candidate,baseline,score,stability,consistency,validation:{n:h1.n,hits:h1.hits,rate:observedRate,recentN:recent1.length,recentRate,failureStreak:h1.failureStreak}});
   }
   candidates.sort((a,b)=>b.score-a.score);
   if(!candidates.length)return null;
-  const setupDepth=Math.min(selectedDigit,9-selectedDigit),middleBias=Math.max(0,Math.min(1,(setupDepth-1)/3));
-  const minTotal=Math.round(16-3*middleBias),recentMin=.48+.015*middleBias,scoreMin=52-4*middleBias;
   const qualified=candidates.filter(c=>{
-    // Treat a good immediate reaction OR credible two-tick follow-through as valid;
-    // don't require all horizons to agree before a candidate can qualify.
-    const hasContinuation=c.r1>=Math.max(.52,baseline-.10)||c.r2>=Math.max(.36,baseline-.18);
-    const hasDirectionalReaction=(c.recentRate>=recentMin&&(c.weightedRate>=baseline-.06||c.r1>=Math.max(.54,baseline-.08)||c.r2>=Math.max(.38,baseline-.16)));
-    return c.total>=minTotal&&c.recentTotal>=4&&hasDirectionalReaction&&hasContinuation&&c.stability>=.44&&c.consistency>=.28&&c.score>=scoreMin;
+    const hasDirectionalReaction=c.r1>=baseline-.04&&c.recentRate>=baseline-.05;
+    const hasContinuation=c.r2>=baseline-.06||c.r1>=baseline+.015;
+    const validationOkay=c.validation.recentN<12||c.validation.recentRate>=baseline-.06;
+    return c.total>=30&&c.recentTotal>=8&&hasDirectionalReaction&&hasContinuation&&validationOkay&&c.stability>=.42&&c.consistency>=.30&&c.score>=55;
   }).slice(0,2);
   if(!qualified.length)return null;
   const entries=qualified.map(c=>{
-    let score=c.score;
-    const status=score>=78?"STRONG CANDIDATE":score>=66?"MODERATE CANDIDATE":"EARLY CANDIDATE";
+    const validationText=c.validation.n>=10
+      ?"Live validation "+Math.round(c.validation.rate*100)+"% across "+c.validation.n+" scored triggers"+(c.validation.recentN>=5?"; recent "+Math.round(c.validation.recentRate*100)+"%":"")
+      :"Live validation still collecting ("+c.validation.n+" scored triggers)";
     let reason;
-    if(c.r1>=.56&&c.r2>=.54&&c.r3>=.50)reason="Historical triggers show follow-through across 1–3 ticks toward the selected setup.";
-    else if(c.r1>=.54&&c.r2>=.52)reason="Historical triggers show immediate reaction and 2-tick continuation toward the selected setup.";
-    else if(c.r1>=.54)reason="Historical triggers show immediate reaction; longer continuation is less consistent.";
-    else reason="Historical triggers show favorable 2-tick continuation despite weaker immediate reaction.";
-    return {digit:c.candidate,score,status,reason,evidence:c.total+" historical triggers; "+c.recentTotal+" recent triggers"};
+    if(c.r1>=baseline+.04&&c.r2>=baseline+.02)reason="Historical 1-tick reaction and conditional continuation both exceed the setup baseline.";
+    else if(c.r1>=baseline-.02&&c.r2>=baseline+.03)reason="Immediate reaction is near baseline; conditional 2-tick follow-through is stronger.";
+    else reason="Passed conservative recent reaction, continuation and consistency checks.";
+    return {digit:c.candidate,score:c.score,status:c.score>=72?"VALIDATED CANDIDATE":c.score>=62?"QUALIFIED CANDIDATE":"PROVISIONAL CANDIDATE",reason,evidence:c.total+" historical triggers; recent transition rate "+Math.round(c.recentRate*100)+"%; "+validationText,validation:c.validation};
   });
-  return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.length===2?"Digit "+entries[0].digit+": score "+entries[0].score+"/100 • Digit "+entries[1].digit+": score "+entries[1].score+"/100":"Digit "+entries[0].digit+": score "+entries[0].score+"/100 • Second digit: no candidate passed validation. Scores rank candidates; they are not win probabilities.",status:entries.length===2?"2 VALID CANDIDATES":"1 VALID CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
+  return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.length===2?"Digit "+entries[0].digit+": rank score "+entries[0].score+"/100 • Digit "+entries[1].digit+": rank score "+entries[1].score+"/100":"Digit "+entries[0].digit+": rank score "+entries[0].score+"/100 • Second digit: no other candidate passed validation. Rank scores are not win probabilities.",status:entries.length===2?"2 QUALIFIED CANDIDATES":"1 QUALIFIED CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
 }
 function autoTradeEntrySelection(){
   if(!$("autoTradeManualEntriesEnabled")?.checked){autoTrade.lastManualBlockReason="";return state.ouEntrySnapshot?.active&&Array.isArray(state.ouEntrySnapshot.digits)?state.ouEntrySnapshot.digits:[];}
@@ -1760,7 +1774,7 @@ function autoTradeReadyToEnter(digit){
   if(risk.level==="UNKNOWN"||risk.level==="HIGH")return {ok:false,reason:risk.title};
   if(risk.level==="MODERATE"&&state.ouSignalSnapshot.signal!=="STRONG SIGNAL")return {ok:false,reason:"moderate spike risk requires STRONG SIGNAL"};
   const selectedEntries=autoTradeEntrySelection();
-  if((manualEntriesEnabled?(selectedEntries.length<1||selectedEntries.length>2):selectedEntries.length!==2)||new Set(selectedEntries).size!==selectedEntries.length)return {ok:false,reason:manualEntriesEnabled?"neither manual digit currently passes the red/green distribution-bar rule":"exactly two distinct validated entry digits are required"};
+  if(selectedEntries.length<1||selectedEntries.length>2||new Set(selectedEntries).size!==selectedEntries.length)return {ok:false,reason:manualEntriesEnabled?"neither manual digit currently passes the red/green distribution-bar rule":"no entry digit passed the updated reliability checks"};
   if(!selectedEntries.includes(digit))return {ok:false,reason:manualEntriesEnabled?"digit is not an eligible manual entry digit":"digit is not a current Entry Engine candidate"};
   return {ok:true};
 }
