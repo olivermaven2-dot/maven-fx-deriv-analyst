@@ -256,8 +256,8 @@ test('spike-risk refresh uses a removable note marker to avoid stacking warnings
 test('Wilson intervals expose uncertainty and remain bounded for live hit rates', () => {
   const start = appSource.indexOf('function wilsonInterval');
   assert.notEqual(start, -1);
-  const end = appSource.indexOf('\\nfunction ', start + 10);
-  const wilsonInterval = vm.runInNewContext(appSource.slice(start, end) + '\\nwilsonInterval');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const wilsonInterval = vm.runInNewContext(appSource.slice(start, end) + '\nwilsonInterval');
   const small = wilsonInterval(5, 10);
   assert.ok(small.low > 0.2 && small.low < 0.3);
   assert.ok(small.high > 0.7 && small.high < 0.8);
