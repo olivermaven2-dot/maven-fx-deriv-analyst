@@ -10,6 +10,28 @@ const nextFunction = appSource.indexOf('\nfunction ', gateStart + 10);
 const gateSource = appSource.slice(gateStart, nextFunction);
 const distributionGate = vm.runInNewContext(gateSource + '\ndistributionGate');
 
+const predictiveGateStart = appSource.indexOf('function intersectPredictiveEntryCandidates');
+assert.notEqual(predictiveGateStart, -1, 'intersectPredictiveEntryCandidates must exist in app.js');
+const predictiveGateEnd = appSource.indexOf('\\nfunction ', predictiveGateStart + 10);
+const predictiveGateSource = appSource.slice(predictiveGateStart, predictiveGateEnd);
+const intersectPredictiveEntryCandidates = vm.runInNewContext(predictiveGateSource + '\\nintersectPredictiveEntryCandidates');
+
+test('manual entry digits must be among predictively qualified candidates', () => {
+  const result = intersectPredictiveEntryCandidates([2, 5], [{ digit: 5, score: 74 }]);
+  assert.deepEqual(Array.from(result), [5]);
+});
+
+test('manual entry digits are blocked when neither passes predictive qualification', () => {
+  const result = intersectPredictiveEntryCandidates([2, 5], []);
+  assert.deepEqual(Array.from(result), []);
+});
+
+test('predictive gate preserves the manual digit order for qualified digits', () => {
+  const result = intersectPredictiveEntryCandidates([5, 2], [{ digit: 2 }, { digit: 5 }]);
+  assert.deepEqual(Array.from(result), [5, 2]);
+});
+
+
 function digitsFromCounts(counts) {
   return counts.flatMap((count, digit) => Array(count).fill(digit));
 }
