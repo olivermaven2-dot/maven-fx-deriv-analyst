@@ -1141,8 +1141,11 @@ function autoTradeReq(obj,kind){
   const id=++autoTrade.req;autoTrade.requests[id]=kind;obj.req_id=id;autoTrade.socket.send(JSON.stringify(obj));return id;
 }
 function autoTradeCanStart(){
-  // Maven FX Bot is demo-only; real-account execution remains disabled.
-  return !!autoTrade.authorized&&!!autoTrade.account&&autoTrade.account.is_virtual===true;
+  if(!autoTrade.authorized||!autoTrade.account)return false;
+  // Real-money execution requires a fresh, explicit in-panel opt-in every session.
+  if(autoTrade.account.is_virtual===true)return true;
+  const check=$("autoTradeRealCheck"),phrase=$("autoTradeRealPhrase");
+  return !!check?.checked&&phrase?.value?.trim()==="TRADE REAL";
 }
 function autoTradeRender(){
   const market=$("autoTradeMarket"),setup=$("autoTradeSetup"),entries=$("autoTradeEntries");
@@ -1475,8 +1478,8 @@ function autoTradeDisconnect(){
   demoTestButton.type="button";demoTestButton.id="autoTradeDemoOneShotTest";demoTestButton.className=$("autoTradeStart").className;demoTestButton.textContent="One-contract DEMO test";demoTestButton.style.marginTop="8px";demoTestButton.addEventListener("click",autoTradeRunDemoTradeTest);
   $("autoTradeStart").parentElement.insertBefore(demoTestButton,$("autoTradeStart").nextSibling);
   $("autoTradeStop").addEventListener("click",()=>autoTradePause("paused by user"));
-  $("autoTradeRealCheck").addEventListener("change",()=>{autoTradeRender()});
-  $("autoTradeRealPhrase").addEventListener("input",()=>{autoTradeRender()});
+  $("autoTradeRealCheck").addEventListener("change",()=>{autoTrade.realConfirmed=!!$("autoTradeRealCheck").checked&&$("autoTradeRealPhrase").value.trim()==="TRADE REAL";autoTradeRender()});
+  $("autoTradeRealPhrase").addEventListener("input",()=>{autoTrade.realConfirmed=!!$("autoTradeRealCheck").checked&&$("autoTradeRealPhrase").value.trim()==="TRADE REAL";autoTradeRender()});
   const savedToken=(()=>{try{return localStorage.getItem("mavenFxDerivApiToken")||""}catch{return ""}})();
   if(savedToken){$("autoTradeToken").value=savedToken;$("autoTradeRemember").checked=true}
   $("autoTradeRemember").addEventListener("change",()=>{if(!$("autoTradeRemember").checked){try{localStorage.removeItem("mavenFxDerivApiToken")}catch{}}});
