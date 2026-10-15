@@ -4,7 +4,7 @@ function renderOverUnder(root,d,c,last,n){
   const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const rawEntry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
   const entry=mavenAIReviewEntry("overunder",rawEntry,e.aiDecision);
-  state.ouEntrySnapshot={key:ouValidationKey(),active:!!entry,digits:entry?entry.entries.filter(x=>x.targetReady).map(x=>x.digit):[],validationDigits:entry?entry.entries.map(x=>x.digit):[],confidence:Number(e.aiDecision?.confidence)};
+  state.ouEntrySnapshot={key:ouValidationKey(),active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[],validationDigits:entry?entry.entries.map(x=>x.digit):[],confidence:Number(e.aiDecision?.confidence)};
   state.ouSignalSnapshot={key:ouValidationKey(),active:activeSignal&&!e.probabilityConflict,signal:e.signal,probabilityConflict:!!e.probabilityConflict,tickCount:state.digits.length};
   setSignalValidationForecast("overunder",state.selectedSide+" "+state.selectedDigit,e.probabilityConflict?"WAIT":e.signal,state.digits.length,e.aiDecision?.confidence,{selectedDigit:state.selectedDigit,side:state.selectedSide});
   autoTradeUpdateLiveFields();
@@ -1698,7 +1698,7 @@ function autoTradeRender(){
     const chosen=autoTradeEntrySelection();
     const manual=$("autoTradeManualEntriesEnabled")?.checked;
     const candidates=state.ouEntrySnapshot?.active&&Array.isArray(state.ouEntrySnapshot.validationDigits)?state.ouEntrySnapshot.validationDigits:[];
-    entries.textContent=chosen.length?chosen.join(" / "):manual?(autoTrade.lastManualBlockReason||"Manual digits not qualified"):candidates.length?"Calibrating digits: "+candidates.join(" / ")+" · auto-entry locked until 95% validation":"No validated entry digits yet";
+    entries.textContent=chosen.length?chosen.join(" / "):manual?(autoTrade.lastManualBlockReason||"Manual digits not qualified"):candidates.length?"Entry digits: "+candidates.join(" / "):"No validated entry digits yet";
   }
   if($("autoTradeCurrency"))$("autoTradeCurrency").textContent=autoTrade.currency||"account currency";
   document.querySelectorAll(".autoTradeCurrencyText").forEach(x=>x.textContent=autoTrade.currency||"account currency");
