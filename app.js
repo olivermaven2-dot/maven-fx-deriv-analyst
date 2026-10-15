@@ -1767,7 +1767,7 @@ function autoTradeIsExecutionBusy(){
 }
 function autoTradeDrainFastTickQueue(){
   if(autoTrade.fastTickQueueDrainActive||!autoTrade.enabled||autoTrade.speedMode!=="FAST"||state.engine!=="overunder"||autoTradeIsExecutionBusy())return;
-  // Queued ticks happened while the approved two-run sequence was busy. They update analysis as received,
+  // Queued ticks happened while the approved entry cycle was busy. They update analysis as received,
   // but replaying them now could create a late entry or bypass the rule to wait for a new digit hit.
   const waiting=autoTrade.fastTickQueue.length;
   if(waiting){
@@ -1852,7 +1852,7 @@ function processAutoTradeTick(digit){
   if(!autoTrade.armed){autoTrade.lastDigit=digit;return}
   const check=autoTradeReadyToEnter(digit);
   if(!check.ok){autoTradeLog("Entry blocked · "+check.reason);autoTrade.lastDigit=digit;return}
-  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=1;autoTrade.runSettled=0;autoTrade.runsPerEntry=Math.max(1,Math.min(20,Math.floor(Number($("autoTradeRunsPerEntry")?.value)||2)));autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;autoTrade.runSide=state.selectedSide;autoTrade.runSelectedDigit=state.selectedDigit;if(autoTrade.recoveryMode!=="SMART_NET")autoTrade.recoveryPhase=0;autoTrade.recoveryPairProfit=0;
+  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=1;autoTrade.runSettled=0;autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;autoTrade.runSide=state.selectedSide;autoTrade.runSelectedDigit=state.selectedDigit;if(autoTrade.recoveryMode!=="SMART_NET")autoTrade.recoveryPhase=0;autoTrade.recoveryPairProfit=0;
   autoTradeLog("ENTRY TRIGGER · "+state.symbol+" digit "+digit+" · "+state.selectedSide+" "+state.selectedDigit+" · starting the "+autoTrade.runsPerEntry+"-run entry cycle at base stake.");
   autoTradePlaceNext();
 }
@@ -2042,7 +2042,7 @@ function autoTradeHandleMessage(d){
         autoTrade.runRemaining=1;autoTradeRender();autoTradePlaceNext();
       }else{
         // Ticks received before this cycle completed cannot become delayed entry triggers.
-        // The next entry must be confirmed by a new live tick after the two-run cycle ends.
+        // The next entry must be confirmed by a new live tick after the configured entry cycle ends.
         const waitingTicks=autoTrade.fastTickQueue.length;
         autoTrade.fastTickQueue.length=0;
         autoTradeRender();
