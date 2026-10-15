@@ -81,7 +81,7 @@
         <div id="autoTradeManualEntryFields" class="auto-trade-wide" hidden>
           <label>Manual entry digit 1<input id="autoTradeManualDigit1" type="number" min="0" max="9" step="1" value="" placeholder="0–9" inputmode="numeric"></label>
           <label>Manual entry digit 2<input id="autoTradeManualDigit2" type="number" min="0" max="9" step="1" value="" placeholder="0–9" inputmode="numeric"></label>
-          <small>When enabled, these replace the automatically selected entry digits. Manual digits replace the Entry Engine digits and do not need to pass its sample-size, extreme-digit, transition, reaction, continuation, stability or consistency checks. Each manual digit must avoid a red (least frequent) or green (most frequent) distribution bar. If one has a red/green bar, the bot uses the other eligible manual digit on its own. One valid manual digit is enough to trigger the normal two-run entry cycle. Final Signal, probability comparison, live-data and spike-risk checks still apply.</small>
+          <small>When enabled, these are the only digits considered, but each must still pass the predictive Entry Engine reaction, continuation, recent-performance, consistency and AI review checks. Each manual digit must also avoid a red (least frequent) or green (most frequent) distribution bar. If one digit fails a check, the other can be used only if it passes all checks. If neither qualifies, the bot waits for better evidence. Final Signal, probability comparison, live-data and spike-risk checks still apply.</small>
         </div>
         <label class="auto-trade-wide"><input id="autoTradeRecoveryEnabled" type="checkbox"> Enable Classic Recovery (Smart Net Recovery is always ON)</label>
         <label class="auto-trade-wide">Recovery method
