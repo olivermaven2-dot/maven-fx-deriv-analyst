@@ -1908,6 +1908,28 @@ function autoTradeHandleMessage(d){
       }
     }else{autoTradeRender()}
   }}
+function autoTradeChooseAccount(choices){
+  const host=$("autoTradeAccountChooser"),connectButton=$("autoTradeConnect");
+  if(!host)return Promise.reject(new Error("Account selection panel is unavailable. Reload Maven FX and reconnect."));
+  host.replaceChildren();
+  const heading=document.createElement("strong");heading.className="account-chooser-title";heading.textContent="CHOOSE AN ACCOUNT";host.appendChild(heading);
+  const note=document.createElement("small");note.textContent="Tap Demo for testing. Real-account trading stays locked until you complete the separate confirmation.";host.appendChild(note);
+  const list=document.createElement("div");list.className="account-choice-list";host.appendChild(list);
+  return new Promise(resolve=>{
+    let finished=false;
+    const finish=value=>{if(finished)return;finished=true;host.hidden=true;host.replaceChildren();if(connectButton)connectButton.disabled=false;resolve(value)};
+    for(const account of choices){
+      const button=document.createElement("button");button.type="button";button.className="account-choice"+(account.demo?" demo":" real");
+      const title=document.createElement("strong");title.textContent=account.demo?"DEMO ACCOUNT":"REAL ACCOUNT";
+      const detail=document.createElement("span");detail.textContent=(account.id||"Account ID unavailable")+" · "+(account.currency||"currency");
+      const action=document.createElement("small");action.textContent=account.demo?"Recommended for testing":"Real money · extra confirmation required";
+      button.append(title,detail,action);button.addEventListener("click",()=>finish(account));list.appendChild(button);
+    }
+    const cancel=document.createElement("button");cancel.type="button";cancel.className="account-choice-cancel";cancel.textContent="CANCEL";cancel.addEventListener("click",()=>finish(null));host.appendChild(cancel);
+    host.hidden=false;if(connectButton)connectButton.disabled=true;
+    host.scrollIntoView({behavior:"smooth",block:"nearest"});
+  });
+}
 async function autoTradeConnect(){
   const token=$("autoTradeToken").value.trim()||(function(){try{return localStorage.getItem("mavenFxDerivApiToken")||""}catch{return ""}})();
   if(!token){autoTradeLog("Enter your Deriv Personal Access Token in this popup. Never paste it into chat.");return}
@@ -1933,11 +1955,8 @@ async function autoTradeConnect(){
     };
     const choices=accounts.map(accountLabel).filter(a=>a.id);
     if(!choices.length)throw new Error("Deriv returned accounts, but no account IDs were found. No connection was made.");
-    const selection=prompt("Choose the account for Maven FX Bot by number.\n\n"+choices.map((a,i)=>(i+1)+". "+a.label).join("\n")+"\n\nEnter a number. Demo is recommended for the first test.");
-    if(selection===null){autoTradeStatus("DISCONNECTED");autoTradeLog("Account selection cancelled.");return}
-    const index=Number(selection)-1;
-    if(!Number.isInteger(index)||index<0||index>=choices.length)throw new Error("Invalid account selection. Reconnect and enter one of the listed numbers.");
-    const chosen=choices[index];
+    const chosen=await autoTradeChooseAccount(choices);
+    if(!chosen){autoTradeStatus("DISCONNECTED");autoTradeLog("Account selection cancelled.");return}
     autoTradeLog("Requesting a short-lived connection URL for "+chosen.label+"…");
     const otpResponse=await fetch("https://api.derivws.com/trading/v1/options/accounts/"+encodeURIComponent(chosen.id)+"/otp",{method:"POST",headers});
     let otpPayload={};try{otpPayload=await otpResponse.json()}catch{}
