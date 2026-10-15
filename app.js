@@ -546,7 +546,7 @@ function setSignalValidationForecast(engine,target,signal,tickCount,confidence,e
 }
 function processSignalValidationTick(digit,quote,previousQuote){
   const sv=state.signalValidation,snap=sv.snapshot;sv.snapshot=null;
-  if(!snap||!snap.active||snap.market!==state.symbol||snap.tickCount!==state.liveTickSequence-1)return;
+  if(!snap||!snap.active||snap.market!==state.symbol||snap.engine!==state.engine||snap.tickCount!==state.liveTickSequence-1)return;
   let hit=false;
   if(snap.engine==="overunder")hit=snap.side==="OVER"?digit>snap.selectedDigit:digit<snap.selectedDigit;
   else if(snap.engine==="evenodd")hit=(digit%2===0?"EVEN":"ODD")===snap.target;
