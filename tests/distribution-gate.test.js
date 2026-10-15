@@ -426,7 +426,7 @@ test('Rise/Fall renderer only activates entry validation for SIGNAL or STRONG SI
   const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
   assert.match(source, /const rawEntry=riseFallEntry\(prices,a\)/);
-  assert.ok(source.includes('setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,n'));
+  assert.ok(source.includes('setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,state.liveTickSequence'));
   const validationStart = appSource.indexOf('function setOtherValidationForecast');
   const validationEnd = appSource.indexOf('\nfunction ', validationStart + 10);
   assert.match(appSource.slice(validationStart, validationEnd), /const active=\(signal==="SIGNAL"\|\|signal==="STRONG SIGNAL"\)&&hasEntry/);
