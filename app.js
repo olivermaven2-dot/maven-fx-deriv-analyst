@@ -1590,7 +1590,7 @@ function renderSubscribedMarketStatus(mode="switching"){
 
 /* Auto Trade: separate authenticated trading socket; never shares the public tick socket. */
 const autoTrade={
-  socket:null,authorized:false,account:null,enabled:false,speedMode:"STANDARD",realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
+  socket:null,tradingHeartbeatTimer:null,authorized:false,account:null,enabled:false,speedMode:"STANDARD",realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,nextEntryAllowedAt:0,entryCooldownMs:5000,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,recoverySide1:"DEFAULT",recoverySide2:"DEFAULT",
   activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,fastTickQueue:[],fastTickQueueLimit:500,fastTickQueueStaleMs:3000,fastTickQueueDrainActive:false,logLines:[],lastManualBlockReason:"",lastManualLoggedReason:"",demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
@@ -1958,6 +1958,7 @@ async function autoTradeConnect(){
   const appId="34Fh3HjvIt4cTAcccHVi2";
   if($("autoTradeRemember").checked){try{localStorage.setItem("mavenFxDerivApiToken",token)}catch{autoTradeLog("Could not save token in this browser; connect for this session only.")}}
   else{try{localStorage.removeItem("mavenFxDerivApiToken")}catch{}}
+  if(autoTrade.tradingHeartbeatTimer){clearInterval(autoTrade.tradingHeartbeatTimer);autoTrade.tradingHeartbeatTimer=null}
   if(autoTrade.socket){try{autoTrade.socket.onclose=null;autoTrade.socket.onerror=null;autoTrade.socket.close()}catch{}}
   autoTrade.enabled=false;autoTrade.authorized=false;autoTrade.account=null;autoTrade.requests={};
   autoTradeStatus("AUTHENTICATING");
@@ -1998,13 +1999,20 @@ async function autoTradeConnect(){
       autoTrade.authorized=true;autoTradeStatus("CONNECTED");
       $("autoTradeToken").value="";
       autoTradeLog("Authenticated trading connection opened · "+chosen.label+".");
+      // Keep the separate trading socket alive even while the bot is waiting for an entry digit.
+      // This heartbeat does not touch the analysis WebSocket or initiate any trade.
+      if(autoTrade.tradingHeartbeatTimer)clearInterval(autoTrade.tradingHeartbeatTimer);
+      autoTrade.tradingHeartbeatTimer=setInterval(()=>{
+        if(autoTrade.socket!==ws||ws.readyState!==WebSocket.OPEN){clearInterval(autoTrade.tradingHeartbeatTimer);autoTrade.tradingHeartbeatTimer=null;return}
+        try{ws.send(JSON.stringify({ping:1}))}catch(e){autoTradeLog("Trading heartbeat send failed: "+(e.message||e));try{ws.close()}catch{}}
+      },15000);
       if(!chosen.demo)autoTradeLog("REAL account selected. Trading remains locked until the in-panel TRADE REAL confirmation is completed.");
       try{autoTradeReq({balance:1},"connection_test");autoTradeLog("Checking authenticated account response (no trade will be placed)…")}catch(e){autoTradeLog("Connection test could not be sent: "+(e.message||e))}
       autoTradeRender();
     };
     ws.onmessage=e=>{try{autoTradeHandleMessage(JSON.parse(e.data))}catch(err){autoTradeLog("Trading response handling error: "+(err.message||err))}};
     ws.onerror=()=>{if(!settled){clearTimeout(timeout);settled=true;autoTrade.authorized=false;autoTradeStatus("CONNECTION FAILED");autoTradeLog("Authenticated WebSocket failed to open. Check network access and reconnect.")}else autoTradeLog("Trading WebSocket reported a network error.")};
-    ws.onclose=()=>{clearTimeout(timeout);if(autoTrade.socket===ws){autoTrade.authorized=false;if(autoTrade.enabled)autoTradePause("trading connection closed");autoTradeStatus("DISCONNECTED");autoTradeRender();autoTradeLog("Trading WebSocket closed. Reconnect before starting the bot.")}};
+    ws.onclose=()=>{clearTimeout(timeout);if(autoTrade.tradingHeartbeatTimer){clearInterval(autoTrade.tradingHeartbeatTimer);autoTrade.tradingHeartbeatTimer=null}if(autoTrade.socket===ws){autoTrade.authorized=false;if(autoTrade.enabled)autoTradePause("trading connection closed");autoTradeStatus("DISCONNECTED");autoTradeRender();autoTradeLog("Trading WebSocket closed. Reconnect before starting the bot.")}};
   }catch(e){
     autoTrade.authorized=false;autoTrade.account=null;autoTradeStatus("CONNECTION FAILED");
     autoTradeLog("PAT connection failed: "+(e.message||e));
@@ -2012,6 +2020,7 @@ async function autoTradeConnect(){
   }
 }
 function autoTradeDisconnect(){
+  if(autoTrade.tradingHeartbeatTimer){clearInterval(autoTrade.tradingHeartbeatTimer);autoTrade.tradingHeartbeatTimer=null}
   autoTradePause("manual disconnect");autoTrade.authorized=false;autoTrade.account=null;
   if(autoTrade.socket){try{autoTrade.socket.close()}catch{}autoTrade.socket=null}
   autoTradeStatus("DISCONNECTED");autoTradeRender();autoTradeLog("Disconnected. Any already-purchased contract may still settle on Deriv.");
