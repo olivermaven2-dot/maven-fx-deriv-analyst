@@ -106,7 +106,7 @@ test('distribution failure forces Final Signal to AVOID in the existing evidence
       cluster: .5, streak: 2, transitions: 10, transitionRate: .6
     });
     const ouRate = () => .5;
-    const mavenAIDecisionLayer = (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,reason:"test harness"});
+    const mavenAIDecisionLayer = (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,adjustedAlignment:alignment,adjustedEvidence:Number(evidence)||0,reason:"test harness"});
     ${gateSource}
     ${evidenceSource}
     overUnderEvidence
@@ -128,7 +128,7 @@ test('complementary probability conflict still blocks a distribution-passing set
       cluster: .5, streak: 2, transitions: 10, transitionRate: .6
     });
     const ouRate = (d, digit, side) => digit === 7 && side === 'UNDER' ? .7 : .5;
-    const mavenAIDecisionLayer = (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,reason:"test harness"});
+    const mavenAIDecisionLayer = (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,adjustedAlignment:alignment,adjustedEvidence:Number(evidence)||0,reason:"test harness"});
     ${gateSource}
     ${evidenceSource}
     overUnderEvidence
@@ -217,7 +217,7 @@ test('complementary Over/Under digit mapping is symmetric for all five pairs', (
       cluster: .5, streak: 2, transitions: 10, transitionRate: .6
     });
     const ouRate = () => .5;
-    const mavenAIDecisionLayer = (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,reason:"test harness"});
+    const mavenAIDecisionLayer = (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,adjustedAlignment:alignment,adjustedEvidence:Number(evidence)||0,reason:"test harness"});
     ${gateSource}
     ${evidenceSource}
     overUnderEvidence
@@ -262,7 +262,7 @@ test('Over/Under validation scores only a candidate triggered immediately after 
     const state = {
       engine: 'overunder', symbol: 'R_100', selectedDigit: 2, selectedSide: 'OVER',
       ticks: Array(100).fill({ quote: 100 }), validationDirty: false,
-      ouEntrySnapshot: { key: 'R_100|2|OVER', tickCount, active: true, digits: [4], validationDigits: [4], confidence: .8 },
+      ouEntrySnapshot: { key: 'R_100|2|OVER', tickCount: ${tickCount}, active: true, digits: [4], validationDigits: [4], confidence: .8 },
       ouValidation: { pending: [], lastTrigger: '' }, ouValidationBook: {}
     };
     const resetOUValidationIfNeeded = () => {};
@@ -317,7 +317,7 @@ test('Even/Odd waits for at least 100 observed digits before issuing a signal', 
   assert.notEqual(start, -1, 'parityStats must exist');
   const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
-  const run = vm.runInNewContext(source + '\nparityStats');
+  const run = vm.runInNewContext(source + '\nparityStats', {mavenAIDecisionLayer:(engine,baseSignal,evidence,alignment,conflict,hardGate,sample)=>({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,adjustedAlignment:alignment,adjustedEvidence:Number(evidence)||0,reason:'test harness'})});
   const result = run(Array(99).fill(2), 'EVEN');
   assert.equal(result.signal, 'WAIT');
 });
