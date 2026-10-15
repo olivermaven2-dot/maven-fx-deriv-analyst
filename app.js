@@ -1748,9 +1748,10 @@ function autoTradeStart(){
   if(!autoTradeCanStart()){autoTradeLog("Start blocked: connect an account; real accounts additionally require the checkbox and exact phrase TRADE REAL.");autoTradeRender();return}
   const stake=Number($("autoTradeStake").value),mg=Number($("autoTradeMartingale").value),tp=Number($("autoTradeTP").value),sl=Number($("autoTradeSL").value);
   if(!(stake>=0.35&&stake<=100&&mg>=1&&mg<=10&&tp>0&&sl>0)){autoTradeLog("Invalid risk settings. Stake must be 0.35–100, multiplier 1–10, and take-profit/stop-loss must be positive.");return}
-  const recoveryEnabled=$("autoTradeRecoveryEnabled").checked;
   const recoveryMode=$("autoTradeRecoveryMode")?.value||"SMART_NET";
   if(!["SMART_NET","CLASSIC"].includes(recoveryMode)){autoTradeLog("Choose a valid recovery mode.");return}
+  // Smart Net Recovery is always active; the checkbox only enables Classic Recovery.
+  const recoveryEnabled=recoveryMode==="SMART_NET"||$("autoTradeRecoveryEnabled").checked;
   const manualEntriesEnabled=$("autoTradeManualEntriesEnabled").checked;
   const manualRaw1=$("autoTradeManualDigit1").value,manualRaw2=$("autoTradeManualDigit2").value;
   const manualDigit1=Number(manualRaw1),manualDigit2=Number(manualRaw2);
@@ -1950,14 +1951,10 @@ function autoTradeHandleMessage(d){
       runFinished=true;
       if(autoTrade.runSettled===1){
         const pairNet=autoTrade.recoveryPairProfit;
-        if(autoTrade.recoveryEnabled){
-          autoTrade.recoveryBalance=Number(Math.max(0,autoTrade.recoveryBalance-pairNet).toFixed(2));
-          autoTrade.recoveryPhase=autoTrade.recoveryBalance>0?1:0;
-          autoTradeLog("TWO-RUN NET RESULT · "+(pairNet>=0?"+":"")+pairNet.toFixed(2)+" "+autoTrade.currency+" · outstanding recovery "+autoTrade.recoveryBalance.toFixed(2)+" "+autoTrade.currency+". "+(autoTrade.recoveryBalance>0?"Wait for a fresh qualified entry digit; next pair stays at base stake.":"Recovery balance cleared; normal entries continue."));
-        }else{
-          autoTrade.recoveryBalance=0;autoTrade.recoveryPhase=0;
-          autoTradeLog("TWO-RUN NET RESULT · "+(pairNet>=0?"+":"")+pairNet.toFixed(2)+" "+autoTrade.currency+" · recovery disabled; no recovery balance carried forward.");
-        }
+        // Smart Net is unconditional in SMART_NET mode, regardless of the Classic toggle.
+        autoTrade.recoveryBalance=Number(Math.max(0,autoTrade.recoveryBalance-pairNet).toFixed(2));
+        autoTrade.recoveryPhase=autoTrade.recoveryBalance>0?1:0;
+        autoTradeLog("TWO-RUN NET RESULT · "+(pairNet>=0?"+":"")+pairNet.toFixed(2)+" "+autoTrade.currency+" · outstanding Smart Net recovery "+autoTrade.recoveryBalance.toFixed(2)+" "+autoTrade.currency+". "+(autoTrade.recoveryBalance>0?"Wait for a fresh qualified entry digit; next pair stays at base stake.":"Smart Net balance cleared; normal entries continue."));
         autoTrade.recoveryPairProfit=0;
       }else{
         autoTradeLog((profit>=0?"RUN 1 CONTRACT SETTLED WIN":"RUN 1 CONTRACT SETTLED LOSS")+" · "+profit.toFixed(2)+" "+autoTrade.currency+" · completing the second contract before calculating the pair result.");
@@ -2129,7 +2126,10 @@ function autoTradeDisconnect(){
   const savedToken=(()=>{try{return localStorage.getItem("mavenFxDerivApiToken")||""}catch{return ""}})();
   if(savedToken){$("autoTradeToken").value=savedToken;$("autoTradeRemember").checked=true}
   $("autoTradeRemember").addEventListener("change",()=>{if(!$("autoTradeRemember").checked){try{localStorage.removeItem("mavenFxDerivApiToken")}catch{}}});
-  $("autoTradeRecoveryEnabled").addEventListener("change",()=>{$("autoTradeRecoveryFields").hidden=!$("autoTradeRecoveryEnabled").checked});
+  const syncRecoveryFields=()=>{$("autoTradeRecoveryFields").hidden=!(($("autoTradeRecoveryMode")?.value||"SMART_NET")==="CLASSIC"&&$("autoTradeRecoveryEnabled").checked)};
+  $("autoTradeRecoveryEnabled").addEventListener("change",syncRecoveryFields);
+  $("autoTradeRecoveryMode").addEventListener("change",syncRecoveryFields);
+  syncRecoveryFields();
   $("autoTradeManualEntriesEnabled").addEventListener("change",()=>{$("autoTradeManualEntryFields").hidden=!$("autoTradeManualEntriesEnabled").checked;autoTradeRender()});
   ["autoTradeManualDigit1","autoTradeManualDigit2"].forEach(id=>$(id).addEventListener("input",()=>autoTradeRender()));
   $("autoTradeRecoveryDigit1").value=String(state.selectedDigit);
