@@ -1591,7 +1591,7 @@ function renderSubscribedMarketStatus(mode="switching"){
 /* Auto Trade: separate authenticated trading socket; never shares the public tick socket. */
 const autoTrade={
   socket:null,authorized:false,account:null,enabled:false,speedMode:"STANDARD",realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
-  nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
+  nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,nextEntryAllowedAt:0,entryCooldownMs:5000,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
   recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,recoverySide1:"DEFAULT",recoverySide2:"DEFAULT",
   activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,fastTickQueue:[],fastTickQueueLimit:500,fastTickQueueStaleMs:3000,fastTickQueueDrainActive:false,logLines:[],lastManualBlockReason:"",lastManualLoggedReason:"",demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
 };
@@ -1736,6 +1736,9 @@ function processAutoTradeTick(digit){
   // Lock one entry sequence until its contracts settle and the sequence is explicitly completed.
   // Never let a fresh tick overwrite runSymbol/runSettled while a quote or contract is in flight.
   if(autoTrade.runSymbol||Object.keys(autoTrade.pendingBuyQuotes).length||Object.keys(autoTrade.activeContracts).length)return;
+  // After a full two-run cycle, enforce a short cooldown. Ticks during the cooldown are
+  // observed but cannot start trades; only a new live entry-digit hit after the cooldown can.
+  if(Date.now()<autoTrade.nextEntryAllowedAt){autoTrade.lastDigit=digit;return}
   const manualEntriesEnabled=!!$("autoTradeManualEntriesEnabled")?.checked;
   const candidates=autoTradeEntrySelection();
   if(!candidates.includes(digit)){
@@ -1910,7 +1913,9 @@ function autoTradeHandleMessage(d){
         }else{
           autoTrade.runSettled=2;
           autoTrade.runSymbol="";autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;autoTrade.armed=true;
-          autoTradeLog("RUN 2 COMPLETE · two-run entry finished. Waiting for a fresh analysis-approved entry trigger.");
+          autoTrade.nextEntryAllowedAt=Date.now()+autoTrade.entryCooldownMs;
+          autoTrade.lastDigit=state.digits.length?state.digits[state.digits.length-1]:autoTrade.lastDigit;
+          autoTradeLog("RUN 2 COMPLETE · two-run entry finished. Cooling down for 5 seconds; then waiting for a fresh live entry-digit hit.");
         }
       }
       if(autoTrade.runSettled<2){
