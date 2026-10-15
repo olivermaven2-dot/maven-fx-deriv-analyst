@@ -276,7 +276,7 @@ test('Over/Under validation scores only a candidate triggered immediately after 
   const makeHarness = tickCount => `
     const state = {
       engine: 'overunder', symbol: 'R_100', selectedDigit: 2, selectedSide: 'OVER',
-      ticks: Array(100).fill({ quote: 100 }), validationDirty: false,
+      ticks: Array(100).fill({ quote: 100 }), liveTickSequence: 100, validationDirty: false,
       ouEntrySnapshot: { key: 'R_100|2|OVER', tickCount: ${tickCount}, active: true, digits: [4], validationDigits: [4], confidence: .8 },
       ouValidation: { pending: [], lastTrigger: '' }, ouValidationBook: {}
     };
@@ -290,6 +290,34 @@ test('Over/Under validation scores only a candidate triggered immediately after 
   const stale = vm.runInNewContext(makeHarness(98)); stale.run(4);
   assert.equal(fresh.state.ouValidation.pending.length, 1);
   assert.equal(stale.state.ouValidation.pending.length, 0);
+});
+
+test('signal validation uses the monotonic live sequence after the tick buffer is full', () => {
+  const start = appSource.indexOf('function processSignalValidationTick');
+  assert.notEqual(start, -1);
+  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const makeHarness = snapshotTick => `
+    const state = {
+      symbol: 'R_100', liveTickSequence: 5001,
+      ticks: Array(2000).fill({quote: 100}), selectedDigit: 2, selectedSide: 'OVER',
+      signalValidation: {
+        snapshot: {active: true, market: 'R_100', engine: 'overunder', target: 'OVER 2', side: 'OVER', selectedDigit: 2, tickCount: ${snapshotTick}, confidence: .8},
+        book: {}
+      }, validationDirty: false
+    };
+    const signalValidationKey = (engine,target,market) => market+'|'+engine+'|'+target;
+    ${source}
+    ({run:processSignalValidationTick,state})
+  `;
+  const fresh = vm.runInNewContext(makeHarness(5000));
+  fresh.run(4, 101, 100);
+  const rec = fresh.state.signalValidation.book['R_100|overunder|OVER 2'];
+  assert.equal(rec.n, 1);
+  assert.equal(rec.hits, 1);
+  const stale = vm.runInNewContext(makeHarness(4999));
+  stale.run(4, 101, 100);
+  assert.equal(Object.keys(stale.state.signalValidation.book).length, 0);
 });
 
 test('bot entry validation refuses an incomplete or duplicated entry pair', () => {
