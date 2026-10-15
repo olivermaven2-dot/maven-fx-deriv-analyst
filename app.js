@@ -1606,7 +1606,7 @@ function renderSubscribedMarketStatus(mode="switching"){
 const autoTrade={
   socket:null,tradingHeartbeatTimer:null,authorized:false,account:null,availableAccounts:[],accountBalances:{},enabled:false,speedMode:"STANDARD",realConfirmed:false,stake:0.35,martingale:2,takeProfit:2,stopLoss:3,
   nextStake:0.35,sessionProfit:0,wins:0,losses:0,runRemaining:0,nextEntryAllowedAt:0,entryCooldownMs:5000,runSymbol:"",runDigit:null,runSide:"OVER",runSelectedDigit:2,armed:true,lastDigit:null,
-  recoveryEnabled:false,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,recoverySide1:"DEFAULT",recoverySide2:"DEFAULT",
+  recoveryEnabled:false,recoveryMode:"SMART_NET",recoveryBalance:0,recoveryPairProfit:0,recoveryPhase:0,recoveryDigit1:2,recoveryDigit2:5,recoverySide1:"DEFAULT",recoverySide2:"DEFAULT",
   activeContracts:{},settled:new Set(),requests:{},req:1000,currency:"",startedAt:0,runSettled:0,waitingForFreshData:false,fastTickQueue:[],fastTickQueueLimit:500,fastTickQueueStaleMs:3000,fastTickQueueDrainActive:false,logLines:[],lastManualBlockReason:"",lastManualLoggedReason:"",demoTestActive:false,demoTestContractId:null,demoTestSide:"OVER",demoTestDigit:2,demoTestSymbol:"",demoTestPendingParameters:null,pendingBuyQuotes:{}
 };
 function autoTradeLog(message){
@@ -1749,6 +1749,8 @@ function autoTradeStart(){
   const stake=Number($("autoTradeStake").value),mg=Number($("autoTradeMartingale").value),tp=Number($("autoTradeTP").value),sl=Number($("autoTradeSL").value);
   if(!(stake>=0.35&&stake<=100&&mg>=1&&mg<=10&&tp>0&&sl>0)){autoTradeLog("Invalid risk settings. Stake must be 0.35–100, multiplier 1–10, and take-profit/stop-loss must be positive.");return}
   const recoveryEnabled=$("autoTradeRecoveryEnabled").checked;
+  const recoveryMode=$("autoTradeRecoveryMode")?.value||"SMART_NET";
+  if(!["SMART_NET","CLASSIC"].includes(recoveryMode)){autoTradeLog("Choose a valid recovery mode.");return}
   const manualEntriesEnabled=$("autoTradeManualEntriesEnabled").checked;
   const manualRaw1=$("autoTradeManualDigit1").value,manualRaw2=$("autoTradeManualDigit2").value;
   const manualDigit1=Number(manualRaw1),manualDigit2=Number(manualRaw2);
@@ -1758,9 +1760,9 @@ function autoTradeStart(){
   if(!Number.isInteger(digit1)||digit1<0||digit1>9||!Number.isInteger(digit2)||digit2<0||digit2>9){autoTradeLog("Recovery digits must be whole numbers from 0 to 9.");return}
   if(!["DEFAULT","OVER","UNDER"].includes(recoverySide1)||!["DEFAULT","OVER","UNDER"].includes(recoverySide2)){autoTradeLog("Choose a valid side for each recovery attempt.");return}
   autoTrade.stake=stake;autoTrade.martingale=mg;autoTrade.takeProfit=tp;autoTrade.stopLoss=sl;autoTrade.nextStake=stake;
-  autoTrade.recoveryEnabled=recoveryEnabled;autoTrade.recoveryPhase=0;autoTrade.recoveryDigit1=digit1;autoTrade.recoveryDigit2=digit2;autoTrade.recoverySide1=recoverySide1;autoTrade.recoverySide2=recoverySide2;
+  autoTrade.recoveryEnabled=recoveryEnabled;autoTrade.recoveryMode=recoveryMode;autoTrade.recoveryBalance=0;autoTrade.recoveryPairProfit=0;autoTrade.recoveryPhase=0;autoTrade.recoveryDigit1=digit1;autoTrade.recoveryDigit2=digit2;autoTrade.recoverySide1=recoverySide1;autoTrade.recoverySide2=recoverySide2;
   autoTrade.sessionProfit=0;autoTrade.wins=0;autoTrade.losses=0;autoTrade.settled=new Set();autoTrade.enabled=true;autoTrade.armed=true;autoTrade.lastDigit=null;autoTrade.startedAt=Date.now();
-  autoTradeLog("Bot started on "+state.symbol+" · "+state.selectedSide+" "+state.selectedDigit+" · entry digits "+(manualEntriesEnabled?"MANUAL":"AUTOMATIC")+" · stake "+stake+" "+autoTrade.currency+" · recovery "+(recoveryEnabled?"ON":"OFF")+".");
+  autoTradeLog("Bot started on "+state.symbol+" · "+state.selectedSide+" "+state.selectedDigit+" · entry digits "+(manualEntriesEnabled?"MANUAL":"AUTOMATIC")+" · stake "+stake+" "+autoTrade.currency+" · recovery "+(recoveryEnabled?"ON":"OFF")+" · mode "+(recoveryMode==="SMART_NET"?"SMART NET (base stake, combined P/L)":"CLASSIC (multiplier and custom recovery digits)")+".");
   autoTradeRender();
 }
 function autoTradeReadyToEnter(digit){
@@ -1806,7 +1808,7 @@ function processAutoTradeTick(digit){
   if(!autoTrade.armed){autoTrade.lastDigit=digit;return}
   const check=autoTradeReadyToEnter(digit);
   if(!check.ok){autoTradeLog("Entry blocked · "+check.reason);autoTrade.lastDigit=digit;return}
-  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=1;autoTrade.runSettled=0;autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;autoTrade.runSide=state.selectedSide;autoTrade.runSelectedDigit=state.selectedDigit;autoTrade.recoveryPhase=0;
+  autoTrade.armed=false;autoTrade.lastDigit=digit;autoTrade.runRemaining=1;autoTrade.runSettled=0;autoTrade.runSymbol=state.symbol;autoTrade.runDigit=digit;autoTrade.runSide=state.selectedSide;autoTrade.runSelectedDigit=state.selectedDigit;if(autoTrade.recoveryMode!=="SMART_NET")autoTrade.recoveryPhase=0;autoTrade.recoveryPairProfit=0;
   autoTradeLog("ENTRY TRIGGER · "+state.symbol+" digit "+digit+" · "+state.selectedSide+" "+state.selectedDigit+" · starting the two-run entry cycle at base stake.");
   autoTradePlaceNext();
 }
@@ -1814,15 +1816,16 @@ function autoTradePlaceNext(){
   if(!autoTrade.enabled||!autoTrade.authorized||!autoTrade.runRemaining)return;
   if(state.symbol!==autoTrade.runSymbol){autoTradePause("selected market changed");return}
   const isRecovery=autoTrade.recoveryPhase>0;
+  const isSmartRecovery=autoTrade.recoveryMode==="SMART_NET"&&autoTrade.recoveryEnabled&&autoTrade.recoveryBalance>0;
   if(!isRecovery&&(state.selectedSide!==autoTrade.runSide||state.selectedDigit!==autoTrade.runSelectedDigit)){autoTradePause("selected Over/Under setup changed");return}
   if(!state.connected||Date.now()-state.lastTickAt>15000){if(!autoTrade.waitingForFreshData)autoTradeLog("LIVE DATA STALE · holding the pending "+(isRecovery?"RECOVERY "+autoTrade.recoveryPhase:"contract")+" until fresh ticks resume; no new contract submitted.");autoTrade.waitingForFreshData=true;return}
   // Validate the live signal only before run 1. Run 2 belongs to the already-approved entry trigger and must not be cancelled just because the signal changes after run 1 settles.
   if(!isRecovery&&autoTrade.runSettled===0&&(state.engine!=="overunder"||state.ouSignalSnapshot?.tickCount!==state.digits.length||!state.ouSignalSnapshot?.active||state.ouSignalSnapshot.key!==ouValidationKey())){autoTradePause("Over/Under signal no longer qualifies before the first contract");return}
   if(autoTrade.sessionProfit>=autoTrade.takeProfit){autoTradePause("take-profit limit reached");return}
   if(autoTrade.sessionProfit<=-autoTrade.stopLoss){autoTradePause("stop-loss limit reached");return}
-  const stake=Math.max(0.35,Math.min(100,Number(autoTrade.nextStake)||autoTrade.stake));
-  const side=isRecovery?(autoTrade.recoveryPhase===1?(autoTrade.recoverySide1==="DEFAULT"?autoTrade.runSide:autoTrade.recoverySide1):(autoTrade.recoverySide2==="DEFAULT"?(autoTrade.runSide==="OVER"?"UNDER":"OVER"):autoTrade.recoverySide2)):autoTrade.runSide;
-  const digit=isRecovery?(autoTrade.recoveryPhase===1?autoTrade.recoveryDigit1:autoTrade.recoveryDigit2):autoTrade.runSelectedDigit;
+  const stake=Math.max(0.35,Math.min(100,autoTrade.recoveryMode==="SMART_NET"?autoTrade.stake:(Number(autoTrade.nextStake)||autoTrade.stake)));
+  const side=autoTrade.recoveryMode==="SMART_NET"?autoTrade.runSide:(isRecovery?(autoTrade.recoveryPhase===1?(autoTrade.recoverySide1==="DEFAULT"?autoTrade.runSide:autoTrade.recoverySide1):(autoTrade.recoverySide2==="DEFAULT"?(autoTrade.runSide==="OVER"?"UNDER":"OVER"):autoTrade.recoverySide2)):autoTrade.runSide);
+  const digit=autoTrade.recoveryMode==="SMART_NET"?autoTrade.runSelectedDigit:(isRecovery?(autoTrade.recoveryPhase===1?autoTrade.recoveryDigit1:autoTrade.recoveryDigit2):autoTrade.runSelectedDigit);
   const parameters={amount:Number(stake.toFixed(2)),basis:"stake",contract_type:side==="OVER"?"DIGITOVER":"DIGITUNDER",currency:autoTrade.currency,duration:1,duration_unit:"t",underlying_symbol:autoTrade.runSymbol,barrier:String(digit)};
   try{const reqId=autoTradeReq({proposal:1,...parameters},"proposal");autoTrade.pendingBuyQuotes[reqId]=parameters;autoTradeLog("Requesting "+(isRecovery?"RECOVERY "+autoTrade.recoveryPhase:"BASE")+" · "+side+" "+digit+" · stake "+stake.toFixed(2)+" "+autoTrade.currency+".")}
   catch(e){autoTradePause("proposal request failed: "+e.message)}
@@ -1938,15 +1941,34 @@ function autoTradeHandleMessage(d){
     if(c.subscription?.id){try{autoTradeReq({forget:c.subscription.id},"forget")}catch{}}
     delete autoTrade.activeContracts[id];
     let runFinished=false;
-    if(profit>=0){
+    if(autoTrade.recoveryMode==="SMART_NET"){
+      // Smart Net mode always completes both contracts for the same trigger at base stake.
+      // Only the combined settled P/L of the pair changes the outstanding recovery balance.
+      if(profit>=0){autoTrade.wins++}else{autoTrade.losses++}
+      autoTrade.recoveryPairProfit=Number((autoTrade.recoveryPairProfit+profit).toFixed(2));
+      autoTrade.nextStake=autoTrade.stake;
+      runFinished=true;
+      if(autoTrade.runSettled===1){
+        const pairNet=autoTrade.recoveryPairProfit;
+        if(autoTrade.recoveryEnabled){
+          autoTrade.recoveryBalance=Number(Math.max(0,autoTrade.recoveryBalance-pairNet).toFixed(2));
+          autoTrade.recoveryPhase=autoTrade.recoveryBalance>0?1:0;
+          autoTradeLog("TWO-RUN NET RESULT · "+(pairNet>=0?"+":"")+pairNet.toFixed(2)+" "+autoTrade.currency+" · outstanding recovery "+autoTrade.recoveryBalance.toFixed(2)+" "+autoTrade.currency+". "+(autoTrade.recoveryBalance>0?"Wait for a fresh qualified entry digit; next pair stays at base stake.":"Recovery balance cleared; normal entries continue."));
+        }else{
+          autoTrade.recoveryBalance=0;autoTrade.recoveryPhase=0;
+          autoTradeLog("TWO-RUN NET RESULT · "+(pairNet>=0?"+":"")+pairNet.toFixed(2)+" "+autoTrade.currency+" · recovery disabled; no recovery balance carried forward.");
+        }
+        autoTrade.recoveryPairProfit=0;
+      }else{
+        autoTradeLog((profit>=0?"RUN 1 CONTRACT SETTLED WIN":"RUN 1 CONTRACT SETTLED LOSS")+" · "+profit.toFixed(2)+" "+autoTrade.currency+" · completing the second contract before calculating the pair result.");
+      }
+    }else if(profit>=0){
       autoTrade.wins++;autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;
       autoTradeLog("SETTLED WIN · "+profit.toFixed(2)+" "+autoTrade.currency+". Current run's recovery progression reset.");
       runFinished=true;
     }else{
       autoTrade.losses++;
       if(!autoTrade.recoveryEnabled){
-        // Recovery OFF: a loss ends this attempt, but the current entry trigger still receives its second base-stake run.
-        // The bot pauses only when the session take-profit or stop-loss is reached; otherwise it waits for a fresh trigger after run 2.
         autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;runFinished=true;
         autoTradeLog("SETTLED LOSS · "+profit.toFixed(2)+" "+autoTrade.currency+" · recovery OFF; this attempt is finished at base stake. Continuing the two-run entry cycle unless a session limit is reached.");
       }
@@ -1956,8 +1978,7 @@ function autoTradeHandleMessage(d){
         autoTradeLog((wasRecovery===0?"BASE ATTEMPT LOST":("RECOVERY "+wasRecovery+" LOST"))+" · next attempt is RECOVERY "+autoTrade.recoveryPhase+" at "+autoTrade.nextStake.toFixed(2)+" "+autoTrade.currency+".");
       }else{
         autoTradeLog("RECOVERY 2 LOST · this run's recovery attempts are exhausted.");
-        autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;
-        runFinished=true;
+        autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;runFinished=true;
       }
     }
     if(autoTrade.sessionProfit>=autoTrade.takeProfit){autoTradePause("take-profit limit reached");return}
@@ -1970,7 +1991,7 @@ function autoTradeHandleMessage(d){
           autoTradeLog("RUN 1 COMPLETE · starting RUN 2 at the base stake for the same entry trigger.");
         }else{
           autoTrade.runSettled=2;
-          autoTrade.runSymbol="";autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;autoTrade.armed=true;
+          autoTrade.runSymbol="";if(autoTrade.recoveryMode!=="SMART_NET")autoTrade.recoveryPhase=0;autoTrade.nextStake=autoTrade.stake;autoTrade.recoveryPairProfit=0;autoTrade.armed=true;
           autoTrade.nextEntryAllowedAt=Date.now()+autoTrade.entryCooldownMs;
           autoTrade.lastDigit=state.digits.length?state.digits[state.digits.length-1]:autoTrade.lastDigit;
           autoTradeLog("RUN 2 COMPLETE · two-run entry finished. Cooling down for 5 seconds; then waiting for a fresh live entry-digit hit.");
