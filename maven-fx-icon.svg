@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Maven FX</title>
+  <desc id="desc">Maven FX financial market analysis app icon</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#101d38"/><stop offset="1" stop-color="#07101f"/></linearGradient>
+    <linearGradient id="line" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#26d6c8"/><stop offset="1" stop-color="#58a6ff"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="104" fill="url(#bg)"/>
+  <rect x="20" y="20" width="472" height="472" rx="86" fill="none" stroke="#2b4266" stroke-width="3"/>
+  <path d="M78 287V136h36l59 82 59-82h36v151h-38V195l-57 76-57-76v92z" fill="#eaf4ff"/>
+  <path d="M283 289l49-62 39 25 70-95" fill="none" stroke="url(#line)" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M414 157h28v28" fill="none" stroke="#58a6ff" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M75 323h362" stroke="#304764" stroke-width="3"/>
+  <text x="256" y="382" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="47" font-weight="800" letter-spacing="2" fill="#ffffff">MAVEN FX</text>
+  <text x="256" y="422" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="17" font-weight="700" letter-spacing="5" fill="#66d9d0">DERIV ANALYST</text>
+</svg>
