@@ -37,7 +37,7 @@ function shouldRenderEngineForCurrentTick(){
   lastMobileEngineRenderAt=now;
   return true;
 }
-const state={socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],lastTickSignature:"",engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
+const state={totalTicks:0,socket:null,markets:[],symbol:"R_100",marketName:"R_100",pipSize:null,ticks:[],digits:[],lastTickSignature:"",engine:"overunder",selectedDigit:2,selectedSide:"OVER",selectedParity:"EVEN",selectedRiseFall:"RISE",connected:false,lastTickAt:0,reconnectTimer:null,reconnectDelay:1000,req:0,endpointIndex:0,connectTimer:null,marketStarted:false,lastMessage:"—",lastError:"—",ouValidation:{key:"",pending:[],completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}},lastTrigger:"—"},ouValidationBook:{},ouPayoutPercent:95,ouEntrySnapshot:null,ouSignalSnapshot:null,deepScanner:{data:{},historyRequests:{},subscribeRequests:{},subscriptions:{},enabled:true,autoLoaded:false,manualOverride:false,startedAt:0,lastScanAt:0,lastLoadedSymbol:"",lastLoadedScore:0,lastSetupKey:"",switchAfter:0}};
 
 const $=id=>document.getElementById(id);
 const statusBadge=$("statusBadge"),statusText=$("statusText"),marketSelect=$("marketSelect");
@@ -364,15 +364,16 @@ function recordOUValidationTrigger(digit){
   resetOUValidationIfNeeded();
   const snap=state.ouEntrySnapshot;
   if(!snap||!snap.active||snap.key!==ouValidationKey()||!snap.digits.includes(digit))return;
-  const signature=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|"+digit+"|"+state.ticks.length;
+  const signature=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|"+digit+"|"+(state.totalTicks||state.ticks.length);
   const key=ouValidationRecordKey(state.symbol,state.selectedDigit,state.selectedSide,digit);
   if(!state.ouValidationBook[key]){
     state.ouValidationBook[key]={market:state.symbol,selectedDigit:state.selectedDigit,side:state.selectedSide,candidate:digit,1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0},triggers:0,lastTriggerTick:0,lastUpdated:Date.now()};
   }
   const rec=state.ouValidationBook[key];
   // Avoid counting overlapping 1/2/3-tick outcomes as independent validation samples.
-  if(state.ticks.length-(rec.lastTriggerTick||0)<3)return;
-  rec.lastTriggerTick=state.ticks.length;
+  const tickSerial=state.totalTicks||state.ticks.length;
+  if(tickSerial-(rec.lastTriggerTick||0)<3)return;
+  rec.lastTriggerTick=tickSerial;
   rec.triggers++;
   state.ouValidation.pending.push({digit,candidate:digit,selectedDigit:state.selectedDigit,side:state.selectedSide,market:state.symbol,steps:0,hits:[],signature});
   state.ouValidation.lastTrigger="Entry digit "+digit+" triggered at tick "+state.ticks.length;
@@ -402,6 +403,7 @@ function receiveTick(t){
   const digit=digitFromQuote(quote,state.pipSize);if(!Number.isInteger(digit))return;
 
   state.lastTickSignature=signature;
+  state.totalTicks=(state.totalTicks||0)+1;
   state.ticks.push({quote:Number(quote),epoch});state.digits.push(digit);
   if(state.ticks.length>MAX_TICKS)state.ticks.shift();if(state.digits.length>MAX_TICKS)state.digits.shift();
   state.lastTickAt=Date.now();
