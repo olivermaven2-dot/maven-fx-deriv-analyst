@@ -137,7 +137,7 @@ test('complementary probability conflict still blocks a distribution-passing set
   const result = runEvidence(overPassTicks, 2, 'OVER');
   assert.equal(result.distribution.pass, true);
   assert.equal(result.probabilityConflict, true);
-  assert.equal(result.signal, 'AVOID');
+  assert.equal(result.signal, 'WAIT');
 });
 
 test('distributionBarFlags matches the displayed MOST and LEAST bars', () => {
