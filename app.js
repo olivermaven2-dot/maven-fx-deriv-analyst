@@ -367,9 +367,13 @@ function recordOUValidationTrigger(digit){
   const signature=state.symbol+"|"+state.selectedDigit+"|"+state.selectedSide+"|"+digit+"|"+state.ticks.length;
   const key=ouValidationRecordKey(state.symbol,state.selectedDigit,state.selectedSide,digit);
   if(!state.ouValidationBook[key]){
-    state.ouValidationBook[key]={market:state.symbol,selectedDigit:state.selectedDigit,side:state.selectedSide,candidate:digit,1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0},triggers:0,lastUpdated:Date.now()};
+    state.ouValidationBook[key]={market:state.symbol,selectedDigit:state.selectedDigit,side:state.selectedSide,candidate:digit,1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0},triggers:0,lastTriggerTick:0,lastUpdated:Date.now()};
   }
-  state.ouValidationBook[key].triggers++;
+  const rec=state.ouValidationBook[key];
+  // Avoid counting overlapping 1/2/3-tick outcomes as independent validation samples.
+  if(state.ticks.length-(rec.lastTriggerTick||0)<3)return;
+  rec.lastTriggerTick=state.ticks.length;
+  rec.triggers++;
   state.ouValidation.pending.push({digit,candidate:digit,selectedDigit:state.selectedDigit,side:state.selectedSide,market:state.symbol,steps:0,hits:[],signature});
   state.ouValidation.lastTrigger="Entry digit "+digit+" triggered at tick "+state.ticks.length;
 }
@@ -626,8 +630,8 @@ function overUnderEntry(d,selectedDigit,selectedSide){
     else if(c.r1>=.54)reason="Historical triggers show immediate reaction; longer continuation is less consistent.";
     else reason="Historical triggers show favorable 2-tick continuation despite weaker immediate reaction.";
     const outlook=c.conservativeRate>=c.baseline+.03?"ABOVE BASELINE IN SAMPLE":c.observedRate>=c.baseline-.02?"NEAR BASELINE IN SAMPLE":"BELOW BASELINE IN SAMPLE";
-    const observationText="Observed next-tick hit rate "+Math.round(c.r1*100)+"% ("+c.n1+" samples); observed 2-tick consecutive rate "+Math.round(c.r2*100)+"% ("+c.n2+" samples); conservative estimate "+Math.round(c.conservativeRate*100)+"% (95% Wilson lower-bound blend; not calibrated)";
-    return {digit:c.candidate,score,status,reason,evidence:c.total+" historical triggers; "+c.recentTotal+" recent triggers",prediction:outlook,predictedRate:c.observedRate,predictionConfidence:c.support,predictionText:observationText};
+    const observationText="Forward-observed next-tick hit rate "+Math.round(c.r1*100)+"% ("+c.n1+" outcomes); 2-tick consecutive rate "+Math.round(c.r2*100)+"% ("+c.n2+" outcomes). One-tick 95% Wilson lower bound: "+Math.round(c.oneTickLower*100)+"% (not a calibrated win probability).";
+    return {digit:c.candidate,score,status,reason,evidence:c.total+" historical triggers; "+c.recentTotal+" recent triggers",prediction:outlook,observedRate:c.r1,oneTickLower:c.oneTickLower,oneTickSamples:c.n1,predictionConfidence:c.support,predictionText:observationText};
   });
   return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.map(e=>"Digit "+e.digit+": rank "+e.score+"/100; "+e.predictionText).join(" • "),status:entries.length===2?"2 HISTORICAL CANDIDATES":"1 HISTORICAL CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason+" "+e.predictionText).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence+"; "+e.predictionText).join(" • "),entries};
 }
@@ -726,7 +730,7 @@ function panel(stateText,reason,entry,why,n){
 }
 function entryHtml(e){
   const cards=Array.isArray(e.entries)
-    ? '<div class="entry-candidates">'+e.entries.map(x=>'<div class="entry-candidate"><strong>'+esc(x.digit)+'</strong><span>SCORE '+esc(x.score)+'/100</span><small>'+esc(x.prediction||"PREDICTION")+' · '+esc(Math.round((x.predictedRate||0)*100))+'% estimate</small><small>Model confidence '+esc(x.predictionConfidence||0)+'%</small></div>').join("")+'</div>'
+    ? '<div class="entry-candidates">'+e.entries.map(x=>'<div class="entry-candidate"><strong>'+esc(x.digit)+'</strong><span>RANK '+esc(x.score)+'/100</span><small>'+esc(x.prediction||"HISTORICAL OUTLOOK")+'</small><small>Forward 1-tick hits '+esc(Math.round((x.observedRate||0)*100))+'% ('+esc(x.oneTickSamples||0)+' outcomes)</small><small>95% Wilson lower bound '+esc(Math.round((x.oneTickLower||0)*100))+'% · support '+esc(x.predictionConfidence||0)+'/100</small></div>').join("")+'</div>'
     : '<div class="entry-candidates"><div class="entry-candidate"><strong>'+esc(e.main||"NO ENTRY")+'</strong>'+(Number.isFinite(Number(e.score))&&e.score!==""?'<span>SCORE '+esc(Math.round(Number(e.score)))+'/100</span>':Number.isFinite(Number.parseFloat(e.confidence))&&Number.parseFloat(e.confidence)>0?'<span>SCORE '+esc(Math.round(Number.parseFloat(e.confidence)))+'/100</span>':'')+'</div></div>';
   return '<div class="entry"><div class="entry-head">ENTRY DIGITS</div>'+cards+'</div>';
 }
@@ -1202,6 +1206,17 @@ function autoTradeReadyToEnter(digit){
   if(risk.level==="UNKNOWN"||risk.level==="HIGH")return {ok:false,reason:risk.title};
   if(risk.level==="MODERATE"&&state.ouSignalSnapshot.signal!=="STRONG SIGNAL")return {ok:false,reason:"moderate spike risk requires STRONG SIGNAL"};
   if(!state.ouEntrySnapshot.digits.includes(digit))return {ok:false,reason:"digit is not a current Entry Engine candidate"};
+  // Real-money orders require independent forward evidence for this exact market/setup/entry digit.
+  // The evidence is a safety gate, not a claim that the signal is profitable.
+  if(autoTrade.account&&!autoTrade.account.is_virtual){
+    const key=ouValidationRecordKey(state.symbol,state.selectedDigit,state.selectedSide,digit);
+    const rec=state.ouValidationBook[key];
+    const outcomes=rec?.[1]?.n||0,hitRate=outcomes?(rec[1].hits/outcomes):0;
+    const lower=ouWilsonLowerBound(hitRate,outcomes);
+    const baseline=state.selectedSide==="OVER"?(9-state.selectedDigit)/10:state.selectedDigit/10;
+    if(outcomes<200)return {ok:false,reason:"REAL-MONEY SAFETY LOCK · need 200 separated forward 1-tick outcomes for this exact entry digit; current "+outcomes};
+    if(lower<baseline+.02)return {ok:false,reason:"REAL-MONEY SAFETY LOCK · 95% Wilson lower bound does not beat the uniform baseline by 2 points"};
+  }
   return {ok:true};
 }
 function processAutoTradeTick(digit){
