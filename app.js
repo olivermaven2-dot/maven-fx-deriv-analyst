@@ -688,18 +688,12 @@ function receiveTick(t){
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
   $("diagTicks").textContent=state.ticks.length;
-  const fastExecution=autoTrade.enabled&&autoTrade.speedMode==="FAST"&&state.engine==="overunder";
-  if(fastExecution){
-    // Preserve every real tick in FIFO order while a quote/contract or the two-run sequence is in flight.
-    autoTrade.fastTickQueue.push({digit,quote:Number(quote),epoch,receivedAt:Date.now()});
-    if(autoTrade.fastTickQueue.length>autoTrade.fastTickQueueLimit)autoTrade.fastTickQueue.shift();
-    if(shouldRenderEngineForCurrentTick())renderEngine();else renderOUValidationPanel();
-    autoTradeDrainFastTickQueue();
-    updateQuality();renderStream(true);
-  }else{
-    updateQuality();renderStream(true);
-    if(shouldRenderEngineForCurrentTick())renderEngine();else renderOUValidationPanel();
-    if(autoTrade.enabled&&state.engine==="overunder")processAutoTradeTick(digit);
+  updateQuality();renderStream(true);
+  if(shouldRenderEngineForCurrentTick())renderEngine();else renderOUValidationPanel();
+  if(autoTrade.enabled&&state.engine==="overunder"){
+    // FAST and Standard use the same live-tick entry checks. Never replay ticks received
+    // while a quote/contract or two-run cycle is busy; the next eligible live tick can trigger.
+    processAutoTradeTick(digit);
   }
 }
 function updateQuality(){
@@ -1691,8 +1685,8 @@ function autoTradeSetSpeedMode(mode,logChange=true){
   const button=$("autoTradeSpeedToggle");
   if(button){button.textContent=autoTrade.speedMode==="FAST"?"FAST EXECUTION: ON":"FAST EXECUTION: OFF";button.setAttribute("aria-pressed",autoTrade.speedMode==="FAST"?"true":"false");button.classList.toggle("fast-active",autoTrade.speedMode==="FAST");}
   if(autoTrade.speedMode!=="FAST"&&autoTrade.fastTickQueue.length){const cleared=autoTrade.fastTickQueue.length;autoTrade.fastTickQueue.length=0;if(logChange)autoTradeLog("FAST QUEUE CLEARED · "+cleared+" waiting ticks discarded because Standard mode was selected.");}
-  const note=$("autoTradeSpeedNote");if(note)note.textContent=autoTrade.speedMode==="FAST"?"Queues live ticks in arrival order while a quote/contract or the two-run cycle is busy, then processes each fresh tick. Old queued ticks are never used for stale entries; Deriv/network speed itself is unchanged.":"Standard mode processes the current live tick directly. Both modes keep the same entry, risk and two-run rules.";
-  if(logChange&&$("autoTradeLog"))autoTradeLog(autoTrade.speedMode==="FAST"?"FAST EXECUTION ON · FIFO live-tick queue enabled; no queued tick is replayed as a trade trigger if it has gone stale.":"Execution speed set to STANDARD.");
+  const note=$("autoTradeSpeedNote");if(note)note.textContent=autoTrade.speedMode==="FAST"?"Checks each incoming live tick immediately using the same entry rules as Standard mode. Ticks arriving while a quote/contract or two-run cycle is busy cannot trigger late entries; Deriv/network speed itself is unchanged.":"Standard mode processes the current live tick directly. Both modes keep the same entry, risk and two-run rules.";
+  if(logChange&&$("autoTradeLog"))autoTradeLog(autoTrade.speedMode==="FAST"?"FAST EXECUTION ON · incoming live ticks are checked immediately; same entry, risk and two-run rules as Standard mode.":"Execution speed set to STANDARD.");
 }
 function autoTradeStart(){
   if(!autoTradeCanStart()){autoTradeLog("Start blocked: connect an account; real accounts additionally require the checkbox and exact phrase TRADE REAL.");autoTradeRender();return}
