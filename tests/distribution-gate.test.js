@@ -609,8 +609,8 @@ test('recovery OFF keeps running through two runs after a loss and waits for a f
   const lossBranch = source.slice(lossBranchStart, lossBranchEnd);
   assert.match(lossBranch, /autoTrade\.recoveryPhase=0;autoTrade\.nextStake=autoTrade\.stake;runFinished=true/);
   assert.doesNotMatch(lossBranch, /autoTradePause\(/);
-  assert.match(source, /RUN 1 COMPLETE · starting RUN 2/);
-  assert.match(source, /RUN 2 COMPLETE · two-run entry finished\. Cooling down for 5 seconds; then waiting for a fresh live entry-digit hit/);
+  assert.match(source, /RUN \"\+autoTrade\.runSettled\+\" COMPLETE · starting RUN \"\+\(autoTrade\.runSettled\+1\)\+\"/);
+  assert.match(source, /ENTRY CYCLE COMPLETE · \"\+autoTrade\.runsPerEntry\+\" runs finished\. Cooling down for 5 seconds; then waiting for a fresh live entry-digit hit/);
   assert.match(source, /autoTrade\.sessionProfit>=autoTrade\.takeProfit/);
   assert.match(source, /autoTrade\.sessionProfit<=-autoTrade\.stopLoss/);
 });
@@ -693,9 +693,19 @@ test('recovery OFF keeps the two-run entry cycle after a loss and waits for a fr
   const lossBranch = source.slice(lossStart, lossEnd);
   assert.match(lossBranch, /autoTrade\.recoveryPhase=0;autoTrade\.nextStake=autoTrade\.stake;runFinished=true/);
   assert.doesNotMatch(lossBranch, /autoTradePause\(/);
-  assert.match(source, /if\(runFinished\)[\s\S]*?RUN 1 COMPLETE[\s\S]*?RUN 2 COMPLETE/);
+  assert.match(source, /if\(runFinished\)[\s\S]*?RUN \"\+autoTrade\.runSettled\+\" COMPLETE[\s\S]*?ENTRY CYCLE COMPLETE/);
   assert.match(source, /autoTrade\.sessionProfit>=autoTrade\.takeProfit/);
   assert.match(source, /autoTrade\.sessionProfit<=-autoTrade\.stopLoss/);
+});
+
+
+test('runs per entry is user-configurable from 1 to 20 and defaults to two', () => {
+  const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
+  assert.match(html, /id="autoTradeRunsPerEntry" type="number" min="1" max="20" step="1" value="2"/);
+  assert.match(appSource, /Number\(\$\("autoTradeRunsPerEntry"\)\?\.value\|\|2\)/);
+  assert.match(appSource, /Number\.isInteger\(runsPerEntry\)&&runsPerEntry>=1&&runsPerEntry<=20/);
+  assert.match(appSource, /autoTrade\.runSettled<autoTrade\.runsPerEntry/);
+  assert.match(appSource, /autoTrade\.runSettled===autoTrade\.runsPerEntry-1/);
 });
 
 test('bot session P/L is colored green for profit and red for loss', () => {
