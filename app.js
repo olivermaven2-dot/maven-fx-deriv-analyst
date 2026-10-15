@@ -593,8 +593,28 @@ function overUnderEntry(d,selectedDigit,selectedSide){
     const recentAdvantage=Math.max(0,Math.min(1,.5+(t.recentRate-baseline)*3));
     const stability=Math.max(0,Math.min(1,1-Math.abs(t.rate-t.recentRate)-Math.abs(t.r1-t.r2)*.35-Math.abs(t.r2-t.r3)*.25));
     const consistency=Math.max(0,Math.min(1,1-Math.abs(t.r1-t.r2)-Math.abs(t.r2-t.r3)));
-    const score=Math.round(100*(directionalAdvantage*.24+recentAdvantage*.18+continuation*.28+immediateAdvantage*.10+twoTickAdvantage*.07+threeTickAdvantage*.03+stability*.05+consistency*.03+sample*.01+recentWeight*.01));
-    candidates.push({...t,candidate,baseline,score,continuation,stability,consistency});
+    // Predictive layer: condition past reactions on the market context immediately
+    // before this entry digit. This adds a forward-looking estimate, not just raw history.
+    const priorDigit=d.length?d[d.length-1]:null;
+    let contextN=0,contextOne=0,contextTwo=0,contextRecentN=0,contextRecentOne=0;
+    const contextStart=Math.max(1,d.length-500);
+    for(let i=contextStart;i<d.length-1;i++){
+      if(d[i]!==candidate||d[i-1]!==priorDigit)continue;
+      const age=d.length-1-i;
+      const one=qualifies(d[i+1]);
+      contextN++;if(one)contextOne++;
+      if(age<=150){contextRecentN++;if(one)contextRecentOne++;}
+      if(i+2<d.length&&one&&qualifies(d[i+2]))contextTwo++;
+    }
+    const contextRate=contextN?contextOne/contextN:t.weightedRate;
+    const contextRecentRate=contextRecentN?contextRecentOne/contextRecentN:contextRate;
+    const contextTwoRate=contextN?contextTwo/contextN:t.r2;
+    const predictionSample=Math.min(1,contextN/12);
+    const predictionConfidence=Math.round(100*(.45*Math.min(1,contextN/20)+.30*Math.min(1,t.recentTotal/30)+.25*Math.min(1,t.total/80)));
+    const predictedRate=.50*contextRate+.30*contextRecentRate+.20*contextTwoRate;
+    const predictionScore=Math.max(0,Math.min(1,.5+(predictedRate-baseline)*3));
+    const score=Math.round(100*(directionalAdvantage*.19+recentAdvantage*.14+continuation*.23+immediateAdvantage*.08+twoTickAdvantage*.06+threeTickAdvantage*.02+stability*.05+consistency*.03+sample*.01+recentWeight*.01+predictionScore*.12+predictionSample*.06));
+    candidates.push({...t,candidate,baseline,score,continuation,stability,consistency,contextN,contextRate,contextRecentRate,contextTwoRate,predictedRate,predictionConfidence});
   }
   candidates.sort((a,b)=>b.score-a.score);
   if(!candidates.length)return null;
@@ -614,9 +634,11 @@ function overUnderEntry(d,selectedDigit,selectedSide){
     else if(c.r1>=.54&&c.r2>=.52)reason="Historical triggers show immediate reaction and 2-tick continuation toward the selected setup.";
     else if(c.r1>=.54)reason="Historical triggers show immediate reaction; longer continuation is less consistent.";
     else reason="Historical triggers show favorable 2-tick continuation despite weaker immediate reaction.";
-    return {digit:c.candidate,score,status,reason,evidence:c.total+" historical triggers; "+c.recentTotal+" recent triggers"};
+    const prediction=c.predictedRate>=c.baseline+.06?"FAVORABLE OUTLOOK":c.predictedRate>=c.baseline-.02?"MIXED OUTLOOK":"WEAK OUTLOOK";
+    const predictionText="Forward estimate "+Math.round(c.predictedRate*100)+"% • "+prediction+" • context sample "+c.contextN+" • model confidence "+c.predictionConfidence+"%";
+    return {digit:c.candidate,score,status,reason,evidence:c.total+" historical triggers; "+c.recentTotal+" recent triggers",prediction,predictedRate:c.predictedRate,predictionConfidence:c.predictionConfidence,predictionText};
   });
-  return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.length===2?"Digit "+entries[0].digit+": score "+entries[0].score+"/100 • Digit "+entries[1].digit+": score "+entries[1].score+"/100":"Digit "+entries[0].digit+": score "+entries[0].score+"/100 • Second digit: no candidate passed validation. Scores rank candidates; they are not win probabilities.",status:entries.length===2?"2 VALID CANDIDATES":"1 VALID CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence).join(" • "),entries};
+  return {main:entries.map(e=>String(e.digit)).join("  •  "),meta:entries.map(e=>"Digit "+e.digit+": rank "+e.score+"/100; "+e.predictionText).join(" • "),status:entries.length===2?"2 PREDICTIVE CANDIDATES":"1 PREDICTIVE CANDIDATE",reason:entries.map(e=>"Digit "+e.digit+": "+e.reason+" "+e.predictionText).join(" "),evidence:entries.map(e=>"Digit "+e.digit+" — "+e.evidence+"; "+e.predictionText).join(" • "),entries};
 }
 function renderParityControls(){
   document.querySelectorAll(".parity-side").forEach(btn=>btn.classList.toggle("active",btn.dataset.parity===state.selectedParity)); const label=$("paritySetupLabel"); if(label)label.textContent=state.selectedParity;
@@ -713,7 +735,7 @@ function panel(stateText,reason,entry,why,n){
 }
 function entryHtml(e){
   const cards=Array.isArray(e.entries)
-    ? '<div class="entry-candidates">'+e.entries.map(x=>'<div class="entry-candidate"><strong>'+esc(x.digit)+'</strong><span>SCORE '+esc(x.score)+'/100</span></div>').join("")+'</div>'
+    ? '<div class="entry-candidates">'+e.entries.map(x=>'<div class="entry-candidate"><strong>'+esc(x.digit)+'</strong><span>SCORE '+esc(x.score)+'/100</span><small>'+esc(x.prediction||"PREDICTION")+' · '+esc(Math.round((x.predictedRate||0)*100))+'% estimate</small><small>Model confidence '+esc(x.predictionConfidence||0)+'%</small></div>').join("")+'</div>'
     : '<div class="entry-candidates"><div class="entry-candidate"><strong>'+esc(e.main||"NO ENTRY")+'</strong>'+(Number.isFinite(Number(e.score))&&e.score!==""?'<span>SCORE '+esc(Math.round(Number(e.score)))+'/100</span>':Number.isFinite(Number.parseFloat(e.confidence))&&Number.parseFloat(e.confidence)>0?'<span>SCORE '+esc(Math.round(Number.parseFloat(e.confidence)))+'/100</span>':'')+'</div></div>';
   return '<div class="entry"><div class="entry-head">ENTRY DIGITS</div>'+cards+'</div>';
 }
