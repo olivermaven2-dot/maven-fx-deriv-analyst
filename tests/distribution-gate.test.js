@@ -686,3 +686,72 @@ test('bot session P/L is colored green for profit and red for loss', () => {
   assert.match(styles, /#autoTradePnL\.pnl-negative\{color:#ef4444/);
 });
 
+
+
+test('signal validation scores a live forecast exactly once', () => {
+  const start = appSource.indexOf('function processSignalValidationTick');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const harness = `
+    const state = {
+      symbol: 'R_100', engine: 'overunder', liveTickSequence: 101,
+      signalValidation: {
+        snapshot: {active: true, market: 'R_100', engine: 'overunder', target: 'OVER 2', side: 'OVER', selectedDigit: 2, tickCount: 100, confidence: .8},
+        book: {}
+      }, validationDirty: false
+    };
+    const signalValidationKey = (engine,target,market) => market+'|'+engine+'|'+target;
+    ${source}
+    ({run:processSignalValidationTick,state})
+  `;
+  const test = vm.runInNewContext(harness);
+  test.run(4, 101, 100);
+  test.run(4, 102, 101);
+  const rec = test.state.signalValidation.book['R_100|overunder|OVER 2'];
+  assert.equal(rec.n, 1);
+  assert.equal(rec.hits, 1);
+});
+
+test('signal validation discards a snapshot after a market switch', () => {
+  const start = appSource.indexOf('function processSignalValidationTick');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const harness = `
+    const state = {
+      symbol: 'R_75', engine: 'overunder', liveTickSequence: 101,
+      signalValidation: {
+        snapshot: {active: true, market: 'R_100', engine: 'overunder', target: 'OVER 2', side: 'OVER', selectedDigit: 2, tickCount: 100, confidence: .8},
+        book: {}
+      }, validationDirty: false
+    };
+    const signalValidationKey = (engine,target,market) => market+'|'+engine+'|'+target;
+    ${source}
+    ({run:processSignalValidationTick,state})
+  `;
+  const test = vm.runInNewContext(harness);
+  test.run(4, 101, 100);
+  assert.equal(Object.keys(test.state.signalValidation.book).length, 0);
+  assert.equal(test.state.signalValidation.snapshot, null);
+});
+
+test('multi-tick Over/Under validation discards pending outcomes from a previous market', () => {
+  const start = appSource.indexOf('function processOUValidationTick');
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const harness = `
+    const state = {
+      symbol: 'R_75', selectedDigit: 2, selectedSide: 'OVER', validationDirty: false,
+      ouValidation: {key: 'R_75|2|OVER', pending: [{market:'R_100', selectedDigit:2, side:'OVER', candidate:4, steps:0, hits:[]}], completed:{1:{n:0,hits:0},2:{n:0,hits:0},3:{n:0,hits:0}}},
+      ouValidationBook: {}
+    };
+    const resetOUValidationIfNeeded = () => {};
+    const ouValidationKey = () => 'R_75|2|OVER';
+    const ouValidationRecordKey = (market,digit,side,candidate) => market+'|'+digit+'|'+side+'|'+candidate;
+    ${source}
+    ({run:processOUValidationTick,state})
+  `;
+  const test = vm.runInNewContext(harness);
+  test.run(4);
+  assert.equal(test.state.ouValidation.pending.length, 0);
+  assert.equal(Object.keys(test.state.ouValidationBook).length, 0);
+});
