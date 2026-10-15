@@ -755,3 +755,38 @@ test('multi-tick Over/Under validation discards pending outcomes from a previous
   assert.equal(test.state.ouValidation.pending.length, 0);
   assert.equal(Object.keys(test.state.ouValidationBook).length, 0);
 });
+
+
+test('already-triggered Even/Odd validation continues under its original engine after an engine switch', () => {
+  const start = appSource.indexOf('function scoreOtherValidationPending');
+  const end = appSource.indexOf('\nfunction ouValidationSummary', start);
+  const source = appSource.slice(start, end);
+  const harness = `
+    const state = {
+      symbol: 'R_100', engine: 'risefall', liveTickSequence: 102, validationDirty: false,
+      otherValidation: {
+        snapshot: null,
+        pending: [{market:'R_100', engine:'evenodd', target:'EVEN', steps:1, hits:[true], confidence:.7}],
+        book: {
+          'R_100|evenodd|EVEN': {
+            market:'R_100', engine:'evenodd', target:'EVEN', triggers:1,
+            confidenceSum:.7, confidenceN:1,
+            1:{n:1,hits:1,failureStreak:0,maxFailureStreak:0},
+            2:{n:0,hits:0,failureStreak:0,maxFailureStreak:0},
+            3:{n:0,hits:0,failureStreak:0,maxFailureStreak:0}
+          }
+        }
+      }
+    };
+    const otherValidationKey = (engine,target,market) => market+'|'+engine+'|'+target;
+    ${source}
+    ({run:processOtherValidationTick,state})
+  `;
+  const test = vm.runInNewContext(harness);
+  test.run(3, 100.3, 100.2);
+  const rec = test.state.otherValidation.book['R_100|evenodd|EVEN'];
+  assert.equal(rec[2].n, 1);
+  assert.equal(rec[2].hits, 1);
+  assert.equal(test.state.otherValidation.pending[0].engine, 'evenodd');
+  assert.equal(test.state.otherValidation.pending[0].steps, 2);
+});
