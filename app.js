@@ -1779,7 +1779,7 @@ function autoTradeSetSpeedMode(mode,logChange=true){
   if(logChange&&$("autoTradeLog"))autoTradeLog(autoTrade.speedMode==="FAST"?"FAST EXECUTION ON · incoming live ticks are checked immediately; same entry, risk and two-run rules as Standard mode.":"Execution speed set to STANDARD.");
 }
 function autoTradeStart(){
-  if(!autoTradeCanStart()){autoTradeLog("Start blocked: connect an account; real accounts additionally require the checkbox and exact phrase TRADE REAL.");autoTradeRender();return}
+  if(!autoTradeCanStart()){autoTradeLog("Start blocked: connect an authenticated demo account. Real-account trading is disabled during safety validation.");autoTradeRender();return}
   const stake=Number($("autoTradeStake").value),mg=Number($("autoTradeMartingale").value),tp=Number($("autoTradeTP").value),sl=Number($("autoTradeSL").value);
   if(!(stake>=0.35&&stake<=100&&mg>=1&&mg<=10&&tp>0&&sl>0)){autoTradeLog("Invalid risk settings. Stake must be 0.35–100, multiplier 1–10, and take-profit/stop-loss must be positive.");return}
   const recoveryMode=$("autoTradeRecoveryMode")?.value||"SMART_NET";
@@ -1925,7 +1925,7 @@ function autoTradeHandleMessage(d){
     autoTrade.currency=d.authorize.currency||"USD";autoTrade.authorized=true;autoTrade.nextStake=autoTrade.stake;
     $("autoTradeToken").value="";
     autoTradeLog("Account authorized · "+autoTrade.account.loginid+" · "+(autoTrade.account.is_virtual?"DEMO":"REAL")+" · "+autoTrade.currency+".");
-    if(!autoTrade.account.is_virtual)autoTradeLog("Real account detected. Trading stays locked until the in-panel confirmation is completed.");
+    if(!autoTrade.account.is_virtual)autoTradeLog("Real account detected. Trading is disabled during safety validation; no real-money orders can be placed.");
     autoTradeRender();return;
   }
   if(kind==="demo_test_proposal"){
@@ -2119,7 +2119,7 @@ async function autoTradeConnect(){
         if(autoTrade.socket!==ws||ws.readyState!==WebSocket.OPEN){clearInterval(autoTrade.tradingHeartbeatTimer);autoTrade.tradingHeartbeatTimer=null;return}
         try{ws.send(JSON.stringify({ping:1}))}catch(e){autoTradeLog("Trading heartbeat send failed: "+(e.message||e));try{ws.close()}catch{}}
       },15000);
-      if(!chosen.demo)autoTradeLog("REAL account selected. Trading remains locked until the in-panel TRADE REAL confirmation is completed.");
+      if(!chosen.demo)autoTradeLog("REAL account selected. Safety lock active: this version cannot place real-money orders.");
       try{autoTradeReq({balance:1},"connection_test");autoTradeLog("Checking authenticated account response (no trade will be placed)…")}catch(e){autoTradeLog("Connection test could not be sent: "+(e.message||e))}
       autoTradeRender();
     };
