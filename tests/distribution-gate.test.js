@@ -106,6 +106,7 @@ test('distribution failure forces Final Signal to AVOID in the existing evidence
       cluster: .5, streak: 2, transitions: 10, transitionRate: .6
     });
     const ouRate = () => .5;
+    const mavenAIDecisionLayer = (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,reason:"test harness"});
     ${gateSource}
     ${evidenceSource}
     overUnderEvidence
@@ -127,6 +128,7 @@ test('complementary probability conflict still blocks a distribution-passing set
       cluster: .5, streak: 2, transitions: 10, transitionRate: .6
     });
     const ouRate = (d, digit, side) => digit === 7 && side === 'UNDER' ? .7 : .5;
+    const mavenAIDecisionLayer = (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,reason:"test harness"});
     ${gateSource}
     ${evidenceSource}
     overUnderEvidence
@@ -215,6 +217,7 @@ test('complementary Over/Under digit mapping is symmetric for all five pairs', (
       cluster: .5, streak: 2, transitions: 10, transitionRate: .6
     });
     const ouRate = () => .5;
+    const mavenAIDecisionLayer = (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,reason:"test harness"});
     ${gateSource}
     ${evidenceSource}
     overUnderEvidence
@@ -249,6 +252,30 @@ test('spike-risk refresh uses a removable note marker to avoid stacking warnings
   assert.match(source, /className="spike-risk-note"/);
 });
 
+
+test('Over/Under validation scores only a candidate triggered immediately after its analysis snapshot', () => {
+  const start = appSource.indexOf('function recordOUValidationTrigger');
+  assert.notEqual(start, -1);
+  const end = appSource.indexOf('\nfunction ', start + 10);
+  const source = appSource.slice(start, end);
+  const makeHarness = tickCount => `
+    const state = {
+      engine: 'overunder', symbol: 'R_100', selectedDigit: 2, selectedSide: 'OVER',
+      ticks: Array(100).fill({ quote: 100 }), validationDirty: false,
+      ouEntrySnapshot: { key: 'R_100|2|OVER', tickCount, active: true, digits: [4], validationDigits: [4], confidence: .8 },
+      ouValidation: { pending: [], lastTrigger: '' }, ouValidationBook: {}
+    };
+    const resetOUValidationIfNeeded = () => {};
+    const ouValidationKey = () => 'R_100|2|OVER';
+    const ouValidationRecordKey = () => 'R_100|2|OVER|4';
+    ${source}
+    ({run:recordOUValidationTrigger,state})
+  `;
+  const fresh = vm.runInNewContext(makeHarness(99)); fresh.run(4);
+  const stale = vm.runInNewContext(makeHarness(98)); stale.run(4);
+  assert.equal(fresh.state.ouValidation.pending.length, 1);
+  assert.equal(stale.state.ouValidation.pending.length, 0);
+});
 
 test('bot entry validation refuses an incomplete or duplicated entry pair', () => {
   const start = appSource.indexOf('function autoTradeReadyToEnter');
@@ -326,16 +353,17 @@ test('Even/Odd renderer only activates entry validation for SIGNAL or STRONG SIG
   assert.match(source, /entryActive\?selectParityEntry/);
 });
 
-test('Rise/Fall waits for 100 prices before issuing a signal', () => {
+test('Rise/Fall waits for its minimum 30 price observations before analysis', () => {
   const start = appSource.indexOf('function riseFallAnalysis');
   assert.notEqual(start, -1, 'riseFallAnalysis must exist');
   const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
   const run = vm.runInNewContext(source + '\nriseFallAnalysis', {
-    state: { selectedRiseFall: 'RISE' }
+    state: { selectedRiseFall: 'RISE' },
+    mavenAIDecisionLayer: (engine,baseSignal,evidence,alignment,conflict,hardGate,sample) => ({signal:baseSignal,baseSignal,confidence:Number(evidence)||0,reason:'test harness'})
   });
-  const result = run(Array.from({ length: 99 }, (_, i) => i + 100));
-  assert.equal(result.signal, 'WAIT');
+  const result = run(Array.from({ length: 29 }, (_, i) => i + 100));
+  assert.equal(result, null);
 });
 
 test('Rise/Fall entry rejects inactive signals and requires current pattern follow-through', () => {
@@ -354,8 +382,11 @@ test('Rise/Fall renderer only activates entry validation for SIGNAL or STRONG SI
   assert.notEqual(start, -1);
   const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
-  assert.match(source, /const entry=riseFallEntry\(prices,a\)/);
-  assert.ok(source.includes('a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL"'));
+  assert.match(source, /const rawEntry=riseFallEntry\(prices,a\)/);
+  assert.ok(source.includes('setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,n'));
+  const validationStart = appSource.indexOf('function setOtherValidationForecast');
+  const validationEnd = appSource.indexOf('\nfunction ', validationStart + 10);
+  assert.match(appSource.slice(validationStart, validationEnd), /const active=\(signal==="SIGNAL"\|\|signal==="STRONG SIGNAL"\)&&hasEntry/);
 });
 
 test('shared spike-risk protection blocks entry display without replacing any engine Final Signal', () => {
@@ -473,14 +504,14 @@ test('recovery OFF keeps running through two runs after a loss and waits for a f
   assert.match(lossBranch, /autoTrade\.recoveryPhase=0;autoTrade\.nextStake=autoTrade\.stake;runFinished=true/);
   assert.doesNotMatch(lossBranch, /autoTradePause\(/);
   assert.match(source, /RUN 1 COMPLETE · starting RUN 2/);
-  assert.match(source, /RUN 2 COMPLETE · two-run entry finished\. Waiting for a fresh analysis-approved entry trigger/);
+  assert.match(source, /RUN 2 COMPLETE · two-run entry finished\. Cooling down for 5 seconds; then waiting for a fresh live entry-digit hit/);
   assert.match(source, /autoTrade\.sessionProfit>=autoTrade\.takeProfit/);
   assert.match(source, /autoTrade\.sessionProfit<=-autoTrade\.stopLoss/);
 });
 
 test('recovery-OFF UI explains two-run entry cycles and fresh-entry waiting', () => {
   const html = fs.readFileSync(require('node:path').join(__dirname, '..', 'index.html'), 'utf8');
-  assert.match(html, /OFF = wait for the next valid entry after a loss/);
+  assert.match(html, /With recovery OFF, a loss ends that attempt at base stake/);
   assert.match(html, /One valid manual digit is enough to trigger the normal two-run entry cycle/);
   assert.match(html, /current entry still completes its two-run cycle; after run 2 the bot waits for a fresh entry/);
   assert.match(html, /Only session take-profit or stop-loss pauses the bot/);
