@@ -232,9 +232,9 @@ test('Over/Under reaction depth preserves two-tick continuation without requirin
 
 test('Over/Under recovery rate uses recovery opportunities, not the unrelated three-tick continuation denominator', () => {
   const start = appSource.indexOf('function ouReactionDepth');
-  const end = appSource.indexOf('\\nfunction ', start + 10);
+  const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
-  const run = vm.runInNewContext(source + '\\nouReactionDepth');
+  const run = vm.runInNewContext(source + '\nouReactionDepth');
   const result = run([5, 2, 6, 7, 5, 2, 2, 2], 5, 4, 'OVER');
   assert.equal(result.n3, 0, 'the sequence has no first-and-second-tick continuation sample');
   assert.equal(result.recoveryN, 2, 'both failed first reactions have enough future ticks to evaluate recovery');
