@@ -1007,15 +1007,19 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   const evidence=probability*.20+momentumScore*.10+trendScore*.08+transition*.14+selected.cluster*.08+reaction*.10+recency*.10+consistency*.08+historical*.07+context*.05;
   const windowConflict=(selected.recent<baseline-.08&&selected.long>baseline+.08)||(Math.abs(selected.recent-selected.long)>=.18&&selected.recent<baseline);
   const evidenceConflict=probabilityConflict||windowConflict;
+  const reactionSampleReady=selected.transitions>=20;
+  const positiveLift=selectedRate-baseline;
+  const transitionLift=selected.weightedTransitionRate-baseline;
   let signal="WAIT";
   if(n<100)signal="WAIT";
   else if(!distribution.ready)signal="WAIT";
   else if(!distribution.pass)signal="AVOID";
   else if(evidenceConflict)signal="WAIT";
-  else if(evidence>=.68&&selectedRate>=baseline-.03&&selected.weightedTransitionRate>=Math.max(.48,baseline-.05)&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
-  else if(evidence>=.54&&selectedRate>=baseline-.07&&consistency>=.45)signal="SIGNAL";
-  else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
-  const aiDecision=mavenAIDecisionLayer("overunder",signal,evidence,[probability,momentumScore,trendScore,transition,selected.cluster,reaction,recency,consistency,historical,context],evidenceConflict,n<100||!distribution.ready||!distribution.pass,n);signal=aiDecision.signal;
+  else if(!reactionSampleReady)signal="WAIT";
+  else if(evidence>=.68&&positiveLift>=.025&&transitionLift>=.015&&consistency>=.58&&n>=250&&selected.transitions>=35)signal="STRONG SIGNAL";
+  else if(evidence>=.56&&positiveLift>=.01&&transitionLift>=-.005&&consistency>=.50&&selected.transitions>=20)signal="SIGNAL";
+  else if(evidence<.38||positiveLift<-.10)signal="AVOID";
+  const aiDecision=mavenAIDecisionLayer("overunder",signal,evidence,[probability,momentumScore,trendScore,transition,selected.cluster,reaction,recency,consistency,historical,context],evidenceConflict,n<100||!distribution.ready||!distribution.pass||!reactionSampleReady,n);signal=aiDecision.signal;
   return {oppositeDigit,selectedRate,oppositeRate,baseline,probability:aiDecision.adjustedAlignment[0]??probability,momentum:aiDecision.adjustedAlignment[1]??momentumScore,trend:aiDecision.adjustedAlignment[2]??trendScore,transition:aiDecision.adjustedAlignment[3]??transition,cluster:aiDecision.adjustedAlignment[4]??selected.cluster,reaction:aiDecision.adjustedAlignment[5]??reaction,recency:aiDecision.adjustedAlignment[6]??recency,consistency:aiDecision.adjustedAlignment[7]??consistency,historical:aiDecision.adjustedAlignment[8]??historical,context:aiDecision.adjustedAlignment[9]??context,evidence:aiDecision.adjustedEvidence,probabilityConflict,windowConflict,evidenceConflict,distribution,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
 }
 function distributionBarFlags(d){
@@ -1311,14 +1315,16 @@ function parityStats(d,selectedSide){
   const context=Math.max(0,Math.min(1,clustering*.65+Math.min(1,streak/5)*.2+(recent>=short50?.15:0)));
   const evidence=probability*.20+momentumScore*.12+trendScore*.08+transition*.15+clustering*.10+recency*.10+consistency*.10+historical*.08+context*.07;
   const conflict=(recent<.43&&long>.53)||(Math.abs(recent-long)>=.16&&recent<.5)||(recent<.45&&short50>.56);
+  const transitionSampleReady=transitions>=30&&recentTransitions>=10;
   let signal="WAIT";
   const n=d.length;
   if(n<100)signal="WAIT";
   else if(conflict)signal="WAIT";
-  else if(evidence>=.68&&recent>=.53&&recentTransitionRate>=.50&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
-  else if(evidence>=.54&&recent>=.50&&consistency>=.45)signal="SIGNAL";
+  else if(!transitionSampleReady)signal="WAIT";
+  else if(evidence>=.68&&recent>=.56&&short50>=.53&&long>=.49&&recentTransitionRate>=.52&&consistency>=.58&&n>=250&&transitions>=50)signal="STRONG SIGNAL";
+  else if(evidence>=.56&&recent>=.53&&short50>=.50&&recentTransitionRate>=.50&&consistency>=.50&&transitions>=30)signal="SIGNAL";
   else if(evidence<.38||recent<.44)signal="AVOID";
-  const aiDecision=mavenAIDecisionLayer("evenodd",signal,evidence,[probability,momentumScore,trendScore,transition,clustering,recency,consistency,historical,context],conflict,n<100,n);signal=aiDecision.signal;
+  const aiDecision=mavenAIDecisionLayer("evenodd",signal,evidence,[probability,momentumScore,trendScore,transition,clustering,recency,consistency,historical,context],conflict,n<100||!transitionSampleReady,n);signal=aiDecision.signal;
   return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,probability:aiDecision.adjustedAlignment[0]??probability,momentumScore:aiDecision.adjustedAlignment[1]??momentumScore,trendScore:aiDecision.adjustedAlignment[2]??trendScore,transition:aiDecision.adjustedAlignment[3]??transition,historical:aiDecision.adjustedAlignment[7]??historical,recency:aiDecision.adjustedAlignment[5]??recency,context:aiDecision.adjustedAlignment[8]??context,evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,target,other};
 }
 function parityEntryCandidates(d,selectedSide){
