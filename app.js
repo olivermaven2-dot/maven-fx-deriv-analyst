@@ -873,7 +873,7 @@ function ouTransitionStats(d,candidate,selectedDigit,selectedSide){
 }
 function ouReactionDepth(d,candidate,selectedDigit,selectedSide){
   const qualifies=x=>selectedSide==="OVER"?x>selectedDigit:x<selectedDigit;
-  let occurrences=0,n1=0,n2=0,n3=0,r1=0,r2=0,r3=0,recovery=0;
+  let occurrences=0,n1=0,n2=0,n3=0,r1=0,r2=0,r3=0,recovery=0,recoveryN=0;
   // r2/r3 measure conditional continuation after prior favorable ticks, not joint rates.
   for(let i=0;i<d.length;i++){
     if(d[i]!==candidate)continue;
@@ -883,10 +883,13 @@ function ouReactionDepth(d,candidate,selectedDigit,selectedSide){
       if(a&&i+2<d.length){
         n2++;const b=qualifies(d[i+2]);if(b)r2++;
         if(b&&i+3<d.length){n3++;if(qualifies(d[i+3]))r3++}
-      }else if(!a&&i+3<d.length&&qualifies(d[i+2])&&qualifies(d[i+3]))recovery++;
+      }else if(!a&&i+3<d.length){
+        recoveryN++;
+        if(qualifies(d[i+2])&&qualifies(d[i+3]))recovery++;
+      }
     }
   }
-  return {occurrences,n1,n2,n3,r1:n1?r1/n1:0,r2:n2?r2/n2:0,r3:n3?r3/n3:0,recovery:n3?recovery/n3:0};
+  return {occurrences,n1,n2,n3,r1:n1?r1/n1:0,r2:n2?r2/n2:0,r3:n3?r3/n3:0,recovery:recoveryN?recovery/recoveryN:0,recoveryN};
 }
 function ouStats(d,digit,side){
   const rates=ouWindowRates(d,digit,side);
