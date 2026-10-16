@@ -1,3 +1,40 @@
+function overUnderCoverageReport(d){
+  const rows=[];
+  for(const side of ["OVER","UNDER"]){
+    for(let digit=0;digit<=9;digit++){
+      const e=overUnderEvidence(d,digit,side);
+      let status=e.signal,reason="";
+      if(!e.distribution.ready){status="COLLECTING";reason="Needs 1,000 live ticks for the distribution gate ("+e.distribution.total+"/1,000).";}
+      else if(!e.distribution.pass){
+        const failures=(e.distribution.failures||[]).map(x=>"digit "+x.digit+" ("+x.percent.toFixed(1)+"%"+(x.most?", highest frequency":"")+(x.least?", lowest frequency":"")+")");
+        reason="Distribution gate: "+failures.join(", ")+".";
+      }else if(e.probabilityConflict)reason="Complementary setup has a rate more than 4 percentage points higher.";
+      else if(e.windowConflict)reason="Recent and longer-window evidence conflict.";
+      else if(e.signal==="WAIT")reason="Evidence thresholds or independent-factor agreement are not yet sufficient.";
+      else if(e.signal==="AVOID")reason="Current evidence is weak or below the setup baseline.";
+      else reason="Setup passed current signal checks.";
+      rows.push({setup:side+" "+digit,status,selected:side===state.selectedSide&&digit===state.selectedDigit,rate:Math.round(e.selectedRate*100)+"%",baseline:Math.round(e.baseline*100)+"%",reason});
+    }
+  }
+  return rows;
+}
+function renderOverUnderCoverage(root,d){
+  const button=root.querySelector("#ouCoverageCheck");
+  const output=root.querySelector("#ouCoverageOutput");
+  if(!button||!output)return;
+  button.addEventListener("click",()=>{
+    button.disabled=true;
+    button.textContent="Evaluating 20 setups…";
+    // Run only on request so the live tick-render loop and mobile performance are unaffected.
+    const rows=overUnderCoverageReport(d);
+    output.innerHTML='<div class="ou-coverage-table-wrap"><table class="ou-coverage-table"><thead><tr><th>Setup</th><th>Status</th><th>Observed rate</th><th>Baseline</th><th>Why / gate result</th></tr></thead><tbody>'+
+      rows.map(r=>'<tr'+(r.selected?' class="is-selected"':'')+'><td><strong>'+r.setup+'</strong>'+(r.selected?' <span>(selected)</span>':'')+'</td><td>'+r.status+'</td><td>'+r.rate+'</td><td>'+r.baseline+'</td><td>'+r.reason.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")+'</td></tr>').join("")+
+      '</tbody></table></div><p class="ou-coverage-note">This report diagnoses all 20 setups using the existing rules. It does not relax thresholds or create extra signals. Results reflect the tick buffer at the time you pressed the button.</p>';
+    output.hidden=false;
+    button.disabled=false;
+    button.textContent="Refresh setup coverage";
+  },{once:true});
+}
 function renderOverUnder(root,d,c,last,n){
   const e=overUnderEvidence(d,state.selectedDigit,state.selectedSide);
   const setup=state.selectedSide+" "+state.selectedDigit;
@@ -28,6 +65,8 @@ function renderOverUnder(root,d,c,last,n){
     e.probabilityConflict?"× Complementary probability conflict — waiting for stronger agreement":e.windowConflict?"× Recent and long-window evidence conflict — waiting for alignment":entry?"✓ Entry candidates "+entry.main+" passed historical reaction filters":"× Entry candidates remain inactive or did not pass validation",
     ouValidationSummary()
   ],n);
+  root.insertAdjacentHTML("beforeend",'<section class="ou-coverage-card"><div class="ou-coverage-head"><div><strong>OVER / UNDER SETUP COVERAGE</strong><p>Diagnose all 20 setups without changing signal rules.</p></div><button id="ouCoverageCheck" type="button">Evaluate all 20 setups</button></div><div id="ouCoverageOutput" hidden></div></section>');
+  renderOverUnderCoverage(root,d);
 }
 const WS_URLS=["wss://api.derivws.com/trading/v1/options/ws/public","wss://ws.binaryws.com/websockets/v3","wss://ws.binaryws.com/websockets/v3?app_id=1089","wss://ws.derivws.com/websockets/v3?app_id=1089"];
 const MAX_TICKS=2000, STREAM_SIZE=80;
