@@ -26,7 +26,7 @@ function renderOverUnderCoverage(root,d){
     button.disabled=true;
     button.textContent="Evaluating 20 setups…";
     // Run only on request so the live tick-render loop and mobile performance are unaffected.
-    const rows=overUnderCoverageReport(d);
+    const rows=overUnderCoverageReport(state.digits);
     output.innerHTML='<div class="ou-coverage-table-wrap"><table class="ou-coverage-table"><thead><tr><th>Setup</th><th>Status</th><th>Observed rate</th><th>Baseline</th><th>Why / gate result</th></tr></thead><tbody>'+
       rows.map(r=>'<tr'+(r.selected?' class="is-selected"':'')+'><td><strong>'+r.setup+'</strong>'+(r.selected?' <span>(selected)</span>':'')+'</td><td>'+r.status+'</td><td>'+r.rate+'</td><td>'+r.baseline+'</td><td>'+r.reason.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")+'</td></tr>').join("")+
       '</tbody></table></div><p class="ou-coverage-note">This report diagnoses all 20 setups using the existing rules. It does not relax thresholds or create extra signals. Results reflect the tick buffer at the time you pressed the button.</p>';
