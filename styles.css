@@ -559,3 +559,16 @@ button:focus-visible,select:focus-visible,input:focus-visible,.ou-digit:focus-vi
 .ou-coverage-table tr.is-selected{background:rgba(68,132,205,.14)}
 .ou-coverage-table tr.is-selected td:first-child strong{color:#80bcff}
 .ou-coverage-table td span{font-size:9px;color:#80bcff}
+
+
+/* Compact EVEN vs ODD relative-strength block */
+.parity-strength{margin:10px 0 0;padding:10px 12px;border:1px solid var(--border-color,#2b3445);border-radius:10px;background:var(--panel-bg,rgba(127,127,127,.05));font-size:12px}
+.parity-strength-heading{font-weight:800;letter-spacing:.06em;font-size:11px;margin-bottom:8px}
+.parity-strength-row{display:grid;grid-template-columns:42px minmax(40px,1fr) 38px;align-items:center;gap:8px;margin:7px 0}
+.parity-strength-row>span{font-weight:700}
+.parity-strength-row>strong{text-align:right;font-variant-numeric:tabular-nums}
+.parity-strength-track{height:7px;border-radius:99px;overflow:hidden;background:rgba(127,127,127,.18)}
+.parity-strength-fill{height:100%;border-radius:99px}
+.parity-strength-fill.even{background:#16a34a}
+.parity-strength-fill.odd{background:#d97706}
+.parity-strength-note{margin-top:7px;font-size:10px;line-height:1.35;opacity:.72}
