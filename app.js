@@ -55,6 +55,7 @@ function renderOverUnder(root,d,c,last,n){
   if(e.aiDecision)reason=e.aiDecision.reason+" "+(e.probabilityConflict?"Probability Comparison also blocks the entry until complementary evidence aligns.":"");
   if(e.probabilityConflict)reason="WAIT: Probability Comparison conflicts with the selected setup because the complementary setup has stronger observed live frequency. The entry is blocked until evidence aligns.";
   else if(e.windowConflict)reason="WAIT: Recent and longer-window behaviour conflict. The AI is withholding the signal until the windows align more clearly.";
+  else if(e.transitions<20)reason="WAIT: only "+e.transitions+" selected-digit reaction samples are available; at least 20 are required before this setup can qualify.";
   else if(e.signal==="AVOID")reason="The selected setup does not have enough aligned A-Setup evidence.";
   else if(e.signal==="WAIT")reason="The selected setup is still building enough independent evidence across the required analysis windows.";
   else if(e.signal==="STRONG SIGNAL")reason="Probability, momentum, trend, transitions, reaction behavior, recency, consistency and context are aligned for "+setup+".";
@@ -1458,7 +1459,7 @@ function renderEvenOdd(root,d,last,n){
   setSignalValidationForecast("evenodd",state.selectedParity,e.signal,state.liveTickSequence,e.aiDecision?.confidence);
   const entryDisplay=entry||{main:entryActive?"NO STRONG ENTRY":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No trigger has enough conditional lift toward the selected Final Signal.":"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."};
   const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
-  const reason=e.conflict?"WAIT: recent and longer-window parity behaviour conflict. The AI will wait for stronger agreement.":e.signal==="STRONG SIGNAL"?"Multiple parity evidence layers are aligned for "+state.selectedParity+".":e.signal==="SIGNAL"?"The selected parity has sufficient multi-factor evidence, but it is not at STRONG SIGNAL level.":e.signal==="AVOID"?"The selected parity has unfavorable evidence.":"Evidence for the selected parity is still developing.";
+  const reason=e.conflict?"WAIT: recent and longer-window parity behaviour conflict. The AI will wait for stronger agreement.":e.transitions<30||e.recentTransitions<10?"WAIT: parity continuation sample is still small ("+e.transitions+" total and "+e.recentTransitions+" recent transitions; needs at least 30 total and 10 recent).":e.signal==="STRONG SIGNAL"?"Multiple parity evidence layers are aligned for "+state.selectedParity+".":e.signal==="SIGNAL"?"The selected parity has sufficient multi-factor evidence, but it is not at STRONG SIGNAL level.":e.signal==="AVOID"?"The selected parity has unfavorable evidence.":"Evidence for the selected parity is still developing.";
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
     "Selected parity: "+state.selectedParity,
     "Recent parity: "+pattern,
