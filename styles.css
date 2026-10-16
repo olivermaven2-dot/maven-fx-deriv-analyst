@@ -543,3 +543,19 @@ button:focus-visible,select:focus-visible,input:focus-visible,.ou-digit:focus-vi
 
 /* Read-only Demo/Real balance cards */
 .auto-trade-balances{margin:9px 0;padding:10px;border:1px solid #263a52;border-radius:10px;background:#0b1422}.balance-heading{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:8px}.balance-heading strong{font-size:9px;letter-spacing:.08em;color:#dce8f8}.balance-heading small{font-size:8px;color:#8fa4bf}.balance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.balance-card{display:flex;flex-direction:column;gap:9px;min-width:0;padding:10px;border:1px solid #2d725a;border-radius:9px;background:#10271f}.balance-card.real{border-color:#76513a;background:#251a14}.balance-card>div{display:flex;flex-direction:column;gap:3px}.balance-card strong{font-size:9px;letter-spacing:.06em;color:#7be0b5}.balance-card.real strong{color:#ffc18f}.balance-card small{font-size:9px;overflow-wrap:anywhere;color:#aab9ce}.balance-card>span{font-size:12px;font-weight:900;overflow-wrap:anywhere;color:#f0f6ff}.balance-empty{font-size:10px;line-height:1.45;color:#9fb1c8;padding:4px 1px}
+
+/* On-demand Over/Under coverage diagnostics */
+.ou-coverage-card{margin-top:14px;padding:12px;border:1px solid var(--border,#26354b);border-radius:12px;background:var(--panel,#0d1727);color:var(--text,#e8eef8)}
+.ou-coverage-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ou-coverage-head strong{font-size:11px;letter-spacing:.06em}
+.ou-coverage-head p,.ou-coverage-note{font-size:11px;line-height:1.5;color:var(--muted,#9aabc1);margin:5px 0 0}
+.ou-coverage-head button{border:1px solid #38577d;border-radius:8px;padding:9px 11px;background:#142a43;color:#eaf3ff;font-weight:700;font-size:11px;cursor:pointer}
+.ou-coverage-head button:disabled{opacity:.65;cursor:wait}
+.ou-coverage-table-wrap{overflow:auto;max-width:100%;margin-top:12px}
+.ou-coverage-table{border-collapse:collapse;width:100%;min-width:650px;font-size:11px}
+.ou-coverage-table th,.ou-coverage-table td{padding:8px;border-bottom:1px solid var(--border,#26354b);text-align:left;vertical-align:top;line-height:1.4}
+.ou-coverage-table th{color:var(--muted,#9aabc1);font-weight:700;white-space:nowrap}
+.ou-coverage-table td:first-child,.ou-coverage-table td:nth-child(2){white-space:nowrap}
+.ou-coverage-table tr.is-selected{background:rgba(68,132,205,.14)}
+.ou-coverage-table tr.is-selected td:first-child strong{color:#80bcff}
+.ou-coverage-table td span{font-size:9px;color:#80bcff}
