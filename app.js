@@ -55,7 +55,6 @@ function renderOverUnder(root,d,c,last,n){
   if(e.aiDecision)reason=e.aiDecision.reason+" "+(e.probabilityConflict?"Probability Comparison also blocks the entry until complementary evidence aligns.":"");
   if(e.probabilityConflict)reason="WAIT: Probability Comparison conflicts with the selected setup because the complementary setup has stronger observed live frequency. The entry is blocked until evidence aligns.";
   else if(e.windowConflict)reason="WAIT: Recent and longer-window behaviour conflict. The AI is withholding the signal until the windows align more clearly.";
-  else if(e.transitions<20)reason="WAIT: only "+e.transitions+" selected-digit reaction samples are available; at least 20 are required before this setup can qualify.";
   else if(e.signal==="AVOID")reason="The selected setup does not have enough aligned A-Setup evidence.";
   else if(e.signal==="WAIT")reason="The selected setup is still building enough independent evidence across the required analysis windows.";
   else if(e.signal==="STRONG SIGNAL")reason="Probability, momentum, trend, transitions, reaction behavior, recency, consistency and context are aligned for "+setup+".";
@@ -1008,19 +1007,15 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   const evidence=probability*.20+momentumScore*.10+trendScore*.08+transition*.14+selected.cluster*.08+reaction*.10+recency*.10+consistency*.08+historical*.07+context*.05;
   const windowConflict=(selected.recent<baseline-.08&&selected.long>baseline+.08)||(Math.abs(selected.recent-selected.long)>=.18&&selected.recent<baseline);
   const evidenceConflict=probabilityConflict||windowConflict;
-  const reactionSampleReady=selected.transitions>=20;
-  const positiveLift=selectedRate-baseline;
-  const transitionLift=selected.weightedTransitionRate-baseline;
   let signal="WAIT";
   if(n<100)signal="WAIT";
   else if(!distribution.ready)signal="WAIT";
   else if(!distribution.pass)signal="AVOID";
   else if(evidenceConflict)signal="WAIT";
-  else if(!reactionSampleReady)signal="WAIT";
-  else if(evidence>=.68&&positiveLift>=.025&&transitionLift>=.015&&consistency>=.58&&n>=250&&selected.transitions>=35)signal="STRONG SIGNAL";
-  else if(evidence>=.56&&positiveLift>=.01&&transitionLift>=-.005&&consistency>=.50&&selected.transitions>=20)signal="SIGNAL";
-  else if(evidence<.38||positiveLift<-.10)signal="AVOID";
-  const aiDecision=mavenAIDecisionLayer("overunder",signal,evidence,[probability,momentumScore,trendScore,transition,selected.cluster,reaction,recency,consistency,historical,context],evidenceConflict,n<100||!distribution.ready||!distribution.pass||!reactionSampleReady,n);signal=aiDecision.signal;
+  else if(evidence>=.68&&selectedRate>=baseline-.03&&selected.weightedTransitionRate>=Math.max(.48,baseline-.05)&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
+  else if(evidence>=.54&&selectedRate>=baseline-.07&&consistency>=.45)signal="SIGNAL";
+  else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
+  const aiDecision=mavenAIDecisionLayer("overunder",signal,evidence,[probability,momentumScore,trendScore,transition,selected.cluster,reaction,recency,consistency,historical,context],evidenceConflict,n<100||!distribution.ready||!distribution.pass,n);signal=aiDecision.signal;
   return {oppositeDigit,selectedRate,oppositeRate,baseline,probability:aiDecision.adjustedAlignment[0]??probability,momentum:aiDecision.adjustedAlignment[1]??momentumScore,trend:aiDecision.adjustedAlignment[2]??trendScore,transition:aiDecision.adjustedAlignment[3]??transition,cluster:aiDecision.adjustedAlignment[4]??selected.cluster,reaction:aiDecision.adjustedAlignment[5]??reaction,recency:aiDecision.adjustedAlignment[6]??recency,consistency:aiDecision.adjustedAlignment[7]??consistency,historical:aiDecision.adjustedAlignment[8]??historical,context:aiDecision.adjustedAlignment[9]??context,evidence:aiDecision.adjustedEvidence,probabilityConflict,windowConflict,evidenceConflict,distribution,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
 }
 function distributionBarFlags(d){
@@ -1470,6 +1465,15 @@ function renderEvenOdd(root,d,last,n){
     "Maven AI decision: "+e.aiDecision.baseSignal+" → "+e.aiDecision.signal+" • confidence "+Math.round(e.aiDecision.confidence*100)+"% • "+e.aiDecision.reason,
     entry?"✓ STRONG ENTRY: trigger has measurable lift toward the Final Signal":"× No strong trigger passed conditional validation"
   ],n);
+  const otherParity=parityStats(d,state.selectedParity==="EVEN"?"ODD":"EVEN");
+  const parityScore=stats=>.35*stats.recent+.25*stats.short50+.20*stats.medium+.10*stats.mid250+.10*stats.long;
+  const evenStats=state.selectedParity==="EVEN"?e:otherParity;
+  const oddStats=state.selectedParity==="ODD"?e:otherParity;
+  const evenRaw=parityScore(evenStats),oddRaw=parityScore(oddStats);
+  const totalStrength=evenRaw+oddRaw;
+  const evenStrength=totalStrength?Math.round(evenRaw/totalStrength*100):50;
+  const oddStrength=100-evenStrength;
+  root.insertAdjacentHTML("beforeend",'<section class="parity-strength" aria-label="Even and odd strength"><div class="parity-strength-heading">EVEN vs ODD STRENGTH</div><div class="parity-strength-row"><span>EVEN</span><div class="parity-strength-track"><div class="parity-strength-fill even" style="width:'+evenStrength+'%"></div></div><strong>'+evenStrength+'%</strong></div><div class="parity-strength-row"><span>ODD</span><div class="parity-strength-track"><div class="parity-strength-fill odd" style="width:'+oddStrength+'%"></div></div><strong>'+oddStrength+'%</strong></div><div class="parity-strength-note">Relative strength from weighted 20/50/100/250/500-tick parity rates; descriptive, not a win probability.</div></section>');
 }
 
 function riseFallAnalysis(prices){
