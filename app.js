@@ -867,13 +867,18 @@ function updateLiveDigitCursor(digit){
   const circle=target.querySelector(".distribution-circle");
   if(!circle)return;
 
-  // A single small blue pointer, positioned immediately below the digit circle.
+  // Keep one cursor per active digit; center it directly below the percentage.
   host.querySelectorAll(".live-digit-cursor").forEach(node=>node.remove());
   const cursor=document.createElement("span");
   cursor.className="live-digit-cursor";
   cursor.setAttribute("aria-hidden","true");
   cursor.innerHTML='<span class="live-digit-cursor-tip"></span>';
-  circle.appendChild(cursor);
+  target.appendChild(cursor);
+  const percent=target.querySelector(".distribution-percent");
+  const targetRect=target.getBoundingClientRect();
+  const percentRect=(percent||circle).getBoundingClientRect();
+  cursor.style.left=(percentRect.left+percentRect.width/2-targetRect.left)+"px";
+  cursor.style.top=(percentRect.bottom-targetRect.top+3)+"px";
   target.classList.add("live-digit-current");
   host.querySelectorAll(".distribution-digit:not([data-digit=\""+digit+"\"]).live-digit-current")
     .forEach(node=>node.classList.remove("live-digit-current"));
