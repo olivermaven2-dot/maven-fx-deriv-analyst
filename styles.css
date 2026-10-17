@@ -988,7 +988,7 @@ body {
 }
 
 /* Live-market digit cursor follows received ticks only; no timer or simulated data. */
-.digit-distribution{position:relative;padding-top:20px}
+.digit-distribution{position:relative;padding-top:0}
 .live-digit-cursor{position:absolute;z-index:5;display:flex;flex-direction:column;align-items:center;gap:1px;transform:translateX(-50%);pointer-events:none;transition:left .12s ease-out,top .12s ease-out;will-change:left,top}
 .live-digit-cursor-label{font-size:8px;line-height:10px;font-weight:1000;letter-spacing:.08em;color:#061a35;background:#65e6b2;border:1px solid #a5f5d4;border-radius:4px;padding:1px 4px;box-shadow:0 0 10px rgba(101,230,178,.35)}
 .live-digit-cursor-tip{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #65e6b2;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
