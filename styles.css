@@ -1040,3 +1040,39 @@ body {
   border-bottom:7px solid #fff !important;
   filter:drop-shadow(0 1px 2px rgba(0,0,0,.85)) !important;
 }
+
+
+/* High-visibility Maven interface cursor: blue-cyan pointer, outlined for contrast. */
+.distribution-digit.live-digit-current .distribution-circle::after{content:none!important;display:none!important;}
+.distribution-circle > .live-digit-cursor{
+  position:absolute!important;
+  top:calc(100% + 4px)!important;
+  left:50%!important;
+  right:auto!important;
+  bottom:auto!important;
+  display:block!important;
+  width:16px!important;
+  height:12px!important;
+  margin:0!important;
+  padding:0!important;
+  transform:translateX(-50%)!important;
+  z-index:30!important;
+  overflow:visible!important;
+  filter:drop-shadow(0 0 3px rgba(96,165,250,.95)) drop-shadow(0 2px 2px rgba(0,0,0,.95))!important;
+}
+.distribution-circle > .live-digit-cursor > .live-digit-cursor-tip{
+  display:block!important;
+  width:0!important;
+  height:0!important;
+  margin:0 auto!important;
+  border-left:8px solid transparent!important;
+  border-right:8px solid transparent!important;
+  border-top:0!important;
+  border-bottom:11px solid #60a5fa!important;
+  outline:none!important;
+  filter:drop-shadow(0 -1px 0 #eaf6ff)!important;
+}
+.distribution-digit.live-digit-current .distribution-circle{
+  border-color:#60a5fa!important;
+  box-shadow:0 0 0 2px rgba(96,165,250,.3),0 0 12px rgba(96,165,250,.42)!important;
+}
