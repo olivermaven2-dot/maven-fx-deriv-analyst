@@ -1603,6 +1603,43 @@ function renderEvenOdd(root,d,last,n){
   const evenPct=Math.round(evenStrength*100),oddPct=Math.round(oddStrength*100);
   root.insertAdjacentHTML("beforeend",'<section class="parity-strength" aria-label="Even and odd strength"><div class="parity-strength-heading">EVEN vs ODD STRENGTH</div><div class="parity-strength-row"><span>EVEN</span><div class="parity-strength-track"><div class="parity-strength-fill even" style="width:'+evenPct+'%"></div></div><strong>'+evenPct+'%</strong></div><div class="parity-strength-row"><span>ODD</span><div class="parity-strength-track"><div class="parity-strength-fill odd" style="width:'+oddPct+'%"></div></div><strong>'+oddPct+'%</strong></div><div class="parity-strength-note">Both parities are evaluated continuously. The stronger parity is selected automatically; the 52% strength gate remains required for SIGNAL.</div></section>');
 }
+function riseFallDigitPatternEvidence(prices,targetDir){
+  if(!Array.isArray(prices)||prices.length<80)return null;
+  const split=Math.floor(prices.length*.70),digits=prices.map(q=>digitFromQuote(q));
+  const moves=prices.slice(1).map((q,i)=>Number(q)>Number(prices[i])?"R":Number(q)<Number(prices[i])?"F":"X");
+  const trainRows=moves.slice(0,Math.max(0,split-1)).filter(x=>x!=="X");
+  const baselineTarget=trainRows.length?trainRows.filter(x=>x===targetDir).length/trainRows.length:.5;
+  const laterRows=moves.slice(Math.max(0,split-1)).filter(x=>x!=="X");
+  const holdoutBaseline=laterRows.length?laterRows.filter(x=>x===targetDir).length/laterRows.length:.5;
+  const candidates=[];
+  for(const len of [1,2,3]){
+    const seen=new Map();
+    for(let tick=len-1;tick<split-1;tick++){
+      const seq=digits.slice(tick-len+1,tick+1);
+      if(seq.some(d=>!Number.isInteger(d)||d<0||d>9)||moves[tick]==="X")continue;
+      const key=seq.join("→"),row=seen.get(key)||{pattern:key,total:0,target:0};
+      row.total++;if(moves[tick]===targetDir)row.target++;seen.set(key,row);
+    }
+    for(const row of seen.values()){
+      if(row.total<8)continue;
+      row.trainRate=row.target/row.total;row.trainLift=row.trainRate-baselineTarget;
+      candidates.push({...row,len});
+    }
+  }
+  candidates.sort((a,b)=>b.trainLift-a.trainLift||b.total-a.total||a.len-b.len);
+  const chosen=candidates.find(x=>x.trainLift>=.035);
+  if(!chosen)return {baselineTarget,holdoutBaseline,pattern:null,trainCount:0,holdoutCount:0,trainRate:null,holdoutRate:null,lift:null,qualified:false};
+  const wanted=chosen.pattern.split("→").map(Number);
+  let holdoutCount=0,holdoutTarget=0;
+  for(let tick=Math.max(chosen.len-1,split-1);tick<moves.length;tick++){
+    const seq=digits.slice(tick-chosen.len+1,tick+1);
+    if(seq.some(d=>!Number.isInteger(d)||d<0||d>9)||seq.some((d,i)=>d!==wanted[i])||moves[tick]==="X")continue;
+    holdoutCount++;if(moves[tick]===targetDir)holdoutTarget++;
+  }
+  const holdoutRate=holdoutCount?holdoutTarget/holdoutCount:null;
+  const lift=holdoutRate===null?null:holdoutRate-holdoutBaseline;
+  return {baselineTarget,holdoutBaseline,pattern:chosen.pattern,trainCount:chosen.total,holdoutCount,trainRate:chosen.trainRate,holdoutRate,lift,qualified:holdoutCount>=6&&lift>=.04};
+}
 function riseFallAnalysis(prices){
   if(!Array.isArray(prices)||prices.length<30)return null;
   const clean=prices.map(Number).filter(Number.isFinite);
@@ -1624,6 +1661,8 @@ function riseFallAnalysis(prices){
   const totalMagnitude=recentDirectional.reduce((sum,x)=>sum+x.magnitude,0);
   const recentMove=totalMagnitude?recentDirectional.filter(x=>x.direction==="R").reduce((sum,x)=>sum+x.magnitude,0)/totalMagnitude:.5;
   const shortRate=rate(moves.slice(-20)),midRate=rate(moves.slice(-100)),longRate=rate(moves.slice(-Math.min(500,moves.length)));
+  const digitEvidence=riseFallDigitPatternEvidence(clean,state.selectedRiseFall==="RISE"?"R":"F");
+  const digitSupport=digitEvidence?.qualified?Math.max(0,Math.min(.12,(digitEvidence.lift||0)*.6)):0;
   const momentum=Math.max(0,Math.min(1,.5+(shortRate-longRate)*2));
   const trendRate=Math.max(0,Math.min(1,.5+(shortRate-midRate)*.7+(midRate-longRate)*.8));
   const recentTarget=state.selectedRiseFall==="RISE"?recentRate:1-recentRate;
@@ -1642,8 +1681,8 @@ function riseFallAnalysis(prices){
   }
   const reversalPressure=adjacent?reversals/adjacent:0;
   const evidence=Math.max(0,Math.min(1,
-    .25*recentTarget+.20*shortTarget+.15*midTarget+.10*longTarget+
-    .12*persistence+.10*(state.selectedRiseFall==="RISE"?recentMove:1-recentMove)+.08*(1-reversalPressure)
+    .24*recentTarget+.19*shortTarget+.14*midTarget+.09*longTarget+
+    .12*persistence+.10*(state.selectedRiseFall==="RISE"?recentMove:1-recentMove)+.08*(1-reversalPressure)+digitSupport
   ));
   const conflict=(recentTarget<.45&&longTarget>.55)||(Math.abs(recentTarget-longTarget)>=.16&&recentTarget<.5)||(shortTarget<.43&&midTarget>.56);
   let signal="WAIT";
@@ -1654,7 +1693,7 @@ function riseFallAnalysis(prices){
   else if(evidence>=.52&&recentTarget>=.50&&shortTarget>=.48&&persistence>=.42)signal="SIGNAL";
   else if(evidence<.43)signal="AVOID";
   const aiDecision=mavenAIDecisionLayer("risefall",signal,evidence,[recentTarget,shortTarget,midTarget,longTarget,persistence,1-reversalPressure,recentMove,trendRate,momentum],conflict,clean.length<100||recentDirectional.length<15||stats.some(x=>x.size<=100&&x.directional<10),clean.length);signal=aiDecision.signal;
-  return {selected:state.selectedRiseFall,stats,recentRate,recentMove:aiDecision.adjustedAlignment[6]??recentMove,trendRate:aiDecision.adjustedAlignment[7]??trendRate,momentum:aiDecision.adjustedAlignment[8]??momentum,persistence:aiDecision.adjustedAlignment[4]??persistence,streak,reversalPressure, evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentTarget:aiDecision.adjustedAlignment[0]??recentTarget,shortTarget:aiDecision.adjustedAlignment[1]??shortTarget,midTarget:aiDecision.adjustedAlignment[2]??midTarget,longTarget:aiDecision.adjustedAlignment[3]??longTarget};
+  return {selected:state.selectedRiseFall,stats,recentRate,recentMove:aiDecision.adjustedAlignment[6]??recentMove,trendRate:aiDecision.adjustedAlignment[7]??trendRate,momentum:aiDecision.adjustedAlignment[8]??momentum,persistence:aiDecision.adjustedAlignment[4]??persistence,streak,reversalPressure,digitEvidence,evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentTarget:aiDecision.adjustedAlignment[0]??recentTarget,shortTarget:aiDecision.adjustedAlignment[1]??shortTarget,midTarget:aiDecision.adjustedAlignment[2]??midTarget,longTarget:aiDecision.adjustedAlignment[3]??longTarget};
 }
 
 function riseFallEntry(prices,analysis){
@@ -1754,6 +1793,12 @@ function renderRiseFall(root,last,n){
     "Selected-direction support: "+Math.round(a.recentTarget*100)+"% • movement-weighted rise: "+Math.round(a.recentMove*100)+"%",
     "Momentum "+Math.round(a.momentum*100)+" • persistence "+Math.round(a.persistence*100)+" • target streak "+a.streak,
     "Reversal pressure "+Math.round(a.reversalPressure*100)+" • evidence "+Math.round(a.evidence*100)+"%",
+    a.digitEvidence?.pattern
+      ? "Digit pattern "+a.digitEvidence.pattern+" • training "+a.digitEvidence.trainCount+" samples at "+Math.round(a.digitEvidence.trainRate*100)+"% • later holdout "+a.digitEvidence.holdoutCount+" samples at "+(a.digitEvidence.holdoutRate===null?"—":Math.round(a.digitEvidence.holdoutRate*100)+"%")
+      : "Digit-pattern evidence: no discovery pattern with sufficient positive training lift",
+    a.digitEvidence?.qualified
+      ? "✓ Digit pattern validated on later ticks • holdout lift "+(a.digitEvidence.lift>=0?"+":"")+Math.round(a.digitEvidence.lift*100)+" percentage points"
+      : "× Digit-pattern confirmation not qualified; price-direction evidence remains primary",
     "Maven AI decision: "+a.aiDecision.baseSignal+" → "+a.aiDecision.signal+" • confidence "+Math.round(a.aiDecision.confidence*100)+"% • "+a.aiDecision.reason,
     a.conflict?"× Directional windows conflict — waiting for stronger agreement":"✓ Directional conflict check passed",
     entry?"✓ Confirmed entry: historical trigger matched the live stream with qualified follow-through toward "+a.selected:"× No entry confirmed yet; historical patterns alone cannot trigger an entry"
