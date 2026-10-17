@@ -1,5 +1,5 @@
-:root{--bg:#080d18;--panel:#101827;--panel2:#0c1422;--line:#223049;--text:#eef4ff;--muted:#8f9db3;--accent:#65a9ff;--good:#4bd49b;--warn:#f1b85b;--bad:#ef6b78;--radius:18px}
-*{box-sizing:border-box}html{background:var(--bg);color-scheme:dark}body{margin:0;background:radial-gradient(circle at 50% -10%,#15233a 0,#080d18 42%);color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
+:root{--bg:#061a35;--panel:#102b4e;--panel2:#0a2040;--line:#34577f;--text:#eef4ff;--muted:#8f9db3;--accent:#65a9ff;--good:#4bd49b;--warn:#f1b85b;--bad:#ef6b78;--radius:18px}
+*{box-sizing:border-box}html{background:#061a35 !important;color-scheme:dark}body{margin:0;background:radial-gradient(ellipse at 8% 0%,rgba(35,126,255,.58),transparent 42%),radial-gradient(ellipse at 92% 20%,rgba(0,190,255,.22),transparent 36%),linear-gradient(135deg,#04122b 0%,#0b2b5b 50%,#061a35 100%) !important;color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
 button,select{font:inherit}.topbar{max-width:920px;margin:auto;padding:20px 16px 12px;display:flex;align-items:center;justify-content:space-between;gap:12px}.brand{font-weight:800;letter-spacing:.08em;font-size:20px}.subbrand{font-size:11px;letter-spacing:.18em;color:var(--muted);margin-top:3px}.status{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;padding:8px 11px;border:1px solid var(--line);border-radius:999px;background:#0c1422}.dot{width:8px;height:8px;border-radius:50%;background:var(--warn)}.status.live .dot{background:var(--good)}.status.offline .dot,.status.error .dot{background:var(--bad)}
 .app{max-width:920px;margin:auto;padding:8px 16px 28px}.live-card,.control-card,.engine-panel,.stream-card,.details{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 12px 35px rgba(0,0,0,.18)}
 .live-card{padding:18px}.live-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.eyebrow,.control-card label,.price-grid span,.section-title{font-size:10px;letter-spacing:.13em;color:var(--muted);font-weight:800}.live-head h1{font-size:21px;margin:7px 0 0}.quality-pill{font-size:10px;font-weight:800;padding:7px 9px;border-radius:999px;border:1px solid #32405a;color:var(--warn);white-space:nowrap}.quality-pill.good{color:var(--good)}.quality-pill.bad{color:var(--bad)}
@@ -651,3 +651,8 @@ button:focus-visible,select:focus-visible,input:focus-visible,.ou-digit:focus-vi
   .app .price-grid div:last-child strong { font-size: clamp(21px, 7vw, 27px); }
   .app .engine-tab { font-size: 8px; }
 }
+
+
+/* Final Midnight Navy background enforcement: high-contrast blue-navy backdrop only. */
+html,body{background-color:#061a35 !important}
+body{background-image:radial-gradient(ellipse at 8% 0%,rgba(35,126,255,.58),transparent 42%),radial-gradient(ellipse at 92% 20%,rgba(0,190,255,.22),transparent 36%),linear-gradient(135deg,#04122b 0%,#0b2b5b 50%,#061a35 100%) !important;background-repeat:no-repeat !important;background-attachment:fixed !important}
