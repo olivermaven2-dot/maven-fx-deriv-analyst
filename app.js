@@ -1327,7 +1327,10 @@ function parityStats(d,selectedSide){
   const historical=Math.max(0,Math.min(1,.5+(long-baseline)*3));
   const recency=Math.max(0,Math.min(1,.5+(recent-long)*3));
   const context=Math.max(0,Math.min(1,clustering*.65+Math.min(1,streak/5)*.2+(recent>=short50?.15:0)));
-  const evidence=probability*.20+momentumScore*.12+trendScore*.08+transition*.15+clustering*.10+recency*.10+consistency*.10+historical*.08+context*.07;
+  // The same weighted 20/50/100/250/500-tick strength shown in the UI is an actual
+  // directional factor in the signal score, not merely a visual comparison.
+  const strength=Math.max(0,Math.min(1,.35*recent+.25*short50+.20*medium+.10*mid250+.10*long));
+  const evidence=probability*.15+momentumScore*.10+trendScore*.07+transition*.13+clustering*.09+recency*.08+consistency*.08+historical*.07+context*.08+strength*.15;
   const conflict=(recent<.43&&long>.53)||(Math.abs(recent-long)>=.16&&recent<.5)||(recent<.45&&short50>.56);
   const transitionSampleReady=transitions>=30&&recentTransitions>=10;
   let signal="WAIT";
@@ -1335,11 +1338,11 @@ function parityStats(d,selectedSide){
   if(n<100)signal="WAIT";
   else if(conflict)signal="WAIT";
   else if(!transitionSampleReady)signal="WAIT";
-  else if(evidence>=.68&&recent>=.56&&short50>=.53&&long>=.49&&recentTransitionRate>=.52&&consistency>=.58&&n>=250&&transitions>=50)signal="STRONG SIGNAL";
-  else if(evidence>=.53&&recent>=.52&&short50>=.49&&recentTransitionRate>=.49&&consistency>=.46&&transitions>=30)signal="SIGNAL";
-  else if(evidence<.38||recent<.44)signal="AVOID";
-  const aiDecision=mavenAIDecisionLayer("evenodd",signal,evidence,[probability,momentumScore,trendScore,transition,clustering,recency,consistency,historical,context],conflict,n<100||!transitionSampleReady,n);signal=aiDecision.signal;
-  return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,probability:aiDecision.adjustedAlignment[0]??probability,momentumScore:aiDecision.adjustedAlignment[1]??momentumScore,trendScore:aiDecision.adjustedAlignment[2]??trendScore,transition:aiDecision.adjustedAlignment[3]??transition,historical:aiDecision.adjustedAlignment[7]??historical,recency:aiDecision.adjustedAlignment[5]??recency,context:aiDecision.adjustedAlignment[8]??context,evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,target,other};
+  else if(evidence>=.68&&strength>=.55&&recent>=.56&&short50>=.53&&long>=.49&&recentTransitionRate>=.52&&consistency>=.58&&n>=250&&transitions>=50)signal="STRONG SIGNAL";
+  else if(evidence>=.53&&strength>=.52&&recent>=.52&&short50>=.49&&recentTransitionRate>=.49&&consistency>=.46&&transitions>=30)signal="SIGNAL";
+  else if(evidence<.38||strength<.44||recent<.44)signal="AVOID";
+  const aiDecision=mavenAIDecisionLayer("evenodd",signal,evidence,[probability,momentumScore,trendScore,transition,clustering,recency,consistency,historical,context,strength],conflict,n<100||!transitionSampleReady,n);signal=aiDecision.signal;
+  return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,strength:aiDecision.adjustedAlignment[9]??strength,probability:aiDecision.adjustedAlignment[0]??probability,momentumScore:aiDecision.adjustedAlignment[1]??momentumScore,trendScore:aiDecision.adjustedAlignment[2]??trendScore,transition:aiDecision.adjustedAlignment[3]??transition,historical:aiDecision.adjustedAlignment[7]??historical,recency:aiDecision.adjustedAlignment[5]??recency,context:aiDecision.adjustedAlignment[8]??context,evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,target,other};
 }
 function parityEntryCandidates(d,selectedSide){
   const key=x=>x%2===0?"E":"O";
@@ -1478,7 +1481,7 @@ function renderEvenOdd(root,d,last,n){
     "Recent parity: "+pattern,
     "20/50/100/250/500 rates: "+e.windows.map(x=>Math.round(x.rate*100)+"%").join(" / "),
     "Probability "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentumScore*100)+" • trend "+Math.round(e.trendScore*100)+" • transitions "+Math.round(e.transition*100),
-    "Clustering "+Math.round(e.clustering*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
+    "EVEN/ODD strength "+Math.round(e.strength*100)+"% • clustering "+Math.round(e.clustering*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
     "Streak "+e.streak+" • evidence "+Math.round(e.evidence*100),
     "Maven AI decision: "+e.aiDecision.baseSignal+" → "+e.aiDecision.signal+" • confidence "+Math.round(e.aiDecision.confidence*100)+"% • "+e.aiDecision.reason,
     entry?"✓ STRONG ENTRY: trigger has measurable lift toward the Final Signal":"× No strong trigger passed conditional validation"
