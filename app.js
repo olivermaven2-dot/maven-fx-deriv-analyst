@@ -1699,6 +1699,39 @@ function riseFallAnalysis(prices){
 function riseFallEntry(prices,analysis){
   if(!analysis||!(analysis.signal==="SIGNAL"||analysis.signal==="STRONG SIGNAL"))return null;
   const target=analysis.selected, targetDir=target==="RISE"?"R":"F";
+
+  // Digit-pattern entries are eligible only after the pattern has positive
+  // out-of-sample lift and is confirmed by current price-direction reaction.
+  // This is an additional entry route; it never upgrades or overrides Final Signal.
+  const digitEvidence=analysis.digitEvidence;
+  if(digitEvidence?.qualified&&digitEvidence.pattern&&digitEvidence.holdoutCount>=6&&
+     Number.isFinite(digitEvidence.lift)&&digitEvidence.lift>=.04){
+    const wanted=digitEvidence.pattern.split("→").map(Number);
+    const liveDigits=prices.slice(-Math.min(prices.length, wanted.length+3)).map(q=>digitFromQuote(q));
+    for(const depth of [2,1]){
+      if(liveDigits.length<wanted.length+depth)continue;
+      const start=liveDigits.length-wanted.length-depth;
+      const matched=wanted.every((d,i)=>liveDigits[start+i]===d);
+      const reactionStart=prices.length-depth-1;
+      let reaction=true;
+      for(let k=reactionStart+1;k<prices.length;k++){
+        const delta=Number(prices[k])-Number(prices[k-1]);
+        if((targetDir==="R"&&delta<=0)||(targetDir==="F"&&delta>=0)){reaction=false;break}
+      }
+      if(matched&&reaction){
+        const holdoutRate=Number(digitEvidence.holdoutRate)||0;
+        const confidence=Math.max(60,Math.min(86,Math.round(65+(digitEvidence.lift*100)*.35+Math.min(8,digitEvidence.holdoutCount/3)+(holdoutRate-.5)*12)));
+        return {
+          type:"DIGIT-PATTERN",status:"CONFIRMED ENTRY",
+          main:digitEvidence.pattern+" → "+target+" price reaction",
+          confidence:confidence+"%",
+          reason:"The digit sequence passed later-sample validation and is present in the live stream, followed by "+depth+" consecutive "+target+" price move(s). Digit evidence supplements price-direction analysis; it does not change Final Signal.",
+          evidence:"Digit pattern "+digitEvidence.pattern+" • training "+digitEvidence.trainCount+" samples / "+Math.round((digitEvidence.trainRate||0)*100)+"% • holdout "+digitEvidence.holdoutCount+" samples / "+Math.round(holdoutRate*100)+"% • holdout lift +"+Math.round(digitEvidence.lift*100)+" pp • live "+depth+"-move price reaction."
+        };
+      }
+    }
+  }
+
   const recent=prices.slice(-500),dirs=[];
   for(let i=1;i<recent.length;i++)dirs.push(recent[i]>recent[i-1]?"R":recent[i]<recent[i-1]?"F":"X");
   const candidates=[];
