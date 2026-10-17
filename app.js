@@ -45,9 +45,12 @@ function renderOverUnder(root,d,c,last,n){
   const e=overUnderEvidence(d,state.selectedDigit,state.selectedSide);
   const setup=state.selectedSide+" "+state.selectedDigit;
   const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
-  const rawEntry=activeSignal&&!e.probabilityConflict?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
-  const entry=mavenAIReviewEntry("overunder",rawEntry,e.aiDecision);
-  state.ouEntrySnapshot={key:ouValidationKey(),tickCount:state.liveTickSequence,active:!!entry,digits:entry?entry.entries.map(x=>x.digit):[],validationDigits:entry?entry.entries.map(x=>x.digit):[],confidence:Number(e.aiDecision?.confidence)};
+  // Entry Engine evaluates candidates independently of the Over/Under Final Signal.
+  // The signal and complementary-probability gate control permission, not candidate discovery.
+  const rawEntry=n>=100?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
+  const entry=rawEntry;
+  const entryPermitted=activeSignal&&!e.probabilityConflict;
+  state.ouEntrySnapshot={key:ouValidationKey(),tickCount:state.liveTickSequence,active:!!entry&&entryPermitted,digits:entry&&entryPermitted?entry.entries.map(x=>x.digit):[],validationDigits:entry&&entryPermitted?entry.entries.map(x=>x.digit):[],candidateDigits:entry?entry.entries.map(x=>x.digit):[],confidence:Number(e.aiDecision?.confidence),blockedReason:e.probabilityConflict?"Complementary probability gate failed":!activeSignal?"Final Signal is not SIGNAL or STRONG SIGNAL":""};
   state.ouSignalSnapshot={key:ouValidationKey(),active:activeSignal&&!e.probabilityConflict,signal:e.signal,probabilityConflict:!!e.probabilityConflict,tickCount:state.digits.length};
   setSignalValidationForecast("overunder",state.selectedSide+" "+state.selectedDigit,e.probabilityConflict?"WAIT":e.signal,state.liveTickSequence,e.aiDecision?.confidence,{selectedDigit:state.selectedDigit,side:state.selectedSide});
   autoTradeUpdateLiveFields();
@@ -59,7 +62,12 @@ function renderOverUnder(root,d,c,last,n){
   else if(e.signal==="WAIT")reason="The selected setup is still building enough independent evidence across the required analysis windows.";
   else if(e.signal==="STRONG SIGNAL")reason="Probability, momentum, trend, transitions, reaction behavior, recency, consistency and context are aligned for "+setup+".";
   else reason="The selected setup has sufficient multi-factor evidence, but the evidence is not strong enough for a STRONG SIGNAL.";
-  const entryDisplay=activeSignal?(entry||{main:"NO VALID ENTRY",confidence:"—",status:"NO ENTRY",reason:"No candidate digit passed the current entry-selection checks.",evidence:"Candidate evaluation completed"}):{main:"NO ACTIVE ENTRY",confidence:"—",status:"INACTIVE",reason:"Entry Engine activates only when the selected Final Signal is SIGNAL or STRONG SIGNAL.",evidence:"Waiting for an active signal"};
+  let entryDisplay;
+  if(entry){
+    entryDisplay={...entry,status:entryPermitted?entry.status:"CANDIDATES ONLY — ENTRY BLOCKED",reason:entryPermitted?entry.reason:(e.probabilityConflict?"Entry candidates are evaluated independently, but the complementary-probability gate currently blocks entry permission.":"Entry candidates are evaluated independently. Entry permission remains blocked until the Over/Under Final Signal is SIGNAL or STRONG SIGNAL."),evidence:entry.evidence+" • Permission: "+(entryPermitted?"allowed by current signal and probability gate":"blocked by separate signal/probability permission gate")};
+  }else{
+    entryDisplay={main:"NO QUALIFIED ENTRY DIGITS",confidence:"—",status:"NO ENTRY",reason:n<100?"Entry Engine is collecting enough ticks for independent candidate analysis.":"No candidate digit currently passes the Entry Engine's own reaction, holdout and consistency checks.",evidence:"Entry candidate analysis does not change the Final Signal."};
+  }
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
     "Selected setup: "+setup,
     "Probability Comparison: "+Math.round(e.selectedRate*100)+"% vs complement "+Math.round(e.oppositeRate*100)+"% • baseline "+Math.round(e.baseline*100)+"%",
