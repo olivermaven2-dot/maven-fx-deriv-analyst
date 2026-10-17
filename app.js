@@ -806,7 +806,7 @@ function receiveTick(t){
   $("lastPrice").textContent=String(quote);$("lastDigit").textContent=digit;
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
   $("diagTicks").textContent=state.ticks.length;
-  updateQuality();renderStream(true);
+  updateQuality();renderStream(true);updateLiveDigitCursor(digit);
   if(shouldRenderEngineForCurrentTick())renderEngine(); // Validation is scored above; its UI is hidden and does not need per-tick re-rendering.
   if(autoTrade.enabled&&state.engine==="overunder"){
     // FAST and Standard use the same live-tick entry checks. Never replay ticks received
@@ -857,6 +857,25 @@ function renderDigitDistribution(){
     return '<button type="button" class="distribution-cell distribution-digit'+kind+relation+(active?' active':'')+'" data-digit="'+digit+'" aria-label="Select digit '+digit+'" aria-pressed="'+active+'"><span class="distribution-circle" style="--share:'+share.toFixed(2)+'%"><span>'+digit+'</span></span><span class="distribution-percent">'+pct.toFixed(1)+'%</span><span class="distribution-tag">'+tag+'</span></button>';
   }).join('');
   host.querySelectorAll(".distribution-digit").forEach(btn=>btn.addEventListener("click",()=>selectOverUnderDigit(Number(btn.dataset.digit))));
+  updateLiveDigitCursor(state.digits.at(-1));
+}
+function updateLiveDigitCursor(digit){
+  const host=$("digitDistribution");
+  if(!host||!Number.isInteger(digit)||digit<0||digit>9)return;
+  const target=host.querySelector('.distribution-digit[data-digit="'+digit+'"]');
+  if(!target)return;
+  let cursor=host.querySelector(".live-digit-cursor");
+  if(!cursor){
+    cursor=document.createElement("span");
+    cursor.className="live-digit-cursor";
+    cursor.setAttribute("aria-hidden","true");
+    cursor.innerHTML='<span class="live-digit-cursor-label">LIVE</span><span class="live-digit-cursor-tip"></span>';
+    host.appendChild(cursor);
+  }
+  cursor.style.left=(target.offsetLeft+target.offsetWidth/2)+"px";
+  cursor.style.top=Math.max(0,target.offsetTop-20)+"px";
+  host.querySelectorAll(".distribution-digit.live-digit-current").forEach(node=>node.classList.remove("live-digit-current"));
+  target.classList.add("live-digit-current");
 }
 function counts(d){return d.reduce((a,x)=>(a[x]=(a[x]||0)+1,a),{})}
 function rate(a,b){return b?Math.round(a/b*100):0}
