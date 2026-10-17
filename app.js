@@ -518,6 +518,7 @@ function loadStrongestScannerMarket(){
   if(!best){deepScannerEvaluate(true);return;}
   if(best.engine==="evenodd"||best.engine==="risefall"){
     state.engine=best.engine;
+    renderStream();
     if(best.engine==="evenodd")state.selectedParity=best.target;
     if(best.engine==="risefall")state.selectedRiseFall=best.target;
     document.querySelectorAll(".engine-tab").forEach(btn=>{const active=btn.dataset.engine===best.engine;btn.classList.toggle("active",active);btn.setAttribute("aria-selected",String(active));});
@@ -822,14 +823,16 @@ function updateQuality(){
 }
 function renderStream(incremental=false){
   const d=state.digits.slice(-STREAM_SIZE),host=$("digitStream");
-  $("streamInfo").textContent=d.length+" digits";
+  const parityMode=state.engine==="evenodd";
+  const displayTick=x=>parityMode?(x%2===0?"E":"O"):String(x);
+  $("streamInfo").textContent=d.length+(parityMode?" parity symbols":" digits");
   const expectedPreviousCount=d.length<STREAM_SIZE?Math.max(0,d.length-1):STREAM_SIZE;
   if(incremental&&host.children.length===expectedPreviousCount&&d.length>0){
     const previous=host.lastElementChild;if(previous)previous.classList.remove("latest");
     if(host.children.length>=STREAM_SIZE)host.firstElementChild.remove();
-    const node=document.createElement("span");node.className="digit latest";node.textContent=String(d[d.length-1]);host.appendChild(node);
+    const node=document.createElement("span");node.className="digit latest";node.textContent=displayTick(d[d.length-1]);node.title=parityMode?"Last digit "+d[d.length-1]:"";host.appendChild(node);
   }else{
-    host.innerHTML=d.map((x,i)=>`<span class="digit ${i===d.length-1?"latest":""}">${x}</span>`).join("");
+    host.innerHTML=d.map((x,i)=>`<span class="digit ${i===d.length-1?"latest":""}" title="${parityMode?"Last digit "+x:""}">${displayTick(x)}</span>`).join("");
   }
   const now=Date.now();
   if(!incremental||now-lastDistributionRenderAt>=2500){renderDigitDistribution();lastDistributionRenderAt=now;}
@@ -1893,7 +1896,7 @@ document.querySelectorAll(".parity-side").forEach(btn=>btn.addEventListener("cli
 document.querySelectorAll(".rise-fall-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedRiseFall=btn.dataset.direction;renderRiseFallControls();renderEngine()}));
 
 document.querySelectorAll("#overUnderControls .ou-side").forEach(btn=>btn.addEventListener("click",()=>{state.selectedSide=btn.dataset.side;autoTradeSetupChanged();state.deepScanner.autoLoaded=false;state.deepScanner.manualOverride=false;state.deepScanner.strongestCandidate=null;renderOUControls();renderEngine();deepScannerEvaluate(true)}));
-document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>{b.classList.remove("active");b.setAttribute("aria-selected","false")});btn.classList.add("active");btn.setAttribute("aria-selected","true");state.engine=btn.dataset.engine;const current=document.getElementById("workspaceCurrent");if(current)current.textContent=btn.textContent.trim();renderEngine()}));
+document.querySelectorAll(".engine-tab").forEach(btn=>btn.addEventListener("click",()=>{document.querySelectorAll(".engine-tab").forEach(b=>{b.classList.remove("active");b.setAttribute("aria-selected","false")});btn.classList.add("active");btn.setAttribute("aria-selected","true");state.engine=btn.dataset.engine;const current=document.getElementById("workspaceCurrent");if(current)current.textContent=btn.textContent.trim();renderStream();renderEngine()}));
 const scanNowBtn=$("scanNowBtn");if(scanNowBtn)scanNowBtn.addEventListener("click",startDeepScan);const loadStrongestBtn=$("loadStrongestBtn");if(loadStrongestBtn)loadStrongestBtn.addEventListener("click",loadStrongestScannerMarket);
 const payoutInput=$("ouPayoutPercent");if(payoutInput)payoutInput.addEventListener("input",()=>{state.ouPayoutPercent=Math.max(1,Math.min(500,Number(payoutInput.value)||95));renderOUValidationPanel()});
 marketSelect.addEventListener("change",()=>{const m=state.markets.find(x=>x.symbol===marketSelect.value);if(m){autoTradeMarketChanged();state.symbol=m.symbol;state.marketName=m.name;$("marketName").textContent=m.name;renderSubscribedMarketStatus("switching");state.marketStarted=false;startMarket(true);syncDeepScannerSubscriptions();renderDeepScanner();}});
