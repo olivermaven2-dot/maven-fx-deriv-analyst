@@ -1143,3 +1143,19 @@ body {
   filter:drop-shadow(0 0 1px rgba(147,197,253,.25))!important;
   opacity:.88!important;
 }
+
+
+/* User-requested final cursor highlight: modestly brighter, compact, centered below percentage. */
+.digit-distribution .distribution-digit.live-digit-current .live-digit-pointer{
+  border-left:5px solid transparent!important;
+  border-right:5px solid transparent!important;
+  border-bottom:7px solid #67dff5!important;
+  border-top:0!important;
+  margin:3px auto 0!important;
+  filter:drop-shadow(0 0 1px rgba(255,255,255,.7)) drop-shadow(0 0 4px rgba(103,223,245,.48))!important;
+  opacity:1!important;
+}
+.digit-distribution .distribution-digit.live-digit-current .distribution-percent{
+  color:#a5eaf5!important;
+  text-shadow:0 0 3px rgba(103,223,245,.32)!important;
+}
