@@ -864,8 +864,16 @@ function updateLiveDigitCursor(digit){
   if(!host||!Number.isInteger(digit)||digit<0||digit>9)return;
   const target=host.querySelector('.distribution-digit[data-digit="'+digit+'"]');
   if(!target)return;
-  // Keep the live marker attached to the digit itself. A separately positioned
-  // element can drift when the grid reflows or the distribution is re-rendered.
+  const circle=target.querySelector(".distribution-circle");
+  if(!circle)return;
+  // Attach the cursor to the active circle itself so it is always positioned
+  // directly underneath that digit, independent of grid rows or offset parents.
+  host.querySelectorAll(".live-digit-cursor").forEach(node=>node.remove());
+  const cursor=document.createElement("span");
+  cursor.className="live-digit-cursor";
+  cursor.setAttribute("aria-hidden","true");
+  cursor.innerHTML='<span class="live-digit-cursor-tip"></span>';
+  circle.appendChild(cursor);
   host.querySelectorAll(".distribution-digit.live-digit-current").forEach(node=>node.classList.remove("live-digit-current"));
   target.classList.add("live-digit-current");
 }
