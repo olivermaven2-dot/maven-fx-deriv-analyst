@@ -232,3 +232,14 @@
   .app > #ouValidationCard { grid-area:validation !important; }
   .app > .details { grid-area:diagnostics !important; }
 }
+
+
+/* Lock the requested desktop positions to the same row under LIVE MARKET DATA. */
+@media (min-width:1024px) {
+  .app > .live-card { grid-column:1 / 3 !important; grid-row:1 !important; }
+  .app > .engine-nav { grid-column:1 / 3 !important; grid-row:2 !important; }
+  .app > .distribution-card { grid-column:1 !important; grid-row:3 !important; align-self:start !important; }
+  .app > #engineRoot { grid-column:2 !important; grid-row:3 !important; align-self:start !important; }
+  .app > #ouValidationCard { grid-column:1 / 3 !important; grid-row:4 !important; }
+  .app > .details { grid-column:1 / 3 !important; grid-row:5 !important; }
+}
