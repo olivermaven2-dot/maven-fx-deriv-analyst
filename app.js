@@ -1483,6 +1483,9 @@ function renderEvenOdd(root,d,last,n){
     "Maven AI decision: "+e.aiDecision.baseSignal+" → "+e.aiDecision.signal+" • confidence "+Math.round(e.aiDecision.confidence*100)+"% • "+e.aiDecision.reason,
     entry?"✓ STRONG ENTRY: trigger has measurable lift toward the Final Signal":"× No strong trigger passed conditional validation"
   ],n);
+  // Keep status styling tied to the signal state, but explicitly name its EVEN/ODD direction.
+  const finalSignalLabel=root.querySelector(".state");
+  if(finalSignalLabel)finalSignalLabel.textContent=e.signal+" — "+state.selectedParity;
   const otherParity=parityStats(d,state.selectedParity==="EVEN"?"ODD":"EVEN");
   const parityScore=stats=>.35*stats.recent+.25*stats.short50+.20*stats.medium+.10*stats.mid250+.10*stats.long;
   const evenStats=state.selectedParity==="EVEN"?e:otherParity;
