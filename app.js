@@ -66,7 +66,7 @@ function renderOverUnder(root,d,c,last,n){
   if(entry){
     entryDisplay={...entry,status:entryPermitted?entry.status:"CANDIDATES ONLY — ENTRY BLOCKED",reason:entryPermitted?entry.reason:(e.probabilityConflict?"Entry candidates are evaluated independently, but the complementary-probability gate currently blocks entry permission.":"Entry candidates are evaluated independently. Entry permission remains blocked until the Over/Under Final Signal is SIGNAL or STRONG SIGNAL."),evidence:entry.evidence+" • Permission: "+(entryPermitted?"allowed by current signal and probability gate":"blocked by separate signal/probability permission gate")};
   }else{
-    entryDisplay={main:"NO QUALIFIED ENTRY DIGITS",confidence:"—",status:"NO ENTRY",reason:n<100?"Entry Engine is collecting enough ticks for independent candidate analysis.":"No candidate digit currently passes the Entry Engine's own reaction, holdout and consistency checks.",evidence:"Entry candidate analysis does not change the Final Signal."};
+    entryDisplay={label:"OVER/UNDER ENTRY",main:entryPermitted?"SIGNAL ACTIVE — WAITING FOR QUALIFIED ENTRY":activeSignal?"SIGNAL BLOCKED — NO ENTRY PERMISSION":"NO QUALIFIED ENTRY DIGITS",confidence:"—",status:entryPermitted?"WAITING FOR ENTRY DIGIT":activeSignal?"ENTRY BLOCKED":"NO ENTRY",reason:n<100?"Entry Engine is collecting enough ticks for independent candidate analysis.":entryPermitted?"The Final Signal is active and the complementary-probability gate has passed, but no entry digit has yet passed the independent reaction, holdout and consistency checks.":"No candidate digit currently passes the Entry Engine's own reaction, holdout and consistency checks. Entry qualification never changes the Final Signal.",evidence:"Independent Entry Engine • max two qualified candidates • Final Signal and complementary-probability gate remain mandatory for entry permission."};
   }
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
     "Selected setup: "+setup,
@@ -1353,7 +1353,7 @@ function entryHtml(e){
   }else{
     cards='<div class="entry-candidates"><div class="entry-candidate"><strong>'+esc(e.main||"NO ENTRY")+'</strong>'+(Number.isFinite(Number(e.score))&&e.score!==""?'<span>SCORE '+esc(Math.round(Number(e.score)))+'/100</span>':Number.isFinite(Number.parseFloat(e.confidence))&&Number.parseFloat(e.confidence)>0?'<span>SCORE '+esc(Math.round(Number.parseFloat(e.confidence)))+'/100</span>':'')+'</div></div>';
   }
-  return '<div class="entry"><div class="entry-head">ENTRY DIGITS</div>'+cards+'</div>';
+  return '<div class="entry"><div class="entry-head">'+esc(e.label||"ENTRY DIGITS")+'</div>'+cards+'</div>';
 }
 function parityStats(d,selectedSide){
   const key=x=>x%2===0?"EVEN":"ODD";
