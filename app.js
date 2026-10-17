@@ -1480,26 +1480,28 @@ function selectParityEntry(d,selectedSide){
     let total=0,hits=0,recentTotal=0,recentHits=0;
     for(let i=runLength;i<recent.length;i++){
       if(!recent.slice(i-runLength,i).every(v=>v===opposite))continue;
-      // Exclude longer runs so length 2 and length 3 are evaluated separately.
-      if(i-runLength-1>=0&&recent[i-runLength-1]===opposite)continue;
+      // A 2-run means exactly two opposite results; a 3-run uses the
+      // rolling last-three pattern, including within a longer live streak.
+      if(runLength===2&&i-runLength-1>=0&&recent[i-runLength-1]===opposite)continue;
       total++;
       if(recent[i]===target)hits++;
       if(i>=recent.length-160){recentTotal++;if(recent[i]===target)recentHits++;}
     }
-    if(total<8)continue;
+    if(total<5)continue;
     const rate=hits/total;
     const recentRate=recentTotal?recentHits/recentTotal:rate;
     const lift=rate-baseline;
     const recentLift=recentRate-baseline;
     const score=100*(Math.max(0,lift)*.65+Math.max(0,recentLift)*.25+Math.min(1,total/40)*.10);
     candidates.push({runLength,total,rate,recentRate,lift,recentLift,score,
-      qualified:total>=8&&lift>=.015&&recentLift>=-.04});
+      qualified:total>=5&&lift>=-.02&&recentLift>=-.08});
   }
 
   let liveRun=0;
   for(let i=recent.length-1;i>=0&&recent[i]===opposite;i--)liveRun++;
-  if(liveRun!==2&&liveRun!==3)return null;
-  const best=candidates.find(c=>c.runLength===liveRun&&c.qualified);
+  if(liveRun<2)return null;
+  const matchedRunLength=liveRun>=3?3:2;
+  const best=candidates.find(c=>c.runLength===matchedRunLength&&c.qualified);
   if(!best)return null;
 
   const confidence=Math.max(65,Math.min(90,Math.round(68+best.score*.45+Math.min(8,best.total/8))));
@@ -1509,11 +1511,11 @@ function selectParityEntry(d,selectedSide){
     type:"PARITY_RUN",
     status:"ENTRY READY",
     trigger:opposite,
-    main:liveRun+" consecutive "+triggerLabel+" results → ENTER "+selectedSide,
+    main:matchedRunLength+" consecutive "+triggerLabel+" results → ENTER "+selectedSide,
     confidence:confidence+"%",
     score:best.score,
-    reason:"The live stream has exactly "+liveRun+" consecutive "+triggerLabel+" results. The independently evaluated "+liveRun+"-run pattern produced "+selectedSide+" "+ratePct+"% of the time across "+best.total+" historical observations (overall baseline "+Math.round(baseline*100)+"%).",
-    evidence:best.total+" historical observations • "+ratePct+"% next-tick "+selectedSide+" rate • exact live pattern qualified."
+    reason:"The live stream has "+liveRun+" consecutive "+triggerLabel+" results; the qualified "+matchedRunLength+"-run pattern produced "+selectedSide+" "+ratePct+"% of the time across "+best.total+" historical observations (overall baseline "+Math.round(baseline*100)+"%).",
+    evidence:best.total+" historical observations • "+ratePct+"% next-tick "+selectedSide+" rate • relaxed evidence thresholds passed for the matching live pattern."
   };
 }
 
