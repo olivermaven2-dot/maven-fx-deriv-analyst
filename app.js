@@ -1820,6 +1820,8 @@ function renderRiseFall(root,last,n){
     root.innerHTML=panel("INSUFFICIENT DATA","Collect at least 30 real price ticks before Rise/Fall analysis.",null,["Uses actual live market prices, not last-digit parity","Selected direction: "+state.selectedRiseFall],n);
     return;
   }
+  state.selectedRiseFall=a.selected;
+  renderRiseFallControls();
   const rawEntry=riseFallEntry(prices,a);
   const entry=mavenAIReviewEntry("risefall",rawEntry,a.aiDecision);
   setOtherValidationForecast("risefall",state.selectedRiseFall,a.signal,!!entry,state.liveTickSequence,a.aiDecision?.confidence);
@@ -1842,7 +1844,9 @@ function renderRiseFall(root,last,n){
     :a.signal==="AVOID"
     ?"Recent price movement conflicts with the selected direction or lacks sufficient support."
     :"Evidence is still developing; wait for more validated live ticks.";
-  root.innerHTML=panel(a.signal,reason,entryDisplay,[
+  root.innerHTML=panel(a.directionSignal||a.signal,reason,entryDisplay,[
+    "Rise strength: "+Math.round(a.riseStrength*100)+"% • Fall strength: "+Math.round(a.fallStrength*100)+"%",
+    "Strength gate: "+(a.strengthGatePassed?"PASSED":"BLOCKED")+" • lead "+Math.round(a.strengthGap*100)+" percentage points • requires ≥56% strength and ≥6 pp lead",
     "Selected direction: "+a.selected,
     "Recent price moves: "+recentPattern,
     "20/50/100/250/500 windows (% RISE): "+latest,
