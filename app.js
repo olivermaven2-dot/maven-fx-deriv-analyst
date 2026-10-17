@@ -1045,6 +1045,10 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
   const smooth=(hits,n,prior=baseline,priorN=8)=>(hits+prior*priorN)/(n+priorN);
   for(let candidate=0;candidate<=9;candidate++){
     if(Array.isArray(onlyCandidates)&&!onlyCandidates.includes(candidate))continue;
+    // Entry bands: OVER may use lower (0–3) and middle (4–6) digits;
+    // UNDER may use middle (4–6) and higher (7–9) digits.
+    if(selectedSide==="OVER"&&candidate>6)continue;
+    if(selectedSide==="UNDER"&&candidate<4)continue;
     if((selectedSide==="UNDER"&&(candidate===0||candidate===1))||(selectedSide==="OVER"&&(candidate===8||candidate===9)))continue;
     if(entryBars.most[candidate]||entryBars.least[candidate])continue;
     const t=ouTransitionStats(d,candidate,selectedDigit,selectedSide);
