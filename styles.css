@@ -1004,3 +1004,10 @@ body {
 .distribution-digit.live-digit-current .distribution-circle{border-color:inherit;box-shadow:none;}
 .distribution-digit.live-digit-current .distribution-circle span{color:inherit;}
 @media(prefers-reduced-motion:reduce){.live-digit-cursor{transition:none}}
+
+
+/* Stable white live cursor: anchored directly beneath the active digit circle. */
+.live-digit-cursor{display:none!important;}
+.distribution-digit{position:relative;overflow:visible!important;}
+.distribution-digit.live-digit-current .distribution-circle{position:relative;}
+.distribution-digit.live-digit-current .distribution-circle::after{content:"";position:absolute;left:50%;top:calc(100% + 4px);transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:0;border-bottom:8px solid #fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.85));z-index:20;pointer-events:none;}
