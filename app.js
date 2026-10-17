@@ -873,8 +873,13 @@ function updateLiveDigitCursor(digit){
     host.appendChild(cursor);
   }
   const circle=target.querySelector(".distribution-circle");
-  cursor.style.left=(target.offsetLeft+target.offsetWidth/2)+"px";
-  cursor.style.top=((circle?target.offsetTop+circle.offsetTop+circle.offsetHeight:target.offsetTop+target.offsetHeight)+2)+"px";
+  // Measure both elements in the same viewport coordinate space, then convert
+  // to the distribution host's coordinate space. offsetTop is relative to each
+  // element's offsetParent and can put the cursor in the wrong row.
+  const hostRect=host.getBoundingClientRect();
+  const anchorRect=(circle||target).getBoundingClientRect();
+  cursor.style.left=(anchorRect.left+anchorRect.width/2-hostRect.left)+"px";
+  cursor.style.top=(anchorRect.bottom-hostRect.top+3)+"px";
   host.querySelectorAll(".distribution-digit.live-digit-current").forEach(node=>node.classList.remove("live-digit-current"));
   target.classList.add("live-digit-current");
 }
