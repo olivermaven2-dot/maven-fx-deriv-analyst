@@ -1210,3 +1210,25 @@ body {
   border-top:0!important;border-bottom:5px solid #60a5fa!important;
   filter:drop-shadow(0 0 1px #eaf4ff)!important;
 }
+
+
+/* Final compact cursor: small, centered directly beneath the active digit. */
+.digit-distribution .distribution-digit .distribution-circle{position:relative!important;overflow:visible!important;}
+.digit-distribution .distribution-digit .distribution-circle > .live-digit-cursor{
+  position:absolute!important;left:50%!important;top:calc(100% + 2px)!important;
+  right:auto!important;bottom:auto!important;display:block!important;
+  width:0!important;height:0!important;padding:0!important;margin:0!important;
+  transform:translateX(-50%)!important;overflow:visible!important;
+  z-index:9999!important;opacity:1!important;visibility:visible!important;
+  filter:drop-shadow(0 1px 1px rgba(0,0,0,.9))!important;
+}
+.digit-distribution .distribution-digit .distribution-circle > .live-digit-cursor > .live-digit-cursor-tip{
+  display:block!important;width:0!important;height:0!important;margin:0!important;
+  border-left:4px solid transparent!important;border-right:4px solid transparent!important;
+  border-top:0!important;border-bottom:5px solid #60a5fa!important;
+  filter:drop-shadow(0 0 1px #f1f7ff)!important;
+}
+.digit-distribution .distribution-digit.live-digit-current .distribution-circle{
+  border-color:#60a5fa!important;
+  box-shadow:0 0 0 1px rgba(96,165,250,.5),0 0 6px rgba(96,165,250,.25)!important;
+}
