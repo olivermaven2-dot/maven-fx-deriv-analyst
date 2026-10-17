@@ -1112,3 +1112,10 @@ body {
   border-bottom-color:#22d3ee!important;
   filter:drop-shadow(0 0 2px #fff) drop-shadow(0 0 6px #22d3ee) drop-shadow(0 0 12px rgba(34,211,238,.95))!important;
 }
+
+
+/* Hide redundant MOST/LEAST labels; the distribution bars already communicate this. */
+.digit-distribution .distribution-cell.most .distribution-tag,
+.digit-distribution .distribution-cell.least .distribution-tag{
+  visibility:hidden!important;
+}
