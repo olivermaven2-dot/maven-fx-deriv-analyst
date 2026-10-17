@@ -943,12 +943,12 @@ function mavenAIDecisionLayer(engine,baseSignal,evidence,alignment,conflict,hard
   else if(conflict){decision="WAIT";reason="AI review detected conflicting evidence and withheld a directional decision.";}
   else if(validation.forecasts>=30&&validation.rate<.40){
     if(decision==="STRONG SIGNAL")decision="SIGNAL";
-    else if(decision==="SIGNAL")decision="WAIT";
-    reason="AI review reduced confidence because the setup's saved walk-forward outcomes are weak ("+Math.round(validation.rate*100)+"% across "+validation.forecasts+" scored outcomes).";
+    // Weak historical validation may downgrade STRONG SIGNAL, but it must not erase a rule-qualified SIGNAL.
+    reason="AI review is cautious because the setup's saved walk-forward outcomes are weak ("+Math.round(validation.rate*100)+"% across "+validation.forecasts+" scored outcomes); the rule-qualified SIGNAL is retained for continued observation.";
   }else if(decision==="STRONG SIGNAL"&&(confidence<.58||agreement<.45)){
     decision="SIGNAL";reason="AI review downgraded the signal because the evidence factors do not agree strongly enough.";
-  }else if(decision==="SIGNAL"&&(confidence<.47||agreement<.30)){
-    decision="WAIT";reason="AI review withheld the signal because too few independent evidence factors support it.";
+  }else if(decision==="SIGNAL"&&(confidence<.30&&agreement<.20)){
+    decision="WAIT";reason="AI review withheld the signal because confidence and independent evidence agreement are both exceptionally weak.";
   }else if(decision==="SIGNAL"&&confidence>=.76&&agreement>=.78&&sample>=200){
     decision="STRONG SIGNAL";reason="AI review upgraded the signal after strong factor agreement and a sufficiently large live sample.";
   }else{
@@ -1016,7 +1016,7 @@ function overUnderEvidence(d,selectedDigit,selectedSide){
   else if(!distribution.pass)signal="AVOID";
   else if(evidenceConflict)signal="WAIT";
   else if(evidence>=.68&&selectedRate>=baseline-.03&&selected.weightedTransitionRate>=Math.max(.48,baseline-.05)&&consistency>=.58&&n>=200)signal="STRONG SIGNAL";
-  else if(evidence>=.54&&selectedRate>=baseline-.07&&consistency>=.45)signal="SIGNAL";
+  else if(evidence>=.52&&selectedRate>=baseline-.08&&consistency>=.42)signal="SIGNAL";
   else if(evidence<.38||selectedRate<baseline-.16)signal="AVOID";
   const aiDecision=mavenAIDecisionLayer("overunder",signal,evidence,[probability,momentumScore,trendScore,transition,selected.cluster,reaction,recency,consistency,historical,context],evidenceConflict,n<100||!distribution.ready||!distribution.pass,n);signal=aiDecision.signal;
   return {oppositeDigit,selectedRate,oppositeRate,baseline,probability:aiDecision.adjustedAlignment[0]??probability,momentum:aiDecision.adjustedAlignment[1]??momentumScore,trend:aiDecision.adjustedAlignment[2]??trendScore,transition:aiDecision.adjustedAlignment[3]??transition,cluster:aiDecision.adjustedAlignment[4]??selected.cluster,reaction:aiDecision.adjustedAlignment[5]??reaction,recency:aiDecision.adjustedAlignment[6]??recency,consistency:aiDecision.adjustedAlignment[7]??consistency,historical:aiDecision.adjustedAlignment[8]??historical,context:aiDecision.adjustedAlignment[9]??context,evidence:aiDecision.adjustedEvidence,probabilityConflict,windowConflict,evidenceConflict,distribution,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentRate:selected.recent,mediumRate:selected.medium,longRate:selected.long,short50:selected.short50,mid250:selected.mid250,weightedTransitionRate:selected.weightedTransitionRate,transitions:selected.transitions,streak:selected.streak};
@@ -1321,7 +1321,7 @@ function parityStats(d,selectedSide){
   else if(conflict)signal="WAIT";
   else if(!transitionSampleReady)signal="WAIT";
   else if(evidence>=.68&&recent>=.56&&short50>=.53&&long>=.49&&recentTransitionRate>=.52&&consistency>=.58&&n>=250&&transitions>=50)signal="STRONG SIGNAL";
-  else if(evidence>=.56&&recent>=.53&&short50>=.50&&recentTransitionRate>=.50&&consistency>=.50&&transitions>=30)signal="SIGNAL";
+  else if(evidence>=.53&&recent>=.52&&short50>=.49&&recentTransitionRate>=.49&&consistency>=.46&&transitions>=30)signal="SIGNAL";
   else if(evidence<.38||recent<.44)signal="AVOID";
   const aiDecision=mavenAIDecisionLayer("evenodd",signal,evidence,[probability,momentumScore,trendScore,transition,clustering,recency,consistency,historical,context],conflict,n<100||!transitionSampleReady,n);signal=aiDecision.signal;
   return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,probability:aiDecision.adjustedAlignment[0]??probability,momentumScore:aiDecision.adjustedAlignment[1]??momentumScore,trendScore:aiDecision.adjustedAlignment[2]??trendScore,transition:aiDecision.adjustedAlignment[3]??transition,historical:aiDecision.adjustedAlignment[7]??historical,recency:aiDecision.adjustedAlignment[5]??recency,context:aiDecision.adjustedAlignment[8]??context,evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,target,other};
@@ -1527,7 +1527,7 @@ function riseFallAnalysis(prices){
   else if(conflict)signal="WAIT";
   else if(recentTarget<.43||shortTarget<.42||persistence<.38)signal="AVOID";
   else if(evidence>=.67&&recentTarget>=.57&&shortTarget>=.54&&midTarget>=.51&&persistence>=.53&&clean.length>=200)signal="STRONG SIGNAL";
-  else if(evidence>=.55&&recentTarget>=.51&&shortTarget>=.49&&persistence>=.45)signal="SIGNAL";
+  else if(evidence>=.52&&recentTarget>=.50&&shortTarget>=.48&&persistence>=.42)signal="SIGNAL";
   else if(evidence<.43)signal="AVOID";
   const aiDecision=mavenAIDecisionLayer("risefall",signal,evidence,[recentTarget,shortTarget,midTarget,longTarget,persistence,1-reversalPressure,recentMove,trendRate,momentum],conflict,clean.length<100||recentDirectional.length<15||stats.some(x=>x.size<=100&&x.directional<10),clean.length);signal=aiDecision.signal;
   return {selected:state.selectedRiseFall,stats,recentRate,recentMove:aiDecision.adjustedAlignment[6]??recentMove,trendRate:aiDecision.adjustedAlignment[7]??trendRate,momentum:aiDecision.adjustedAlignment[8]??momentum,persistence:aiDecision.adjustedAlignment[4]??persistence,streak,reversalPressure, evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentTarget:aiDecision.adjustedAlignment[0]??recentTarget,shortTarget:aiDecision.adjustedAlignment[1]??shortTarget,midTarget:aiDecision.adjustedAlignment[2]??midTarget,longTarget:aiDecision.adjustedAlignment[3]??longTarget};
