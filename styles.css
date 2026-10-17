@@ -987,267 +987,44 @@ body {
   .topbar { background:rgba(13,18,25,.98) !important; }
 }
 
-/* Live-market digit cursor follows received ticks only; no timer or simulated data. */
-.digit-distribution{position:relative;padding-top:0}
-.live-digit-cursor{position:absolute;z-index:5;display:flex;flex-direction:column;align-items:center;gap:1px;transform:translateX(-50%);pointer-events:none;transition:left .12s ease-out,top .12s ease-out;will-change:left,top}
-.live-digit-cursor-label{font-size:8px;line-height:10px;font-weight:1000;letter-spacing:.08em;color:#061a35;background:#65e6b2;border:1px solid #a5f5d4;border-radius:4px;padding:1px 4px;box-shadow:0 0 10px rgba(101,230,178,.35)}
-.live-digit-cursor-tip{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #65e6b2;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
-.distribution-digit.live-digit-current .distribution-circle{border-color:#65e6b2;box-shadow:0 0 0 2px rgba(101,230,178,.24),0 0 14px rgba(101,230,178,.24)}
-.distribution-digit.live-digit-current .distribution-circle span{color:#a5f5d4}
-@media(prefers-reduced-motion:reduce){.live-digit-cursor{transition:none}}
-
-
-/* Plain white cursor below the active digit: no LIVE label or colored highlight. */
-.live-digit-cursor{z-index:5;display:block;transform:translateX(-50%);pointer-events:none;transition:left .12s ease-out,top .12s ease-out;}
-.live-digit-cursor-label{display:none !important;}
-.live-digit-cursor-tip{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:0;border-bottom:7px solid #fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7));}
-.distribution-digit.live-digit-current .distribution-circle{border-color:inherit;box-shadow:none;}
-.distribution-digit.live-digit-current .distribution-circle span{color:inherit;}
-@media(prefers-reduced-motion:reduce){.live-digit-cursor{transition:none}}
-
-
-/* Stable white live cursor: anchored directly beneath the active digit circle. */
-.live-digit-cursor{display:none!important;}
-.distribution-digit{position:relative;overflow:visible!important;}
-.distribution-digit.live-digit-current .distribution-circle{position:relative;}
-.distribution-digit.live-digit-current .distribution-circle::after{content:"";position:absolute;left:50%;top:calc(100% + 4px);transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:0;border-bottom:8px solid #fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.85));z-index:20;pointer-events:none;}
-
-
-/* Final cursor placement: anchor the plain white pointer to the digit circle itself. */
-.distribution-circle > .live-digit-cursor{
-  position:absolute !important;
-  top:calc(100% + 3px) !important;
-  left:50% !important;
-  right:auto !important;
-  bottom:auto !important;
-  display:block !important;
-  width:10px !important;
-  height:7px !important;
-  margin:0 !important;
-  padding:0 !important;
-  transform:translateX(-50%) !important;
-  z-index:20 !important;
-  overflow:visible !important;
-}
-.distribution-circle > .live-digit-cursor > .live-digit-cursor-tip{
-  display:block !important;
-  width:0 !important;
-  height:0 !important;
-  margin:0 auto !important;
-  border-left:5px solid transparent !important;
-  border-right:5px solid transparent !important;
-  border-top:0 !important;
-  border-bottom:7px solid #fff !important;
-  filter:drop-shadow(0 1px 2px rgba(0,0,0,.85)) !important;
-}
-
-
-/* High-visibility Maven interface cursor: blue-cyan pointer, outlined for contrast. */
-.distribution-digit.live-digit-current .distribution-circle::after{content:none!important;display:none!important;}
-.distribution-circle > .live-digit-cursor{
+/* Live digit cursor: small, centered directly under the active digit, using Maven interface blue. */
+.digit-distribution .distribution-circle{position:relative;overflow:visible!important;}
+.digit-distribution .distribution-circle > .live-digit-cursor{
   position:absolute!important;
-  top:calc(100% + 4px)!important;
   left:50%!important;
+  top:calc(100% + 3px)!important;
   right:auto!important;
   bottom:auto!important;
   display:block!important;
-  width:16px!important;
-  height:12px!important;
+  width:0!important;
+  height:0!important;
   margin:0!important;
   padding:0!important;
-  transform:translateX(-50%)!important;
-  z-index:30!important;
-  overflow:visible!important;
-  filter:drop-shadow(0 0 3px rgba(96,165,250,.95)) drop-shadow(0 2px 2px rgba(0,0,0,.95))!important;
-}
-.distribution-circle > .live-digit-cursor > .live-digit-cursor-tip{
-  display:block!important;
-  width:0!important;
-  height:0!important;
-  margin:0 auto!important;
-  border-left:8px solid transparent!important;
-  border-right:8px solid transparent!important;
-  border-top:0!important;
-  border-bottom:11px solid #60a5fa!important;
-  outline:none!important;
-  filter:drop-shadow(0 -1px 0 #eaf6ff)!important;
-}
-.distribution-digit.live-digit-current .distribution-circle{
-  border-color:#60a5fa!important;
-  box-shadow:0 0 0 2px rgba(96,165,250,.3),0 0 12px rgba(96,165,250,.42)!important;
-}
-
-
-/* Final placement: a high-contrast Maven-blue cursor just below the percentage text. */
-.distribution-digit{
-  position:relative!important;
-  overflow:visible!important;
-}
-.distribution-digit > .live-digit-cursor{
-  position:absolute!important;
-  display:block!important;
-  width:16px!important;
-  height:12px!important;
-  margin:0!important;
-  padding:0!important;
-  transform:translateX(-50%)!important;
-  z-index:50!important;
-  pointer-events:none!important;
-  overflow:visible!important;
-  filter:drop-shadow(0 0 3px rgba(96,165,250,.95)) drop-shadow(0 2px 2px rgba(0,0,0,.95))!important;
-}
-.distribution-digit > .live-digit-cursor > .live-digit-cursor-tip{
-  display:block!important;
-  width:0!important;
-  height:0!important;
-  margin:0 auto!important;
-  border-left:8px solid transparent!important;
-  border-right:8px solid transparent!important;
-  border-top:0!important;
-  border-bottom:11px solid #60a5fa!important;
-  filter:drop-shadow(0 -1px 0 #f1f7ff)!important;
-}
-.distribution-digit.live-digit-current .distribution-circle{
-  border-color:#60a5fa!important;
-  box-shadow:0 0 0 2px rgba(96,165,250,.3),0 0 12px rgba(96,165,250,.42)!important;
-}
-
-
-/* Maven FX cursor visibility override — unmistakable interface-blue pointer. */
-.digit-distribution .distribution-digit{
-  position:relative!important;
-  overflow:visible!important;
-  isolation:isolate;
-}
-.digit-distribution .distribution-digit > .live-digit-cursor{
-  display:block!important;
-  position:absolute!important;
-  left:50%!important;
-  top:auto!important;
-  right:auto!important;
-  bottom:-19px!important;
-  width:0!important;
-  height:0!important;
-  padding:0!important;
-  margin:0!important;
-  transform:translateX(-50%)!important;
-  overflow:visible!important;
-  z-index:999!important;
-  opacity:1!important;
-  visibility:visible!important;
-  filter:drop-shadow(0 0 4px rgba(96,165,250,1)) drop-shadow(0 2px 3px rgba(0,0,0,.95))!important;
-}
-.digit-distribution .distribution-digit > .live-digit-cursor > .live-digit-cursor-tip{
-  display:block!important;
-  width:0!important;
-  height:0!important;
-  margin:0!important;
-  border-left:9px solid transparent!important;
-  border-right:9px solid transparent!important;
-  border-top:0!important;
-  border-bottom:13px solid #60a5fa!important;
-  filter:drop-shadow(0 -1px 0 #ffffff)!important;
-}
-.digit-distribution .distribution-digit.live-digit-current .distribution-circle{
-  border-color:#60a5fa!important;
-  box-shadow:0 0 0 2px #60a5fa,0 0 0 5px rgba(96,165,250,.22),0 0 15px rgba(96,165,250,.72)!important;
-}
-.digit-distribution .distribution-digit.live-digit-current .distribution-percent{
-  color:#93c5fd!important;
-  font-weight:900!important;
-  text-shadow:0 0 8px rgba(96,165,250,.65)!important;
-}
-
-
-/* Compact, clearly visible Maven-blue live digit pointer. */
-.digit-distribution > .live-digit-cursor{
-  position:absolute!important;
-  z-index:20!important;
-  display:block!important;
-  width:0!important;
-  height:0!important;
-  padding:0!important;
-  margin:0!important;
   border:0!important;
   transform:translateX(-50%)!important;
+  z-index:10!important;
   pointer-events:none!important;
   opacity:1!important;
   visibility:visible!important;
-  filter:drop-shadow(0 1px 2px rgba(0,0,0,.9))!important;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.95))!important;
 }
-.digit-distribution > .live-digit-cursor > .live-digit-cursor-tip{
+.digit-distribution .distribution-circle > .live-digit-cursor > .live-digit-cursor-tip{
   display:block!important;
   width:0!important;
   height:0!important;
+  margin:0!important;
+  padding:0!important;
   border-left:4px solid transparent!important;
   border-right:4px solid transparent!important;
   border-top:0!important;
   border-bottom:5px solid #60a5fa!important;
-  filter:drop-shadow(0 0 1px #dbeafe)!important;
-}
-.digit-distribution > .live-digit-cursor .live-digit-cursor-label{display:none!important}
-.digit-distribution .distribution-digit.live-digit-current .distribution-circle{
-  border-color:#60a5fa!important;
-  box-shadow:0 0 0 1px rgba(96,165,250,.55),0 0 6px rgba(96,165,250,.28)!important;
-}
-.digit-distribution .distribution-digit.live-digit-current .distribution-percent{
-  color:#93c5fd!important;
-  text-shadow:none!important;
-}
-
-
-/* Final override: compact Maven-blue cursor directly below the active digit. */
-.distribution-circle > .live-digit-cursor{
-  position:absolute!important;top:calc(100% + 3px)!important;left:50%!important;
-  right:auto!important;bottom:auto!important;display:block!important;
-  width:0!important;height:0!important;padding:0!important;margin:0!important;
-  transform:translateX(-50%)!important;overflow:visible!important;z-index:9999!important;
-  filter:drop-shadow(0 1px 1px rgba(0,0,0,.9))!important;
-}
-.distribution-circle > .live-digit-cursor > .live-digit-cursor-tip{
-  display:block!important;width:0!important;height:0!important;margin:0!important;
-  border-left:4px solid transparent!important;border-right:4px solid transparent!important;
-  border-top:0!important;border-bottom:5px solid #60a5fa!important;
-  filter:drop-shadow(0 0 1px #eaf4ff)!important;
-}
-
-
-/* Final compact cursor: small, centered directly beneath the active digit. */
-.digit-distribution .distribution-digit .distribution-circle{position:relative!important;overflow:visible!important;}
-.digit-distribution .distribution-digit .distribution-circle > .live-digit-cursor{
-  position:absolute!important;left:50%!important;top:calc(100% + 2px)!important;
-  right:auto!important;bottom:auto!important;display:block!important;
-  width:0!important;height:0!important;padding:0!important;margin:0!important;
-  transform:translateX(-50%)!important;overflow:visible!important;
-  z-index:9999!important;opacity:1!important;visibility:visible!important;
-  filter:drop-shadow(0 1px 1px rgba(0,0,0,.9))!important;
-}
-.digit-distribution .distribution-digit .distribution-circle > .live-digit-cursor > .live-digit-cursor-tip{
-  display:block!important;width:0!important;height:0!important;margin:0!important;
-  border-left:4px solid transparent!important;border-right:4px solid transparent!important;
-  border-top:0!important;border-bottom:5px solid #60a5fa!important;
   filter:drop-shadow(0 0 1px #f1f7ff)!important;
 }
 .digit-distribution .distribution-digit.live-digit-current .distribution-circle{
   border-color:#60a5fa!important;
-  box-shadow:0 0 0 1px rgba(96,165,250,.5),0 0 6px rgba(96,165,250,.25)!important;
+  box-shadow:0 0 0 1px rgba(96,165,250,.45),0 0 6px rgba(96,165,250,.24)!important;
 }
-
-
-/* Final cursor styling: centered directly under the percentage, pointing back to its digit. */
-.digit-distribution .distribution-digit{position:relative!important;overflow:visible!important;}
-.digit-distribution .distribution-digit > .live-digit-cursor{
- position:absolute!important;left:50%;top:0;right:auto;bottom:auto;display:block!important;
- width:0!important;height:0!important;margin:0!important;padding:0!important;border:0!important;
- transform:translateX(-50%)!important;z-index:10000!important;pointer-events:none!important;
- opacity:1!important;visibility:visible!important;filter:drop-shadow(0 1px 2px rgba(0,0,0,.95)) drop-shadow(0 0 2px rgba(96,165,250,.9))!important;
+.digit-distribution .distribution-digit.live-digit-current .distribution-circle span{
+  color:inherit!important;
 }
-.digit-distribution .distribution-digit > .live-digit-cursor > .live-digit-cursor-tip{
- display:block!important;width:0!important;height:0!important;margin:0!important;padding:0!important;
- border-left:7px solid transparent!important;border-right:7px solid transparent!important;
- border-top:0!important;border-bottom:9px solid #60a5fa!important;
- filter:drop-shadow(0 -1px 0 #f1f7ff)!important;
-}
-.digit-distribution .distribution-digit.live-digit-current .distribution-circle{
- border-color:#60a5fa!important;box-shadow:0 0 0 1px rgba(96,165,250,.35),0 0 7px rgba(96,165,250,.3)!important;
-}
+@media(prefers-reduced-motion:reduce){.live-digit-cursor{transition:none!important}}
