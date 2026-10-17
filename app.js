@@ -823,7 +823,7 @@ function updateQuality(){
 }
 function renderStream(incremental=false){
   const d=state.digits.slice(-STREAM_SIZE),host=$("digitStream");
-  const parityMode=state.engine==="evenodd";
+  const parityMode=state.engine==="evenodd"||document.querySelector('.engine-tab.active')?.dataset.engine==="evenodd";
   const displayTick=x=>parityMode?(x%2===0?"E":"O"):String(x);
   $("streamInfo").textContent=d.length+(parityMode?" parity symbols":" digits");
   const expectedPreviousCount=d.length<STREAM_SIZE?Math.max(0,d.length-1):STREAM_SIZE;
