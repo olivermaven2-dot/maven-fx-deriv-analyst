@@ -1468,56 +1468,69 @@ function parityReactionEntry(d,selectedSide){
 }
 
 function selectParityEntry(d,selectedSide){
-  // Independently qualify exact 2-run and exact 3-run patterns. Only the
-  // historical pattern matching the current live run may trigger an entry.
-  if(!Array.isArray(d)||d.length<30)return null;
+  // Research-led entry evaluation: discover the conditional pattern on older
+  // ticks, then evaluate that same pattern on a later holdout sample.
+  // Streaks are candidate triggers only; they never qualify by themselves.
+  if(!Array.isArray(d)||d.length<100)return null;
   const target=selectedSide==="EVEN"?"E":"O";
-  const opposite=target==="E"?"O":"E";
   const key=x=>(x%2===0?"E":"O");
   const recent=d.slice(-500).map(key);
-  const baseline=recent.length?recent.filter(x=>x===target).length/recent.length:.5;
+  if(recent.length<100)return null;
+
+  const split=Math.floor(recent.length*.70);
+  if(split<60||recent.length-split<30)return null;
+  const train=recent.slice(0,split);
+  const holdout=recent.slice(split);
+  const rate=(arr)=>arr.length?arr.filter(x=>x===target).length/arr.length:.5;
+  const trainBaseline=rate(train);
+  const testBaseline=rate(holdout);
+  const liveSuffix=recent.slice(-3);
   const candidates=[];
 
-  for(const runLength of [2,3]){
-    let total=0,hits=0,recentTotal=0,recentHits=0;
-    for(let i=runLength;i<recent.length;i++){
-      if(!recent.slice(i-runLength,i).every(v=>v===opposite))continue;
-      // A 2-run means exactly two opposite results; a 3-run uses the
-      // rolling last-three pattern, including within a longer live streak.
-      if(runLength===2&&i-runLength-1>=0&&recent[i-runLength-1]===opposite)continue;
-      total++;
-      if(recent[i]===target)hits++;
-      if(i>=recent.length-160){recentTotal++;if(recent[i]===target)recentHits++;}
-    }
-    if(total<5)continue;
-    const rate=hits/total;
-    const recentRate=recentTotal?recentHits/recentTotal:rate;
-    const lift=rate-baseline;
-    const recentLift=recentRate-baseline;
-    const score=100*(Math.max(0,lift)*.65+Math.max(0,recentLift)*.25+Math.min(1,total/40)*.10);
-    candidates.push({runLength,total,rate,recentRate,lift,recentLift,score,
-      qualified:total>=5&&lift>=-.02&&recentLift>=-.08});
+  // Compare 1-, 2-, and 3-tick parity patterns, including non-streak patterns.
+  for(let len=1;len<=3;len++){
+    const pattern=liveSuffix.slice(-len).join("");
+    const collect=(arr)=>{
+      const out={n:0,next:0,within2:0};
+      for(let i=0;i+len<arr.length;i++){
+        if(arr.slice(i,i+len).join("")!==pattern)continue;
+        out.n++;
+        if(arr[i+len]===target)out.next++;
+        if(arr[i+len]===target||arr[i+len+1]===target)out.within2++;
+      }
+      return out;
+    };
+    const tr=collect(train);
+    const va=collect(holdout);
+    // Keep outcome windows inside each split so training outcomes cannot leak
+    // into validation and validation examples do not borrow future training data.
+    const trainLift=tr.n?tr.next/tr.n-trainBaseline:0;
+    const validationRate=va.n?va.next/va.n:0;
+    const validationLift=validationRate-testBaseline;
+    const within2Rate=va.n?va.within2/va.n:0;
+    if(tr.n<12||va.n<8)continue;
+    // A pattern must show a modest training lift and repeat it out-of-sample.
+    // Two-tick follow-through is reported as supporting evidence, not a gate.
+    const qualified=trainLift>=.02&&validationLift>=.04;
+    const score=Math.max(0,Math.min(85,Math.round(50+Math.max(0,trainLift)*100+Math.max(0,validationLift)*250+Math.min(10,va.n/3))));
+    candidates.push({pattern,len,tr,va,trainLift,validationRate,validationLift,within2Rate,qualified,score});
   }
 
-  let liveRun=0;
-  for(let i=recent.length-1;i>=0&&recent[i]===opposite;i--)liveRun++;
-  if(liveRun<2)return null;
-  const matchedRunLength=liveRun>=3?3:2;
-  const best=candidates.find(c=>c.runLength===matchedRunLength&&c.qualified);
+  const best=candidates.filter(x=>x.qualified).sort((a,b)=>
+    b.score-a.score||b.validationLift-a.validationLift||b.va.n-a.va.n
+  )[0];
   if(!best)return null;
 
-  const confidence=Math.max(65,Math.min(90,Math.round(68+best.score*.45+Math.min(8,best.total/8))));
-  const triggerLabel=opposite==="E"?"EVEN":"ODD";
-  const ratePct=Math.round(best.rate*100);
+  const label=best.pattern.split("").map(x=>x==="E"?"EVEN":"ODD").join(" → ");
+  const pct=x=>Math.round(x*100)+"%";
   return {
-    type:"PARITY_RUN",
+    type:"VALIDATED_PARITY_PATTERN",
     status:"ENTRY READY",
-    trigger:opposite,
-    main:matchedRunLength+" consecutive "+triggerLabel+" results → ENTER "+selectedSide,
-    confidence:confidence+"%",
+    trigger:best.pattern,
+    main:label+" → ENTER "+selectedSide,
     score:best.score,
-    reason:"The live stream has "+liveRun+" consecutive "+triggerLabel+" results; the qualified "+matchedRunLength+"-run pattern produced "+selectedSide+" "+ratePct+"% of the time across "+best.total+" historical observations (overall baseline "+Math.round(baseline*100)+"%).",
-    evidence:best.total+" historical observations • "+ratePct+"% next-tick "+selectedSide+" rate • relaxed evidence thresholds passed for the matching live pattern."
+    reason:"This pattern passed a chronological holdout test: training rate "+pct(best.tr.next/best.tr.n)+" across "+best.tr.n+" examples; later validation rate "+pct(best.validationRate)+" across "+best.va.n+" examples, versus a validation baseline of "+pct(testBaseline)+".",
+    evidence:"Out-of-sample lift "+(best.validationLift>=0?"+":"")+pct(best.validationLift)+" • training lift "+(best.trainLift>=0?"+":"")+pct(best.trainLift)+" • target appeared within 2 ticks in "+pct(best.within2Rate)+" of validation examples. Score is an evidence-ranking score, not a win probability."
   };
 }
 
