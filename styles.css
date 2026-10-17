@@ -987,22 +987,22 @@ body {
   .topbar { background:rgba(13,18,25,.98) !important; }
 }
 
-/* Visible, compact upward pointer: centered on the digit and placed just below its percentage. */
-.digit-distribution .distribution-digit{position:relative!important;overflow:visible!important;}
-.digit-distribution .distribution-digit > .live-digit-cursor{
-  position:absolute!important;left:50%!important;top:var(--cursor-top, 76px)!important;
-  display:block!important;width:12px!important;height:9px!important;
+/* Small upward pointer attached directly to the percentage, centered under the digit. */
+.digit-distribution .distribution-percent{position:relative!important;overflow:visible!important;}
+.digit-distribution .distribution-percent > .live-digit-cursor{
+  position:absolute!important;left:50%!important;top:calc(100% + 2px)!important;
+  display:block!important;width:8px!important;height:6px!important;
   margin:0!important;padding:0!important;border:0!important;
   transform:translateX(-50%)!important;z-index:100!important;
   pointer-events:none!important;opacity:1!important;visibility:visible!important;
 }
-.digit-distribution .distribution-digit > .live-digit-cursor > .live-digit-cursor-tip{
+.digit-distribution .distribution-percent > .live-digit-cursor > .live-digit-cursor-tip{
   display:block!important;position:absolute!important;left:0!important;top:0!important;
   width:0!important;height:0!important;margin:0!important;padding:0!important;
-  border-left:6px solid transparent!important;
-  border-right:6px solid transparent!important;
-  border-top:0!important;border-bottom:9px solid #60a5fa!important;
-  filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 4px rgba(96,165,250,.95))!important;
+  border-left:4px solid transparent!important;
+  border-right:4px solid transparent!important;
+  border-top:0!important;border-bottom:6px solid #60a5fa!important;
+  filter:drop-shadow(0 0 1px #fff) drop-shadow(0 0 3px rgba(96,165,250,.9))!important;
 }
 .digit-distribution .distribution-digit.live-digit-current .distribution-circle{
   border-color:#60a5fa!important;box-shadow:0 0 0 1px rgba(96,165,250,.55)!important;
