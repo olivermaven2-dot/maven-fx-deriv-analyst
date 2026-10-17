@@ -864,22 +864,8 @@ function updateLiveDigitCursor(digit){
   if(!host||!Number.isInteger(digit)||digit<0||digit>9)return;
   const target=host.querySelector('.distribution-digit[data-digit="'+digit+'"]');
   if(!target)return;
-  let cursor=host.querySelector(".live-digit-cursor");
-  if(!cursor){
-    cursor=document.createElement("span");
-    cursor.className="live-digit-cursor";
-    cursor.setAttribute("aria-hidden","true");
-    cursor.innerHTML='<span class="live-digit-cursor-tip"></span>';
-    host.appendChild(cursor);
-  }
-  const circle=target.querySelector(".distribution-circle");
-  // Measure both elements in the same viewport coordinate space, then convert
-  // to the distribution host's coordinate space. offsetTop is relative to each
-  // element's offsetParent and can put the cursor in the wrong row.
-  const hostRect=host.getBoundingClientRect();
-  const anchorRect=(circle||target).getBoundingClientRect();
-  cursor.style.left=(anchorRect.left+anchorRect.width/2-hostRect.left)+"px";
-  cursor.style.top=(anchorRect.bottom-hostRect.top+3)+"px";
+  // Keep the live marker attached to the digit itself. A separately positioned
+  // element can drift when the grid reflows or the distribution is re-rendered.
   host.querySelectorAll(".distribution-digit.live-digit-current").forEach(node=>node.classList.remove("live-digit-current"));
   target.classList.add("live-digit-current");
 }
