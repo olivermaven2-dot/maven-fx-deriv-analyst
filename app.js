@@ -1060,17 +1060,19 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
     if(recent1.length>=12&&recentRate<baseline-.06)continue;
     if(h1.n>=20&&observedRate<baseline-.07)continue;
     if(recent1.length>=8&&h1.failureStreak>=5&&recentRate<baseline)continue;
-    const sample=Math.min(1,t.total/100);
-    const directionalLift=Math.max(0,Math.min(1,.5+(t.r1-baseline)*3.5));
-    const recentLift=Math.max(0,Math.min(1,.5+(t.recentRate-baseline)*3.5));
-    const secondLift=Math.max(0,Math.min(1,.5+(t.r2-baseline)*3));
-    const thirdLift=Math.max(0,Math.min(1,.5+(t.r3-baseline)*2));
-    const validationLift=recent1.length>=6?Math.max(0,Math.min(1,.5+(recentRate-baseline)*3.5)):.5;
+    const sample=Math.min(1,t.total/120);
+    const directionalLift=Math.max(0,Math.min(1,.5+(t.r1-baseline)*4));
+    const recentLift=Math.max(0,Math.min(1,.5+(t.recentRate-baseline)*4));
+    const secondLift=Math.max(0,Math.min(1,.5+(t.r2-baseline)*3.5));
+    const thirdLift=Math.max(0,Math.min(1,.5+(t.r3-baseline)*2.5));
+    const validationLift=recent1.length>=6?Math.max(0,Math.min(1,.5+(recentRate-baseline)*4)):.5;
     const stability=Math.max(0,Math.min(1,1-Math.abs(t.rate-t.recentRate)-Math.abs(t.r1-t.r2)*.20-Math.abs(t.r2-t.r3)*.15));
     const consistency=Math.max(0,Math.min(1,1-Math.abs(t.r1-t.r2)*.7-Math.abs(t.r2-t.r3)*.3));
+    // Once enough real entry outcomes exist, use the conservative Wilson bound so a small lucky sample cannot dominate ranking.
+    const validationConfidence=h1.n>=20?Math.max(0,Math.min(1,.5+(ouWilsonLowerBound(h1.hits,h1.n)-baseline)*3.5)):.5;
     const validationWeight=recent1.length>=12?.16:recent1.length>=6?.10:0;
     const recentWeight=.12-validationWeight;
-    const score=Math.round(100*(directionalLift*.25+recentLift*.20+secondLift*.13+thirdLift*.07+stability*.10+consistency*.07+sample*.06+validationLift*validationWeight+Math.min(1,t.recentTotal/40)*recentWeight));
+    const score=Math.round(100*(directionalLift*.24+recentLift*.22+secondLift*.16+thirdLift*.08+stability*.08+consistency*.06+sample*.04+validationLift*validationWeight+validationConfidence*.06+Math.min(1,t.recentTotal/40)*recentWeight));
     const recentObservedRate=recent1.length?recentHits1/recent1.length:0;
     candidates.push({...t,candidate,baseline,score,stability,consistency,validation:{n:h1.n,hits:h1.hits,rate:observedRate,observedRate:rawObservedRate,recentN:recent1.length,recentHits:recentHits1,recentRate,recentObservedRate,failureStreak:h1.failureStreak,lowerBound:ouWilsonLowerBound(h1.hits,h1.n)}});
   }
@@ -1078,8 +1080,11 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
   if(!candidates.length)return null;
   const watchCandidates=candidates.filter(c=>{
     const hasDirectionalReaction=c.r1>=baseline-.04&&c.recentRate>=baseline-.05;
+    // Accept a credible one- or two-tick reaction; do not make the third tick a mandatory gate.
     const hasContinuation=c.r2>=baseline-.06||c.r1>=baseline+.015;
-    return c.total>=30&&c.recentTotal>=8&&hasDirectionalReaction&&hasContinuation&&c.stability>=.42&&c.consistency>=.30&&c.score>=55;
+    const hasReliableSample=c.total>=30&&c.recentTotal>=8;
+    const validatedWeak=c.validation.n>=25&&c.validation.lowerBound<baseline-.08;
+    return hasReliableSample&&hasDirectionalReaction&&hasContinuation&&!validatedWeak&&c.stability>=.42&&c.consistency>=.30&&c.score>=55;
   }).slice(0,2);
   if(!watchCandidates.length)return null;
   const entries=watchCandidates.map(c=>{
