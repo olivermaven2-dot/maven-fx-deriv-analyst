@@ -439,26 +439,33 @@ test('Even/Odd waits for at least 100 observed digits before issuing a signal', 
   assert.equal(result.signal, 'WAIT');
 });
 
-test('Even/Odd entry requires a current live trigger and does not rely on a historical pattern alone', () => {
+test('Even/Odd entry independently qualifies exact 2-run and 3-run patterns against historical outcomes', () => {
   const start = appSource.indexOf('function selectParityEntry');
   assert.notEqual(start, -1, 'selectParityEntry must exist');
   const end = appSource.indexOf('\nfunction ', start + 10);
   const source = appSource.slice(start, end);
   const harness = `
-    const parityPatternStats = () => ({
-      type: 'PATTERN', status: 'STRONG ENTRY', main: 'E → EVEN',
-      confidence: '80%', score: 8, reason: 'test', evidence: 'test'
-    });
-    const parityReactionEntry = () => null;
     ${source}
     selectParityEntry
   `;
   const run = vm.runInNewContext(harness);
+  const twoRunData = [];
+  for (let i = 0; i < 60; i++) twoRunData.push(2, 1, 3, 2, 4);
+  twoRunData.push(1, 3);
+  const twoRun = run(twoRunData, 'EVEN');
+  assert.ok(twoRun, 'qualified O-O pattern should allow EVEN entry');
+  assert.match(twoRun.main, /2 consecutive ODD results → ENTER EVEN/);
+  assert.match(twoRun.evidence, /exact live pattern qualified/);
+
+  const threeRunData = [];
+  for (let i = 0; i < 60; i++) threeRunData.push(2, 1, 3, 5, 2, 4);
+  threeRunData.push(1, 3, 5);
+  const threeRun = run(threeRunData, 'EVEN');
+  assert.ok(threeRun, 'qualified O-O-O pattern should allow EVEN entry');
+  assert.match(threeRun.main, /3 consecutive ODD results → ENTER EVEN/);
+
   assert.equal(run([1, 3, 5, 7, 9, 1, 3, 5, 7, 9], 'EVEN'), null,
-    'a historical candidate must not pass without a current matching trigger and follow-through');
-  const confirmed = run([1, 3, 5, 7, 9, 2, 4], 'EVEN');
-  assert.ok(confirmed, 'a matching live trigger with one-tick follow-through may qualify');
-  assert.match(confirmed.evidence, /live trigger matched/);
+    'a historical pattern alone must not qualify when there is no matching 2-run or 3-run at the live tail');
 });
 
 test('Even/Odd renderer only activates entry validation for SIGNAL or STRONG SIGNAL', () => {
