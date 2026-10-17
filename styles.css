@@ -1042,3 +1042,29 @@ body {
   opacity:1!important;visibility:visible!important;z-index:9999!important;
   pointer-events:none!important;
 }
+
+
+/* Cursor: a small, solid accent-blue pointer directly beneath the digit percentage. */
+.digit-distribution .live-digit-pointer{
+  display:block!important;
+  position:relative!important;
+  align-self:center!important;
+  flex:0 0 auto!important;
+  width:0!important;
+  height:0!important;
+  margin:2px 0 0!important;
+  padding:0!important;
+  border-left:5px solid transparent!important;
+  border-right:5px solid transparent!important;
+  border-top:0!important;
+  border-bottom:7px solid #60a5fa!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  transform:none!important;
+  opacity:1!important;
+  visibility:visible!important;
+  z-index:20!important;
+  pointer-events:none!important;
+}
+.digit-distribution .distribution-percent.cursor-active-percent::after{content:none!important;display:none!important;}
+.digit-distribution .distribution-digit.live-digit-current .distribution-circle{border-color:inherit!important;box-shadow:none!important;}
