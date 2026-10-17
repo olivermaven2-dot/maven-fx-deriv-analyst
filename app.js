@@ -1554,7 +1554,7 @@ function selectParityEntry(d,selectedSide){
     const recentLift=recentRate-baseline;
     const score=100*(Math.max(0,lift1)*.42+Math.max(0,lift2)*.38+Math.max(0,recentLift)*.12+Math.min(1,total/40)*.08);
     // Require repeatable historical support and no material recent reversal.
-    const qualified=(lift1>=.035||lift2>=.045)&&recentLift>=-.06&&(recentN<3||recent2>=baseline2-.08);
+    const qualified=(lift1>=.02||lift2>=.025)&&recentLift>=-.08&&(recentN<3||recent2>=baseline2-.10);
     candidates.push({pattern,len,total,rate1,rate2,rate3,recentRate,recent2,lift1,lift2,recentLift,score,qualified});
   }
   const best=candidates.filter(x=>x.qualified).sort((a,b)=>b.score-a.score||b.total-a.total)[0];
@@ -1595,7 +1595,7 @@ function renderEvenOdd(root,d,last,n){
   const entry=mavenAIReviewEntry("evenodd",rawEntry,e.aiDecision);
   setOtherValidationForecast("evenodd",state.selectedParity,e.signal,!!entry,state.liveTickSequence,e.aiDecision?.confidence);
   setSignalValidationForecast("evenodd",state.selectedParity,e.signal,state.liveTickSequence,e.aiDecision?.confidence);
-  const entryDisplay=entry||{main:entryActive?"NO QUALIFIED PATTERN / REACTION":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No live 1–3 tick parity pattern currently shows enough repeatable 1–2 tick reaction above baseline.":"Entry evaluation activates when EVEN or ODD passes the Final Signal gate."};
+  const entryDisplay=entry||{main:entryActive?"NO QUALIFIED PATTERN / REACTION":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"Directional Final Signal is qualified, but the separate entry trigger has not passed yet. The live 1–3 tick pattern must show repeatable 1–2 tick follow-through above its baseline; this does not cancel the Final Signal.":"Entry evaluation activates when EVEN or ODD passes the Final Signal gate."};
   const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
   const reason=e.strength<.52
     ?"WAIT: neither parity has passed the 52% strength gate for a SIGNAL."
