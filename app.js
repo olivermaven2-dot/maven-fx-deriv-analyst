@@ -759,7 +759,7 @@ function signalEntryMetricsMarkup(engine){
 function renderOUValidationPanel(){
   const card=$("ouValidationCard"),out=$("ouValidationResults"),payoutControl=$("ouPayoutControl");
   if(!card||!out)return;
-  card.style.display="";
+  card.style.display="none"; // Validation continues in receiveTick; keep its results panel hidden.
   if(payoutControl)payoutControl.style.display=state.engine==="overunder"?"":"none";
   if(state.engine!=="overunder"){
     const engine=state.engine,target=engine==="evenodd"?state.selectedParity:state.selectedRiseFall;
