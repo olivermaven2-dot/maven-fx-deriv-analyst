@@ -900,11 +900,11 @@ function updateLiveDigitCursor(digit){
   setImportant(tip,"width","0");
   setImportant(tip,"height","0");
   setImportant(tip,"margin","0");
-  setImportant(tip,"border-left","4px solid transparent");
-  setImportant(tip,"border-right","4px solid transparent");
+  setImportant(tip,"border-left","3px solid transparent");
+  setImportant(tip,"border-right","3px solid transparent");
   setImportant(tip,"border-top","0");
-  setImportant(tip,"border-bottom","5px solid #60a5fa");
-  setImportant(tip,"filter","drop-shadow(0 0 1px #dbeafe) drop-shadow(0 1px 1px rgba(0,0,0,.85))");
+  setImportant(tip,"border-bottom","4px solid #60a5fa");
+  setImportant(tip,"filter","drop-shadow(0 0 1px #dbeafe)");
   target.appendChild(cursor);
   host.querySelectorAll(".distribution-digit.live-digit-current").forEach(node=>node.classList.remove("live-digit-current"));
   target.classList.add("live-digit-current");
