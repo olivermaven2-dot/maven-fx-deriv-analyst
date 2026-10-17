@@ -867,16 +867,13 @@ function updateLiveDigitCursor(digit){
   const percentage=target.querySelector(".distribution-percent");
   if(!percentage)return;
 
-  // Put one compact pointer directly below the percentage and center it on the digit.
+  // Anchor the pointer to the percentage itself so it stays centered below it.
   host.querySelectorAll(".live-digit-cursor").forEach(node=>node.remove());
   const cursor=document.createElement("span");
   cursor.className="live-digit-cursor";
   cursor.setAttribute("aria-hidden","true");
   cursor.innerHTML='<span class="live-digit-cursor-tip"></span>';
-  target.appendChild(cursor);
-  const targetRect=target.getBoundingClientRect();
-  const percentageRect=percentage.getBoundingClientRect();
-  cursor.style.setProperty("--cursor-top",(percentageRect.bottom-targetRect.top+2)+"px");
+  percentage.appendChild(cursor);
   host.querySelectorAll(".distribution-digit.live-digit-current")
     .forEach(node=>node.classList.remove("live-digit-current"));
   target.classList.add("live-digit-current");
