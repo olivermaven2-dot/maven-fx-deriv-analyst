@@ -407,11 +407,14 @@ function deepScannerSetupKey(){return state.engine==="evenodd"?"evenodd|BOTH":st
 function deepScannerEvaluate(force=false){
   const ds=state.deepScanner;if(!ds.enabled||!state.markets.length)return [];
   if(isMobileDevice()&&!isDeepScannerOpen())return ds.lastScanRows||[];
-  // Keep live tick collection immediate while avoiding repeated full-market analysis on lower-powered phones.
-  if(!force&&ds.lastScanAt&&Date.now()-ds.lastScanAt<10000)return ds.lastScanRows||[];
   syncCurrentIntoScanner();
   const setup=deepScannerSetupKey();
-  if(ds.lastSetupKey!==setup){ds.lastSetupKey=setup;ds.autoLoaded=false;ds.manualOverride=false;ds.lastLoadedSymbol="";ds.lastLoadedScore=0;ds.startedAt=Date.now();}
+  if(ds.lastSetupKey!==setup){
+    ds.lastSetupKey=setup;ds.autoLoaded=false;ds.manualOverride=false;ds.lastLoadedSymbol="";ds.lastLoadedScore=0;ds.startedAt=Date.now();
+    ds.lastScanAt=0;ds.strongestCandidate=null;ds.lastScanRows=[];
+  }
+  // Keep live tick collection immediate while avoiding repeated full-market analysis on lower-powered phones.
+  if(!force&&ds.lastScanAt&&Date.now()-ds.lastScanAt<10000)return ds.lastScanRows||[];
   const counts={history:0,risk:0,distribution:0,probability:0,signal:0,entry:0};
   const rows=[];
   for(const m of state.markets){
@@ -475,7 +478,7 @@ function startDeepScan(){
   }
   renderDeepScanner();
   const winner=$("scannerWinner");
-  if(winner)winner.innerHTML="<strong>SCANNING MARKETS NOW</strong><span>Refreshing live Deriv histories and evaluating your selected "+esc(state.selectedSide)+" "+state.selectedDigit+" setup. Your active market will not change automatically.</span>";
+  if(winner)winner.innerHTML="<strong>SCANNING MARKETS NOW</strong><span>Refreshing live Deriv histories and "+(state.engine==="evenodd"?"comparing EVEN and ODD setups":"evaluating your selected "+esc(state.selectedSide)+" "+state.selectedDigit+" setup")+". Your active market will not change automatically.</span>";
   const btn=$("loadStrongestBtn");
   if(btn){btn.disabled=true;btn.textContent="SCANNING MARKETS…";}
   deepScannerEvaluate(true);
