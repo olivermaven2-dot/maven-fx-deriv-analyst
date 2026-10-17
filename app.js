@@ -1067,6 +1067,11 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
   const entryBars=distributionBarFlags(d);
   const baseline=selectedSide==="OVER"?(9-selectedDigit)/10:selectedDigit/10;
   const smooth=(hits,n,prior=baseline,priorN=8)=>(hits+prior*priorN)/(n+priorN);
+  // Use an older discovery segment and a newer, untouched holdout segment.
+  // This avoids ranking entry digits only on the same ticks used to discover them.
+  const split=Math.max(0,Math.min(d.length-1,Math.floor(d.length*.70)));
+  const discovery=d.slice(0,split);
+  const holdout=d.slice(split);
   for(let candidate=0;candidate<=9;candidate++){
     if(Array.isArray(onlyCandidates)&&!onlyCandidates.includes(candidate))continue;
     // Entry bands: OVER may use lower (0–3) and middle (4–6) digits;
@@ -1075,8 +1080,13 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
     if(selectedSide==="UNDER"&&candidate<4)continue;
     if((selectedSide==="UNDER"&&(candidate===0||candidate===1))||(selectedSide==="OVER"&&(candidate===8||candidate===9)))continue;
     if(entryBars.most[candidate]||entryBars.least[candidate])continue;
-    const t=ouTransitionStats(d,candidate,selectedDigit,selectedSide);
+    const t=ouTransitionStats(discovery,candidate,selectedDigit,selectedSide);
+    const h=ouTransitionStats(holdout,candidate,selectedDigit,selectedSide);
     if(t.total<30||t.recentTotal<8)continue;
+    const holdoutLowerBound=h.n1>=8?ouWilsonLowerBound(Math.round(h.r1*h.n1),h.n1):baseline;
+    const holdoutRate=h.n1?h.r1:baseline;
+    // Once there is a meaningful holdout sample, block candidates that materially collapse.
+    if(h.n1>=12&&holdoutRate<baseline-.06)continue;
     const key=ouValidationRecordKey(state.symbol,selectedDigit,selectedSide,candidate);
     const validation=state.ouValidationBook[key]||null;
     const h1=validation?.[1]||{n:0,hits:0,failureStreak:0};
@@ -1093,43 +1103,48 @@ function overUnderEntry(d,selectedDigit,selectedSide,onlyCandidates=null){
     const recentLift=Math.max(0,Math.min(1,.5+(t.recentRate-baseline)*4));
     const secondLift=Math.max(0,Math.min(1,.5+(t.r2-baseline)*3.5));
     const thirdLift=Math.max(0,Math.min(1,.5+(t.r3-baseline)*2.5));
+    const holdoutLift=h.n1>=6?Math.max(0,Math.min(1,.5+(holdoutRate-baseline)*4)):.5;
     const validationLift=recent1.length>=6?Math.max(0,Math.min(1,.5+(recentRate-baseline)*4)):.5;
     const stability=Math.max(0,Math.min(1,1-Math.abs(t.rate-t.recentRate)-Math.abs(t.r1-t.r2)*.20-Math.abs(t.r2-t.r3)*.15));
     const consistency=Math.max(0,Math.min(1,1-Math.abs(t.r1-t.r2)*.7-Math.abs(t.r2-t.r3)*.3));
-    // Conservative lower bounds reduce over-ranking of candidates whose apparent reaction may be noise.
+    // Conservative bounds reduce over-ranking of small or noisy samples.
     const reactionLowerBound=t.n1>=12?ouWilsonLowerBound(Math.round(t.r1*t.n1),t.n1):baseline;
     const continuationLowerBound=t.n2>=10?ouWilsonLowerBound(Math.round(t.r2*t.n2),t.n2):baseline;
     const predictiveLift=Math.max(0,Math.min(1,.5+((reactionLowerBound-baseline)*2.5)+((continuationLowerBound-baseline)*1.5)));
     const validationConfidence=h1.n>=20?Math.max(0,Math.min(1,.5+(ouWilsonLowerBound(h1.hits,h1.n)-baseline)*3.5)):.5;
     const validationWeight=recent1.length>=12?.10:recent1.length>=6?.06:0;
     const recentWeight=.04;
-    const score=Math.round(100*(directionalLift*.20+recentLift*.18+secondLift*.12+thirdLift*.04+stability*.08+consistency*.06+sample*.04+validationLift*validationWeight+validationConfidence*.08+Math.min(1,t.recentTotal/40)*recentWeight+predictiveLift*.16));
+    const holdoutWeight=h.n1>=12?.12:h.n1>=6?.06:0;
+    const score=Math.round(100*(directionalLift*.18+recentLift*.15+secondLift*.11+thirdLift*.04+stability*.07+consistency*.05+sample*.04+holdoutLift*holdoutWeight+validationLift*validationWeight+validationConfidence*.08+Math.min(1,t.recentTotal/40)*recentWeight+predictiveLift*.16));
     const recentObservedRate=recent1.length?recentHits1/recent1.length:0;
-    candidates.push({...t,candidate,baseline,score,stability,consistency,reactionLowerBound,continuationLowerBound,predictiveLift,validation:{n:h1.n,hits:h1.hits,rate:observedRate,observedRate:rawObservedRate,recentN:recent1.length,recentHits:recentHits1,recentRate,recentObservedRate,failureStreak:h1.failureStreak,lowerBound:ouWilsonLowerBound(h1.hits,h1.n)}});
+    candidates.push({...t,candidate,baseline,score,stability,consistency,reactionLowerBound,continuationLowerBound,predictiveLift,holdout:{n:h.n1,hits:Math.round(h.r1*h.n1),rate:holdoutRate,lowerBound:holdoutLowerBound},validation:{n:h1.n,hits:h1.hits,rate:observedRate,observedRate:rawObservedRate,recentN:recent1.length,recentHits:recentHits1,recentRate,recentObservedRate,failureStreak:h1.failureStreak,lowerBound:ouWilsonLowerBound(h1.hits,h1.n)}});
   }
-  candidates.sort((a,b)=>b.score-a.score);
+  candidates.sort((a,b)=>b.score-a.score||b.holdout.lowerBound-a.holdout.lowerBound);
   if(!candidates.length)return null;
   const watchCandidates=candidates.filter(c=>{
     const hasDirectionalReaction=c.r1>=baseline-.04&&c.recentRate>=baseline-.05;
-    // Require evidence of near-term predictive value when the conditional sample is large enough.
     const predictiveEvidence=(c.n1<12||c.reactionLowerBound>=baseline-.10)&&(c.n2<10||c.continuationLowerBound>=baseline-.12);
-    // Accept a credible one- or two-tick reaction; the third tick remains supporting evidence only.
+    // A credible one- or two-tick reaction qualifies; tick three is supporting evidence only.
     const hasContinuation=c.r2>=baseline-.06||c.r1>=baseline+.015;
     const hasReliableSample=c.total>=30&&c.recentTotal>=8;
     const validatedWeak=c.validation.n>=25&&c.validation.lowerBound<baseline-.08;
-    return hasReliableSample&&hasDirectionalReaction&&hasContinuation&&predictiveEvidence&&!validatedWeak&&c.stability>=.42&&c.consistency>=.30&&c.score>=55;
+    const holdoutWeak=c.holdout.n>=12&&c.holdout.rate<baseline-.06;
+    return hasReliableSample&&hasDirectionalReaction&&hasContinuation&&predictiveEvidence&&!validatedWeak&&!holdoutWeak&&c.stability>=.42&&c.consistency>=.30&&c.score>=55;
   }).slice(0,2);
   if(!watchCandidates.length)return null;
   const entries=watchCandidates.map(c=>{
+    const holdoutText=c.holdout.n
+      ?"Out-of-sample holdout "+Math.round(c.holdout.rate*100)+"% ("+c.holdout.hits+"/"+c.holdout.n+")"+(c.holdout.n>=8?"; Wilson lower bound "+Math.round(c.holdout.lowerBound*100)+"%":"; small sample")
+      :"Out-of-sample holdout collecting — 0 candidate triggers";
     const validationText=c.validation.n>=1
       ?"Live validation "+Math.round(c.validation.observedRate*100)+"% ("+c.validation.hits+"/"+c.validation.n+")"+(c.validation.recentN>=5?"; last "+c.validation.recentN+": "+Math.round(c.validation.recentObservedRate*100)+"%":"")
       :"Live validation collecting — 0 scored triggers";
     let reason;
-    if(c.reactionLowerBound>baseline&&c.continuationLowerBound>baseline)reason="Conservative next-tick and conditional continuation estimates both exceed the setup baseline.";
-    else if(c.r1>=baseline+.04&&c.r2>=baseline+.02)reason="Historical 1-tick reaction and conditional continuation both exceed the setup baseline.";
+    if(c.reactionLowerBound>baseline&&c.continuationLowerBound>baseline&&c.holdout.n>=8&&c.holdout.lowerBound>baseline)reason="Discovery and holdout estimates both support a reaction above baseline; live validation remains important.";
+    else if(c.r1>=baseline+.04&&c.r2>=baseline+.02)reason="Discovery data shows 1-tick reaction and conditional continuation above baseline; check holdout and live evidence.";
     else if(c.r1>=baseline-.02&&c.r2>=baseline+.03)reason="Immediate reaction is near baseline; conditional 2-tick follow-through is stronger.";
-    else reason="Passed reaction, continuation, recent-regime and consistency checks; estimates remain uncertain.";
-    return {digit:c.candidate,score:c.score,targetReady:true,status:"ENTRY CANDIDATE",reason,evidence:c.total+" historical triggers; recent transition rate "+Math.round(c.recentRate*100)+"%; conservative reaction bound "+Math.round(c.reactionLowerBound*100)+"%; "+validationText,validation:c.validation};
+    else reason="Passed discovery, holdout deterioration, continuation, recent-regime and consistency checks; predictive edge is not proven.";
+    return {digit:c.candidate,score:c.score,targetReady:true,status:"ENTRY CANDIDATE",reason,evidence:c.total+" discovery triggers; "+holdoutText+"; "+validationText,validation:c.validation,holdout:c.holdout};
   });
   const main=entries.map(e=>String(e.digit)).join("  •  ");
   const meta=entries.map(e=>"Digit "+e.digit+": entry score "+e.score+"/100").join(" • ")+" • Rank scores are not win probabilities.";
