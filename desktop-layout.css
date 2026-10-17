@@ -91,3 +91,52 @@
   .app .distribution-setup .ou-side { min-height: 30px; padding: 6px 10px; }
   .app .distribution-engine-controls .ou-side { min-height: 30px; padding: 6px 10px; }
 }
+
+
+/* Laptop compact layout: setup and decision stay together in the first viewport.
+   LIVE DIGIT HISTORY remains hidden by styles.css and inline markup; processing is untouched. */
+@media (min-width:1024px) {
+  .app {
+    grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr) !important;
+    grid-template-areas:
+      "live live"
+      "nav nav"
+      "distribution engine"
+      "diagnostics diagnostics" !important;
+    column-gap:12px !important;
+    row-gap:7px !important;
+    padding-top:6px !important;
+    padding-bottom:10px !important;
+  }
+  .app > .live-card { padding:9px 12px !important; }
+  .app .live-head h1 { font-size:16px !important; }
+  .app .live-card > .market-picker-card { margin-top:6px !important;padding-top:6px !important; }
+  .app .live-card .subscribed-market-status { margin-top:5px !important;padding-top:5px !important; }
+  .app .live-card .price-grid { margin-top:6px !important;gap:6px !important; }
+  .app .live-card .price-grid>div { padding:6px 9px !important; }
+  .app .live-card .price-grid strong,
+  .app .live-card .price-grid div:last-child strong { font-size:22px !important;margin-top:2px !important; }
+  .app .live-card .live-meta { margin-top:5px !important;font-size:10px !important; }
+  .app > .engine-nav { padding:3px !important; }
+  .app .engine-tab { min-height:36px !important;padding:7px 8px !important; }
+  .app > .distribution-card { padding:9px !important; }
+  .app .distribution-note { font-size:10px !important;line-height:1.3 !important;margin:3px 0 6px !important; }
+  .app .distribution-card .ou-digit,.app .distribution-card .ou-side { min-height:29px !important;padding:5px !important; }
+  .app .distribution-circle { width:38px !important;height:38px !important; }
+  .app .distribution-percent { font-size:9px !important; }
+  .app .distribution-tag { font-size:7px !important; }
+  .app .distribution-legend { margin-top:5px !important;font-size:8px !important; }
+  .app > #engineRoot { align-self:start !important; }
+  .app .engine-panel { padding:10px !important; }
+  .app .decision-summary { position:static !important;top:auto !important;margin:0 0 7px !important;padding:9px !important; }
+  .app .decision-summary .state { font-size:22px !important; }
+  .app .decision-summary .reason { font-size:10px !important; }
+  .app .decision-summary .entry { margin-top:6px !important;padding:7px 9px !important; }
+  .app .decision-summary .entry-main { font-size:20px !important; }
+  .app .engine-panel .why { margin-top:7px !important; }
+  .app .engine-panel .why li { font-size:10px !important;padding:2px 0 !important; }
+  .app .engine-panel .analysis-details { margin-top:7px !important; }
+  .app .engine-panel .stats { margin-top:5px !important;gap:5px !important; }
+  .app .engine-panel .stat { padding:5px !important; }
+  .app > .details { margin-top:0 !important; }
+}
