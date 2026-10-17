@@ -807,7 +807,7 @@ function receiveTick(t){
   $("tickCount").textContent=state.ticks.length.toLocaleString()+" ticks";$("updatedAt").textContent="Updated "+new Date().toLocaleTimeString();
   $("diagTicks").textContent=state.ticks.length;
   updateQuality();renderStream(true);
-  if(shouldRenderEngineForCurrentTick())renderEngine();else renderOUValidationPanel();
+  if(shouldRenderEngineForCurrentTick())renderEngine(); // Validation is scored above; its UI is hidden and does not need per-tick re-rendering.
   if(autoTrade.enabled&&state.engine==="overunder"){
     // FAST and Standard use the same live-tick entry checks. Never replay ticks received
     // while a quote/contract or two-run cycle is busy; the next eligible live tick can trigger.
