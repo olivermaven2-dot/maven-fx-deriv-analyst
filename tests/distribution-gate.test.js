@@ -439,7 +439,7 @@ test('Even/Odd waits for at least 100 observed digits before issuing a signal', 
   assert.equal(result.signal, 'WAIT');
 });
 
-test('Even/Odd entry qualifies parity patterns only after chronological holdout validation', () => {
+test('Even/Odd entry qualifies live parity patterns using 1–2 tick reaction evidence', () => {
   const start = appSource.indexOf('function selectParityEntry');
   assert.notEqual(start, -1, 'selectParityEntry must exist');
   const end = appSource.indexOf('\nfunction ', start + 10);
@@ -455,8 +455,8 @@ test('Even/Odd entry qualifies parity patterns only after chronological holdout 
   const twoRun = run(twoRunData, 'EVEN');
   assert.ok(twoRun, 'qualified O-O pattern should allow EVEN entry');
   assert.match(twoRun.main, /2 consecutive ODD results → ENTER EVEN/);
-  assert.match(twoRun.evidence, /Out-of-sample lift/);
-  assert.match(twoRun.reason, /later validation rate .* versus a validation baseline/);
+  assert.match(twoRun.evidence, /1-tick lift/);
+  assert.match(twoRun.reason, /followed within 1 tick .* within 2 ticks/);
 
   const threeRunData = [];
   for (let i = 0; i < 60; i++) threeRunData.push(2, 1, 3, 5, 2, 4);
