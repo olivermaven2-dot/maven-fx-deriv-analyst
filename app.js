@@ -867,14 +867,16 @@ function updateLiveDigitCursor(digit){
   const circle=target.querySelector(".distribution-circle");
   if(!circle)return;
 
-  // Place a compact pointer below the full digit cell (including its percentage),
-  // centered on the same vertical line as the digit above.
+  // Keep one small pointer immediately below the digit circle, centered exactly
+  // on the digit itself (not beside the circle or below the percentage label).
   host.querySelectorAll(".live-digit-cursor").forEach(node=>node.remove());
   const cursor=document.createElement("span");
   cursor.className="live-digit-cursor";
   cursor.setAttribute("aria-hidden","true");
   cursor.innerHTML='<span class="live-digit-cursor-tip"></span>';
   target.appendChild(cursor);
+  cursor.style.left=(circle.offsetLeft+circle.offsetWidth/2)+"px";
+  cursor.style.top=(circle.offsetTop+circle.offsetHeight+1)+"px";
   host.querySelectorAll(".distribution-digit.live-digit-current")
     .forEach(node=>node.classList.remove("live-digit-current"));
   target.classList.add("live-digit-current");
