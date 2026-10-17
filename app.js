@@ -505,7 +505,7 @@ function startDeepScan(){
   }
   renderDeepScanner();
   const winner=$("scannerWinner");
-  if(winner)winner.innerHTML="<strong>SCANNING MARKETS NOW</strong><span>Refreshing live Deriv histories and "+(state.engine==="evenodd"?"comparing EVEN and ODD setups":"evaluating your selected "+esc(state.selectedSide)+" "+state.selectedDigit+" setup")+". Your active market will not change automatically.</span>";
+  if(winner)winner.innerHTML="<strong>SCANNING MARKETS NOW</strong><span>Refreshing live Deriv histories and "+(state.engine==="evenodd"?"comparing EVEN and ODD setups":state.engine==="risefall"?"comparing price-based RISE and FALL strength":"evaluating your selected "+esc(state.selectedSide)+" "+state.selectedDigit+" setup")+". Your active market will not change automatically.</span>";
   const btn=$("loadStrongestBtn");
   if(btn){btn.disabled=true;btn.textContent="SCANNING MARKETS…";}
   deepScannerEvaluate(true);
