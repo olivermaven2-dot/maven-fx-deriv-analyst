@@ -882,7 +882,7 @@ function updateLiveDigitCursor(digit){
   setImportant(cursor,"position","absolute");
   setImportant(cursor,"display","block");
   setImportant(cursor,"left",(percentRect.left+percentRect.width/2-targetRect.left)+"px");
-  setImportant(cursor,"top",(percentRect.bottom-targetRect.top+4)+"px");
+  setImportant(cursor,"top",(percentRect.bottom-targetRect.top+3)+"px");
   setImportant(cursor,"right","auto");
   setImportant(cursor,"bottom","auto");
   setImportant(cursor,"width","0");
@@ -900,11 +900,11 @@ function updateLiveDigitCursor(digit){
   setImportant(tip,"width","0");
   setImportant(tip,"height","0");
   setImportant(tip,"margin","0");
-  setImportant(tip,"border-left","10px solid transparent");
-  setImportant(tip,"border-right","10px solid transparent");
+  setImportant(tip,"border-left","4px solid transparent");
+  setImportant(tip,"border-right","4px solid transparent");
   setImportant(tip,"border-top","0");
-  setImportant(tip,"border-bottom","14px solid #60a5fa");
-  setImportant(tip,"filter","drop-shadow(0 -1px 0 #ffffff) drop-shadow(0 0 4px rgba(96,165,250,1)) drop-shadow(0 2px 3px rgba(0,0,0,.95))");
+  setImportant(tip,"border-bottom","5px solid #60a5fa");
+  setImportant(tip,"filter","drop-shadow(0 0 1px #dbeafe) drop-shadow(0 1px 1px rgba(0,0,0,.85))");
   target.appendChild(cursor);
   host.querySelectorAll(".distribution-digit.live-digit-current").forEach(node=>node.classList.remove("live-digit-current"));
   target.classList.add("live-digit-current");
