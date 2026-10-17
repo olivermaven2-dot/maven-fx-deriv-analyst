@@ -403,7 +403,7 @@ function scannerRisk(r){
   if(elevated>=2||reversalRate>=.8)return {level:"MODERATE",reason:"Elevated movement or reversals"};
   return {level:"LOW",reason:"Movement is within its recent market-specific baseline"};
 }
-function deepScannerSetupKey(){return state.selectedDigit+"|"+state.selectedSide}
+function deepScannerSetupKey(){return state.engine==="evenodd"?"evenodd|BOTH":state.selectedDigit+"|"+state.selectedSide+"|"+state.engine}
 function deepScannerEvaluate(force=false){
   const ds=state.deepScanner;if(!ds.enabled||!state.markets.length)return [];
   if(isMobileDevice()&&!isDeepScannerOpen())return ds.lastScanRows||[];
@@ -416,10 +416,24 @@ function deepScannerEvaluate(force=false){
   const rows=[];
   for(const m of state.markets){
     const r=scannerRecord(m);
-    // The distribution gate needs all 1,000 real ticks. Do not report a candidate from a partial window.
+    // Always require the full 1,000-tick real Deriv history before ranking a market.
     if(r.digits.length<1000){counts.history++;continue;}
     const risk=scannerRisk(r);
     if(risk.level==="HIGH"||risk.level==="UNKNOWN"){counts.risk++;continue;}
+    if(state.engine==="evenodd"){
+      // Scan both directions independently; only rank a parity with a qualified signal and predictive entry.
+      for(const target of ["EVEN","ODD"]){
+        const a=parityStats(r.digits,target);
+        if(!(a.signal==="SIGNAL"||a.signal==="STRONG SIGNAL")){counts.signal++;continue;}
+        const entry=selectParityEntry(r.digits,target);
+        if(!entry){counts.entry++;continue;}
+        const entryConfidence=Math.max(0,Math.min(100,Number.parseFloat(String(entry.confidence||"0").replace("%",""))||0));
+        const score=Math.round(a.evidence*50+(a.strength||0)*30+entryConfidence*.15+(risk.level==="LOW"?10:3));
+        rows.push({engine:"evenodd",target,symbol:m.symbol,name:m.name,score,signal:a.signal,evidence:Math.round(a.evidence*100),strength:Math.round((a.strength||0)*100),entry:entry.main||"Qualified parity trigger",entryScore:entryConfidence,sample:r.digits.length,risk:risk.level,riskReason:risk.reason,reason:"Qualified "+target+" signal strength with predictive entry confirmation"});
+      }
+      continue;
+    }
+    if(state.engine!=="overunder"){continue;}
     const a=overUnderEvidence(r.digits,state.selectedDigit,state.selectedSide);
     if(!a.distribution?.ready){counts.history++;continue;}
     if(!a.distribution.pass){counts.distribution++;continue;}
@@ -428,7 +442,7 @@ function deepScannerEvaluate(force=false){
     const entry=overUnderEntry(r.digits,state.selectedDigit,state.selectedSide);
     if(!entry||!entry.entries?.length){counts.entry++;continue;}
     const top=entry.entries[0],score=Math.round(a.evidence*60+Math.min(100,top.score||0)*.30+(risk.level==="LOW"?10:3));
-    rows.push({symbol:m.symbol,name:m.name,score,signal:a.signal,evidence:Math.round(a.evidence*100),entry:top.digit,entryScore:top.score||0,sample:r.digits.length,risk:risk.level,riskReason:risk.reason,reason:a.signal==="STRONG SIGNAL"?"Strong multi-factor Over/Under evidence with a qualifying entry-digit reaction":"Qualified Over/Under evidence and entry-digit reaction"});
+    rows.push({engine:"overunder",symbol:m.symbol,name:m.name,score,signal:a.signal,evidence:Math.round(a.evidence*100),entry:top.digit,entryScore:top.score||0,sample:r.digits.length,risk:risk.level,riskReason:risk.reason,reason:a.signal==="STRONG SIGNAL"?"Strong multi-factor Over/Under evidence with a qualifying entry-digit reaction":"Qualified Over/Under evidence and entry-digit reaction"});
   }
   rows.sort((a,b)=>b.score-a.score||b.evidence-a.evidence||b.sample-a.sample);
   ds.lastScanAt=Date.now();
@@ -470,11 +484,18 @@ function loadStrongestScannerMarket(){
   const ds=state.deepScanner;
   const best=ds.strongestCandidate;
   if(!best){deepScannerEvaluate(true);return;}
+  if(best.engine==="evenodd"){
+    state.selectedParity=best.target;
+    state.engine="evenodd";
+    document.querySelectorAll(".engine-tab").forEach(btn=>{const active=btn.dataset.engine==="evenodd";btn.classList.toggle("active",active);btn.setAttribute("aria-selected",String(active));});
+    const current=document.getElementById("workspaceCurrent"),tab=document.querySelector('.engine-tab[data-engine="evenodd"]');if(current&&tab)current.textContent=tab.textContent.trim();
+  }
   loadScannerMarket(best.symbol,true,best.score);
   ds.lastLoadedSymbol=best.symbol;ds.lastLoadedScore=best.score;ds.autoLoaded=false;ds.manualOverride=true;
+  renderEngine();
   renderDeepScanner([best]);
   const winner=$("scannerWinner");
-  if(winner)winner.innerHTML="<strong>MARKET LOADED • "+esc(best.name)+"</strong><span>"+esc(best.symbol)+" loaded into the Over/Under engine. Analysis will refresh using this market's own live data.</span>";
+  if(winner)winner.innerHTML="<strong>MARKET LOADED • "+esc(best.name)+"</strong><span>"+esc(best.symbol)+" loaded into the "+(best.engine==="evenodd"?"Even/Odd engine ("+best.target+")":"Over/Under engine")+". Analysis will refresh using this market's own live data.</span>";
 }
 function loadScannerMarket(symbol,manual=false,score=0){
   // Hard safety gate: scanner market changes are allowed only through the explicit LOAD STRONGEST MARKET action.
@@ -491,11 +512,11 @@ function renderDeepScanner(rows=null){
   const best=rows.find(r=>r.score>0)||ds.strongestCandidate||null;
   const total=state.markets.length,ready=state.markets.filter(m=>(ds.data[m.symbol]?.digits.length||0)>=1000).length;
   const status=$("deepScannerStatus");if(status)status.textContent=!state.connected?"FEED OFFLINE":best?"STRONG SETUP READY":ready+"/"+total+" FULL DATA";
-  const progress=$("scannerProgress");if(progress)progress.textContent=ready+" of "+total+" markets have 1,000 ticks • Setup "+state.selectedSide+" "+state.selectedDigit;
-  const setup=$("scannerSetup");if(setup)setup.textContent=state.selectedSide+" "+state.selectedDigit;
+  const progress=$("scannerProgress");if(progress)progress.textContent=ready+" of "+total+" markets have 1,000 ticks • "+(state.engine==="evenodd"?"comparing EVEN and ODD":"Setup "+state.selectedSide+" "+state.selectedDigit);
+  const setup=$("scannerSetup");if(setup)setup.textContent=state.engine==="evenodd"?"EVEN / ODD":state.selectedSide+" "+state.selectedDigit;
   const winner=$("scannerWinner");
   if(winner){
-    if(best)winner.innerHTML="<strong>STRONGEST ELIGIBLE SETUP READY</strong><span>Signal "+esc(best.signal)+" • Evidence "+best.evidence+"% • Entry digit "+best.entry+" • Risk "+esc(best.risk)+". Press LOAD STRONGEST MARKET to switch your active market.</span>";
+    if(best)winner.innerHTML="<strong>STRONGEST ELIGIBLE SETUP READY</strong><span>"+(best.engine==="evenodd"?esc(best.target)+" signal":"Signal "+esc(best.signal))+" • "+esc(best.signal)+" • Evidence "+best.evidence+"%"+(best.engine==="evenodd"?" • parity strength "+best.strength+"%":"")+" • Entry "+esc(String(best.entry))+" • Risk "+esc(best.risk)+". Press LOAD STRONGEST MARKET to switch your active market.</span>";
     else {
       const d=ds.lastScanDiagnostics;
       let why="";
