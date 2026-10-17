@@ -807,3 +807,77 @@ button:not(.engine-tab):not(.deep-scanner-close) {
   .topbar { border-radius:0 0 13px 13px; }
   .app > .engine-nav { background:rgba(5,17,38,.96); backdrop-filter:blur(12px); }
 }
+
+
+/* Midnight Navy comfort adjustment: reduce brightness and glow, retain colorful accents. */
+:root {
+  --bg:#050f22;
+  --panel:#0c1b32;
+  --panel2:#091529;
+  --line:#203956;
+  --text:#e7eef9;
+  --muted:#9aabc2;
+  --accent:#4c8fe8;
+  --good:#39c995;
+  --warn:#e7b957;
+  --bad:#e45d70;
+}
+html,body { background-color:#050f22 !important; }
+body {
+  background-image:
+    radial-gradient(ellipse 92% 50% at 50% -10%,rgba(25,76,145,.25) 0%,rgba(11,34,69,.12) 48%,transparent 78%),
+    radial-gradient(ellipse 42% 38% at 100% 50%,rgba(0,126,151,.07) 0%,transparent 76%),
+    linear-gradient(145deg,#040b18 0%,#091a31 50%,#050f22 100%) !important;
+}
+.topbar {
+  background:linear-gradient(100deg,rgba(7,19,38,.98),rgba(9,28,52,.96),rgba(9,20,43,.98));
+  border-color:rgba(64,105,157,.18);
+}
+.brand {
+  background:linear-gradient(90deg,#e9f1ff 0%,#a9c9f0 55%,#83aeea 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.subbrand,.eyebrow,.control-card label,.price-grid span,.section-title,.panel-kicker,.ou-label,.entry-head,.why-title { color:#91a9ca; }
+.live-card,.control-card,.engine-panel,.stream-card,.details {
+  background:linear-gradient(145deg,rgba(12,29,53,.99),rgba(7,19,36,.99));
+  border-color:rgba(65,101,148,.34);
+  box-shadow:0 10px 28px rgba(0,0,0,.22);
+}
+.live-card { border-top:2px solid rgba(63,127,205,.62); }
+.status { background:#0b1a30;border-color:#263e5e; }
+.subscribed-market-status {
+  border-color:rgba(37,164,183,.22) !important;
+  background:linear-gradient(100deg,rgba(0,128,153,.06),rgba(35,85,160,.06)) !important;
+}
+.price-grid > div {
+  background:linear-gradient(145deg,#071326,#0a1b32);
+  border-color:rgba(58,105,164,.26);
+}
+.price-grid div:last-child { border-color:rgba(43,169,187,.28);box-shadow:none; }
+.price-grid div:last-child strong { color:#79cbd9;text-shadow:none; }
+#lastPrice { color:#d9e5f5; }
+.control-card select { background:#0a192e;border-color:#29486c; }
+.engine-nav { background:rgba(4,13,27,.78);border-color:rgba(48,81,126,.18); }
+.engine-tab { background:linear-gradient(180deg,#0d1d34,#091529);border-color:#203957;color:#a9bad2; }
+.engine-tab:nth-child(1).active { background:linear-gradient(135deg,#173d6e,#102544);border-color:#3f78bb;box-shadow:none; }
+.engine-tab:nth-child(2).active { background:linear-gradient(135deg,#392b65,#211d43);border-color:#7966ad;box-shadow:none; }
+.engine-tab:nth-child(3).active { background:linear-gradient(135deg,#10464e,#0c2d37);border-color:#328b91;box-shadow:none; }
+.entry { background:linear-gradient(135deg,#09182d,#0b2039);border-color:rgba(59,104,160,.28); }
+.state.strong { color:#77cbdc;text-shadow:none; }
+.state.signal { color:#39c995; }
+.state.wait { color:#e7b957; }
+.state.none { color:#9aabc2; }
+.digit { background:#102039;border-color:#263e5e; }
+.digit.latest { outline-color:#69b9c8;box-shadow:none; }
+.distribution-card,.ou-controls { background:linear-gradient(145deg,#0c1c32,#081426);border-color:rgba(58,100,149,.3); }
+.ou-digit.selected,.ou-side.selected,.ou-digit.active,.ou-side.active { border-color:#477fb9;box-shadow:0 0 0 1px rgba(71,127,185,.10); }
+.deep-scanner-fab,.auto-trade-fab { box-shadow:0 6px 18px rgba(0,0,0,.28),0 0 0 1px rgba(78,127,183,.18); }
+.deep-scanner-dialog { background:linear-gradient(145deg,#0d213b,#071326);border-color:rgba(67,117,177,.38); }
+@media (max-width:600px) {
+  body {
+    background-image:
+      radial-gradient(ellipse 125% 38% at 50% 0%,rgba(25,76,145,.22) 0%,rgba(9,29,58,.08) 56%,transparent 84%),
+      linear-gradient(180deg,#07162b 0%,#091a30 48%,#050f22 100%) !important;
+  }
+  .app > .engine-nav { background:rgba(4,13,27,.97); }
+}
