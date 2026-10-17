@@ -1361,7 +1361,7 @@ function parityStats(d,selectedSide){
   const transitionSampleReady=transitions>=15&&recentTransitions>=5;
   let signal="WAIT";
   const n=d.length;
-  if(n<60)signal="WAIT";
+  if(n<100)signal="WAIT";
   else if(conflict)signal="WAIT";
   else if(!transitionSampleReady)signal="WAIT";
   else if(evidence>=.58&&strength>=.50&&recent>=.50&&short50>=.47&&recentTransitionRate>=.47&&consistency>=.40&&n>=120&&transitions>=25)signal="STRONG SIGNAL";
