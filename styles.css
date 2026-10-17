@@ -1011,3 +1011,32 @@ body {
 .distribution-digit{position:relative;overflow:visible!important;}
 .distribution-digit.live-digit-current .distribution-circle{position:relative;}
 .distribution-digit.live-digit-current .distribution-circle::after{content:"";position:absolute;left:50%;top:calc(100% + 4px);transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:0;border-bottom:8px solid #fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.85));z-index:20;pointer-events:none;}
+
+
+/* Final cursor placement: anchor the plain white pointer to the digit circle itself. */
+.distribution-circle > .live-digit-cursor{
+  position:absolute !important;
+  top:calc(100% + 3px) !important;
+  left:50% !important;
+  right:auto !important;
+  bottom:auto !important;
+  display:block !important;
+  width:10px !important;
+  height:7px !important;
+  margin:0 !important;
+  padding:0 !important;
+  transform:translateX(-50%) !important;
+  z-index:20 !important;
+  overflow:visible !important;
+}
+.distribution-circle > .live-digit-cursor > .live-digit-cursor-tip{
+  display:block !important;
+  width:0 !important;
+  height:0 !important;
+  margin:0 auto !important;
+  border-left:5px solid transparent !important;
+  border-right:5px solid transparent !important;
+  border-top:0 !important;
+  border-bottom:7px solid #fff !important;
+  filter:drop-shadow(0 1px 2px rgba(0,0,0,.85)) !important;
+}
