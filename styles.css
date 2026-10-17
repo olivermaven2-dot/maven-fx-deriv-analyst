@@ -990,7 +990,7 @@ body {
 /* Compact cursor below the percentage, pointing straight up at the digit. */
 .digit-distribution .distribution-digit{position:relative!important;overflow:visible!important;}
 .digit-distribution .distribution-digit > .live-digit-cursor{
-  position:absolute!important;left:50%!important;top:calc(100% + 2px)!important;
+  position:absolute!important;left:50%!important;top:calc(clamp(39px,10vw,55px) + 23px)!important;
   display:block!important;width:0!important;height:0!important;
   margin:0!important;padding:0!important;border:0!important;
   transform:translateX(-50%)!important;z-index:30!important;
