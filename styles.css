@@ -881,3 +881,9 @@ body {
   }
   .app > .engine-nav { background:rgba(4,13,27,.97); }
 }
+
+
+/* Keep LIVE DIGIT HISTORY processing in the shared background stream, but remove its visible panel. */
+.app > .stream-card {
+  display: none !important;
+}
