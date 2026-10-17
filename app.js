@@ -1512,70 +1512,70 @@ function parityReactionEntry(d,selectedSide){
 }
 
 function selectParityEntry(d,selectedSide){
-  // Research-led entry evaluation: discover the conditional pattern on older
-  // ticks, then evaluate that same pattern on a later holdout sample.
-  // Streaks are candidate triggers only; they never qualify by themselves.
-  if(!Array.isArray(d)||d.length<100)return null;
+  // Evaluate the live 1-, 2- and 3-tick parity pattern plus reaction after
+  // that pattern. A 1- or 2-tick continuation can qualify; the 3rd tick only
+  // adds confidence and never acts as a required gate.
+  if(!Array.isArray(d)||d.length<100||!["EVEN","ODD"].includes(selectedSide))return null;
   const target=selectedSide==="EVEN"?"E":"O";
   const key=x=>(x%2===0?"E":"O");
   const recent=d.slice(-500).map(key);
   if(recent.length<100)return null;
-
-  const split=Math.floor(recent.length*.70);
-  if(split<60||recent.length-split<30)return null;
-  const train=recent.slice(0,split);
-  const holdout=recent.slice(split);
-  const rate=(arr)=>arr.length?arr.filter(x=>x===target).length/arr.length:.5;
-  const trainBaseline=rate(train);
-  const testBaseline=rate(holdout);
+  const baseline=recent.filter(x=>x===target).length/recent.length;
   const liveSuffix=recent.slice(-3);
   const candidates=[];
+  const pct=x=>Math.round(x*100)+"%";
 
-  // Compare 1-, 2-, and 3-tick parity patterns, including non-streak patterns.
   for(let len=1;len<=3;len++){
     const pattern=liveSuffix.slice(-len).join("");
-    const collect=(arr)=>{
-      const out={n:0,next:0,within2:0};
-      for(let i=0;i+len<arr.length;i++){
-        if(arr.slice(i,i+len).join("")!==pattern)continue;
-        out.n++;
-        if(arr[i+len]===target)out.next++;
-        if(arr[i+len]===target||arr[i+len+1]===target)out.within2++;
+    let total=0,next=0,within2=0,within3=0,recentN=0,recentNext=0,recentWithin2=0;
+    // Only count complete future outcomes; never score the current unfinished suffix.
+    for(let i=0;i+len<recent.length;i++){
+      if(recent.slice(i,i+len).join("")!==pattern)continue;
+      const first=i+len,has1=first<recent.length,has2=first+1<recent.length,has3=first+2<recent.length;
+      if(!has1)continue;
+      total++;
+      if(recent[first]===target)next++;
+      if(has1&&recent[first]===target||has2&&recent[first+1]===target)within2++;
+      if((has1&&recent[first]===target)||(has2&&recent[first+1]===target)||(has3&&recent[first+2]===target))within3++;
+      if(i>=Math.max(0,recent.length-160)){
+        recentN++;
+        if(recent[first]===target)recentNext++;
+        if((has1&&recent[first]===target)||(has2&&recent[first+1]===target))recentWithin2++;
       }
-      return out;
-    };
-    const tr=collect(train);
-    const va=collect(holdout);
-    // Keep outcome windows inside each split so training outcomes cannot leak
-    // into validation and validation examples do not borrow future training data.
-    const trainLift=tr.n?tr.next/tr.n-trainBaseline:0;
-    const validationRate=va.n?va.next/va.n:0;
-    const validationLift=validationRate-testBaseline;
-    const within2Rate=va.n?va.within2/va.n:0;
-    if(tr.n<12||va.n<8)continue;
-    // A pattern must show a modest training lift and repeat it out-of-sample.
-    // Two-tick follow-through is reported as supporting evidence, not a gate.
-    const qualified=trainLift>=.02&&validationLift>=.04;
-    const score=Math.max(0,Math.min(85,Math.round(50+Math.max(0,trainLift)*100+Math.max(0,validationLift)*250+Math.min(10,va.n/3))));
-    candidates.push({pattern,len,tr,va,trainLift,validationRate,validationLift,within2Rate,qualified,score});
+    }
+    if(total<8)continue;
+    const rate1=next/total,rate2=within2/total,rate3=within3/total;
+    const recentRate=recentN?recentNext/recentN:rate1;
+    const recent2=recentN?recentWithin2/recentN:rate2;
+    const lift1=rate1-baseline;
+    // Baseline probability of at least one target in two independent outcomes.
+    const baseline2=1-Math.pow(1-baseline,2);
+    const lift2=rate2-baseline2;
+    const recentLift=recentRate-baseline;
+    const score=100*(Math.max(0,lift1)*.42+Math.max(0,lift2)*.38+Math.max(0,recentLift)*.12+Math.min(1,total/40)*.08);
+    // Require repeatable historical support and no material recent reversal.
+    const qualified=(lift1>=.035||lift2>=.045)&&recentLift>=-.06&&(recentN<3||recent2>=baseline2-.08);
+    candidates.push({pattern,len,total,rate1,rate2,rate3,recentRate,recent2,lift1,lift2,recentLift,score,qualified});
   }
-
-  const best=candidates.filter(x=>x.qualified).sort((a,b)=>
-    b.score-a.score||b.validationLift-a.validationLift||b.va.n-a.va.n
-  )[0];
+  const best=candidates.filter(x=>x.qualified).sort((a,b)=>b.score-a.score||b.total-a.total)[0];
   if(!best)return null;
-
   const parts=best.pattern.split("");
-  const label=parts.every(x=>x===parts[0])?best.len+" consecutive "+(parts[0]==="E"?"EVEN":"ODD")+" results":parts.map(x=>x==="E"?"EVEN":"ODD").join(" → ");
-  const pct=x=>Math.round(x*100)+"%";
+  const label=parts.every(x=>x===parts[0])
+    ?best.len+" consecutive "+(parts[0]==="E"?"EVEN":"ODD")+" results"
+    :parts.map(x=>x==="E"?"EVEN":"ODD").join(" → ");
+  let confidence=Math.round(54+Math.min(13,best.score*.7)+Math.min(8,best.total/12)+Math.max(0,best.lift1)*35);
+  // Three-tick follow-through is a confidence booster only, never a qualification gate.
+  if(best.rate3>=1-Math.pow(1-baseline,3)+.05)confidence+=3;
+  confidence=Math.max(55,Math.min(82,confidence));
   return {
-    type:"VALIDATED_PARITY_PATTERN",
+    type:"PARITY_PATTERN_REACTION",
     status:"ENTRY READY",
     trigger:best.pattern,
+    score:Math.round(best.score),
+    confidence:confidence+"%",
     main:label+" → ENTER "+selectedSide,
-    score:best.score,
-    reason:"This pattern passed a chronological holdout test: training rate "+pct(best.tr.next/best.tr.n)+" across "+best.tr.n+" examples; later validation rate "+pct(best.validationRate)+" across "+best.va.n+" examples, versus a validation baseline of "+pct(testBaseline)+".",
-    evidence:"Out-of-sample lift "+(best.validationLift>=0?"+":"")+pct(best.validationLift)+" • training lift "+(best.trainLift>=0?"+":"")+pct(best.trainLift)+" • target appeared within 2 ticks in "+pct(best.within2Rate)+" of validation examples. Score is an evidence-ranking score, not a win probability."
+    reason:"Live pattern/reaction candidate: "+best.total+" historical matches. "+selectedSide+" followed within 1 tick "+pct(best.rate1)+" of the time and within 2 ticks "+pct(best.rate2)+" of the time, against a "+pct(baseline)+" one-tick baseline.",
+    evidence:"1-tick lift "+(best.lift1>=0?"+":"")+pct(best.lift1)+" • 2-tick reaction lift "+(best.lift2>=0?"+":"")+pct(best.lift2)+" • recent 1-tick rate "+pct(best.recentRate)+". Three-tick continuation "+pct(best.rate3)+" is confidence-only. Scores are historical evidence rankings, not guaranteed win probabilities."
   };
 }
 
@@ -1595,7 +1595,7 @@ function renderEvenOdd(root,d,last,n){
   const entry=mavenAIReviewEntry("evenodd",rawEntry,e.aiDecision);
   setOtherValidationForecast("evenodd",state.selectedParity,e.signal,!!entry,state.liveTickSequence,e.aiDecision?.confidence);
   setSignalValidationForecast("evenodd",state.selectedParity,e.signal,state.liveTickSequence,e.aiDecision?.confidence);
-  const entryDisplay=entry||{main:entryActive?"NO STRONG ENTRY":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No 2–3 opposite-parity run currently qualifies for the selected Final Signal.":"Entry activates when EVEN or ODD passes the strength gate and signal checks."};
+  const entryDisplay=entry||{main:entryActive?"NO QUALIFIED PATTERN / REACTION":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No live 1–3 tick parity pattern currently shows enough repeatable 1–2 tick reaction above baseline.":"Entry evaluation activates when EVEN or ODD passes the Final Signal gate."};
   const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
   const reason=e.strength<.52
     ?"WAIT: neither parity has passed the 52% strength gate for a SIGNAL."
@@ -1617,7 +1617,7 @@ function renderEvenOdd(root,d,last,n){
     "Clustering "+Math.round(e.clustering*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
     "Streak "+e.streak+" • evidence "+Math.round(e.evidence*100),
     "Maven AI decision: "+e.aiDecision.baseSignal+" → "+e.aiDecision.signal+" • confidence "+Math.round(e.aiDecision.confidence*100)+"% • "+e.aiDecision.reason,
-    entry?"✓ ENTRY: opposite-parity run trigger passed validation":"× Waiting for a qualifying 2–3 opposite-parity run"
+    entry?"✓ Pattern + reaction candidate qualified":"× No qualifying live pattern/reaction yet"
   ],n);
   const finalSignalLabel=root.querySelector(".state");
   if(finalSignalLabel)finalSignalLabel.textContent=e.signal+" — "+state.selectedParity;
