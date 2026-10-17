@@ -869,11 +869,12 @@ function updateLiveDigitCursor(digit){
     cursor=document.createElement("span");
     cursor.className="live-digit-cursor";
     cursor.setAttribute("aria-hidden","true");
-    cursor.innerHTML='<span class="live-digit-cursor-label">LIVE</span><span class="live-digit-cursor-tip"></span>';
+    cursor.innerHTML='<span class="live-digit-cursor-tip"></span>';
     host.appendChild(cursor);
   }
+  const circle=target.querySelector(".distribution-circle");
   cursor.style.left=(target.offsetLeft+target.offsetWidth/2)+"px";
-  cursor.style.top=Math.max(0,target.offsetTop-20)+"px";
+  cursor.style.top=((circle?target.offsetTop+circle.offsetTop+circle.offsetHeight:target.offsetTop+target.offsetHeight)+2)+"px";
   host.querySelectorAll(".distribution-digit.live-digit-current").forEach(node=>node.classList.remove("live-digit-current"));
   target.classList.add("live-digit-current");
 }
