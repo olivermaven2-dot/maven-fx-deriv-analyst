@@ -875,8 +875,7 @@ function updateLiveDigitCursor(digit){
   cursor.setAttribute("aria-hidden","true");
   cursor.innerHTML='<span class="live-digit-cursor-tip"></span>';
   target.appendChild(cursor);
-  cursor.style.left=(circle.offsetLeft+circle.offsetWidth/2)+"px";
-  cursor.style.top=(circle.offsetTop+circle.offsetHeight+1)+"px";
+  // CSS anchors the small pointer below the full digit cell, centered under its percentage.
   host.querySelectorAll(".distribution-digit.live-digit-current")
     .forEach(node=>node.classList.remove("live-digit-current"));
   target.classList.add("live-digit-current");
