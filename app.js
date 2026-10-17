@@ -864,18 +864,15 @@ function updateLiveDigitCursor(digit){
   if(!host||!Number.isInteger(digit)||digit<0||digit>9)return;
   const target=host.querySelector('.distribution-digit[data-digit="'+digit+'"]');
   if(!target)return;
-  // Put the pointer on the percentage label itself. CSS draws a small,
-  // upward-pointing marker centered below that label and therefore the digit.
-  host.querySelectorAll(".distribution-digit.live-digit-current")
-    .forEach(node=>{
-      node.classList.remove("live-digit-current");
-      node.querySelector(".distribution-percent")?.classList.remove("cursor-active-percent");
-    });
+  host.querySelectorAll(".distribution-digit.live-digit-current").forEach(node=>node.classList.remove("live-digit-current"));
+  host.querySelectorAll(".live-digit-pointer").forEach(node=>node.remove());
   const percentage=target.querySelector(".distribution-percent");
   if(!percentage)return;
   target.classList.add("live-digit-current");
-  percentage.classList.add("cursor-active-percent");
-  host.querySelectorAll(".live-digit-cursor").forEach(node=>node.remove());
+  const pointer=document.createElement("span");
+  pointer.className="live-digit-pointer";
+  pointer.setAttribute("aria-hidden","true");
+  percentage.insertAdjacentElement("afterend",pointer);
 }
 function counts(d){return d.reduce((a,x)=>(a[x]=(a[x]||0)+1,a),{})}
 function rate(a,b){return b?Math.round(a/b*100):0}
