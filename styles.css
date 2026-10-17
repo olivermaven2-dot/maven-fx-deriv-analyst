@@ -995,3 +995,12 @@ body {
 .distribution-digit.live-digit-current .distribution-circle{border-color:#65e6b2;box-shadow:0 0 0 2px rgba(101,230,178,.24),0 0 14px rgba(101,230,178,.24)}
 .distribution-digit.live-digit-current .distribution-circle span{color:#a5f5d4}
 @media(prefers-reduced-motion:reduce){.live-digit-cursor{transition:none}}
+
+
+/* Plain white cursor below the active digit: no LIVE label or colored highlight. */
+.live-digit-cursor{z-index:5;display:block;transform:translateX(-50%);pointer-events:none;transition:left .12s ease-out,top .12s ease-out;}
+.live-digit-cursor-label{display:none !important;}
+.live-digit-cursor-tip{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:0;border-bottom:7px solid #fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.7));}
+.distribution-digit.live-digit-current .distribution-circle{border-color:inherit;box-shadow:none;}
+.distribution-digit.live-digit-current .distribution-circle span{color:inherit;}
+@media(prefers-reduced-motion:reduce){.live-digit-cursor{transition:none}}
