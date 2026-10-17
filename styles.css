@@ -1068,3 +1068,24 @@ body {
 }
 .digit-distribution .distribution-percent.cursor-active-percent::after{content:none!important;display:none!important;}
 .digit-distribution .distribution-digit.live-digit-current .distribution-circle{border-color:inherit!important;box-shadow:none!important;}
+
+
+/* Final live-digit cursor: compact, high-contrast, centered below the percentage. */
+.digit-distribution .distribution-digit.live-digit-current .distribution-percent{
+  color:#67e8f9!important;
+  text-shadow:0 0 5px rgba(34,211,238,.45)!important;
+}
+.digit-distribution .distribution-digit.live-digit-current .live-digit-pointer{
+  width:0!important;height:0!important;
+  margin:3px auto 0!important;
+  border-left:5px solid transparent!important;
+  border-right:5px solid transparent!important;
+  border-top:0!important;
+  border-bottom:7px solid #22d3ee!important;
+  filter:drop-shadow(0 0 1px #f8fafc) drop-shadow(0 0 4px rgba(34,211,238,.95))!important;
+  opacity:1!important;visibility:visible!important;
+}
+.digit-distribution .distribution-digit.live-digit-current .distribution-circle{
+  border-color:#22d3ee!important;
+  box-shadow:0 0 0 2px rgba(34,211,238,.45),0 0 9px rgba(34,211,238,.28)!important;
+}
