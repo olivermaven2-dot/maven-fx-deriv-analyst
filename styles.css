@@ -364,30 +364,35 @@ button,select,summary{touch-action:manipulation}
 }
 
 /* Maven FX Glass & Layered visual theme — presentation only */
+/* Midnight Navy — balanced finish; palette-only, preserving signal colors */
 :root{
-  --glass-bg:rgba(13,22,36,.84);
-  --glass-panel:rgba(20,32,50,.74);
-  --glass-panel-strong:rgba(25,40,61,.88);
-  --glass-line:rgba(131,177,221,.22);
-  --glass-line-bright:rgba(90,190,255,.42);
-  --glass-glow:rgba(38,150,255,.10);
+  --bg:#071426;
+  --panel:#10213a;
+  --panel2:#0b192d;
+  --line:#2a4262;
+  --glass-bg:rgba(9,23,43,.88);
+  --glass-panel:rgba(17,37,63,.82);
+  --glass-panel-strong:rgba(21,45,74,.92);
+  --glass-line:rgba(117,163,211,.25);
+  --glass-line-bright:rgba(89,174,255,.46);
+  --glass-glow:rgba(42,132,235,.13);
 }
 body{
   background:
-    radial-gradient(ellipse at 12% 0%,rgba(35,119,190,.16),transparent 42%),
-    radial-gradient(ellipse at 92% 18%,rgba(37,208,220,.09),transparent 34%),
-    linear-gradient(145deg,#070c15 0%,#0a1220 48%,#080e18 100%);
+    radial-gradient(ellipse at 14% -4%,rgba(42,111,190,.25),transparent 43%),
+    radial-gradient(ellipse at 88% 12%,rgba(41,91,158,.16),transparent 36%),
+    linear-gradient(145deg,#061124 0%,#0b1b33 48%,#071326 100%);
   background-attachment:fixed;
 }
 .topbar{
-  background:rgba(8,14,24,.78);
+  background:rgba(6,17,34,.86);
   border-bottom:1px solid var(--glass-line);
   box-shadow:0 8px 28px rgba(0,0,0,.18);
 }
 .app .live-card,.app .market-picker-card, .app .control-card,.app .distribution-card,.app .stream-card,
 .app .details,.app #overUnderControls,.app #evenOddControls, .app #riseFallControls,.app #engineRoot,
 .app .engine-nav{
-  background:linear-gradient(145deg,rgba(24,39,59,.88),rgba(12,21,34,.88));
+  background:linear-gradient(145deg,rgba(22,44,73,.92),rgba(10,25,46,.94));
   border:1px solid var(--glass-line);
   box-shadow:0 10px 28px rgba(0,0,0,.22),inset 0 1px 0 rgba(255,255,255,.035);
   border-radius:15px;
@@ -409,7 +414,7 @@ body{
 }
 .app .engine-nav{
   padding:7px;
-  background:rgba(11,19,31,.9);
+  background:rgba(8,21,40,.94);
 }
 .engine-tab{
   border:1px solid transparent;
@@ -429,7 +434,7 @@ button:focus-visible,select:focus-visible,input:focus-visible,.ou-digit:focus-vi
   outline-offset:2px;
 }
 .price-grid>div,.metric-card,.signal-card,.digit-card,.stat-card{
-  background:linear-gradient(145deg,rgba(29,46,68,.72),rgba(13,24,39,.78));
+  background:linear-gradient(145deg,rgba(27,51,81,.78),rgba(11,27,49,.86));
   border:1px solid rgba(132,177,218,.16);
   border-radius:11px;
 }
