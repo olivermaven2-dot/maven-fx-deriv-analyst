@@ -577,3 +577,69 @@ button:focus-visible,select:focus-visible,input:focus-visible,.ou-digit:focus-vi
 /* Even/Odd live stream parity colors */
 #digitStream .digit.parity-even{color:#ef4444;border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.12)}
 #digitStream .digit.parity-odd{color:#22c55e;border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12)}
+
+
+/* Phone-first dashboard order: controls before signal, history after signal.
+   Layout-only changes; the same live stream and analysis engines are retained. */
+@media (max-width: 600px) {
+  .app {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 7px 10px 22px;
+  }
+  .app > .live-card { order: 1; padding: 12px; }
+  .app > .engine-nav { order: 2; position: sticky; top: 59px; z-index: 25; margin: 0; padding: 5px 0 3px; background: rgba(8,13,24,.96); }
+  .app > .distribution-card { order: 3; margin: 0; padding: 12px; }
+  .app > #engineRoot { order: 4; min-width: 0; margin: 0; }
+  .app > .stream-card { order: 5; margin: 0; padding: 12px; }
+  .app > .details { order: 6; margin: 0; }
+  .app > .ou-validation-card { display: none !important; }
+  .app .live-head { gap: 8px; align-items: center; }
+  .app .live-head h1 { font-size: clamp(16px, 4.6vw, 20px); overflow-wrap: anywhere; }
+  .app .quality-pill { padding: 5px 7px; font-size: 9px; }
+  .app .live-card > .market-picker-card {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+    margin-top: 9px;
+    padding-top: 9px;
+  }
+  .app .live-card > .market-picker-card select { min-height: 40px; }
+  .app .subscribed-market-status { gap: 8px; margin-top: 8px; padding-top: 8px; }
+  .app .subscribed-market-status strong { font-size: 12px; }
+  .app .subscribed-market-status small { font-size: 9px; }
+  .app .price-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 7px;
+    margin-top: 10px;
+  }
+  .app .price-grid > div { min-width: 0; padding: 10px 8px; }
+  .app .price-grid strong,
+  .app .price-grid div:last-child strong {
+    font-size: clamp(23px, 7.5vw, 34px);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .app .price-grid span { font-size: 9px; letter-spacing: .09em; }
+  .app .live-meta { gap: 5px 10px; font-size: 10px; }
+  .app .live-meta span:last-child { text-align: right; }
+  .app .engine-nav { gap: 4px; }
+  .app .engine-tab { flex: 1 1 0; min-width: 0; padding: 10px 4px; font-size: 9px; letter-spacing: 0; }
+  .app .distribution-note { margin: 6px 0 8px; font-size: 11px; line-height: 1.4; }
+  .app .ou-row { gap: 4px; }
+  .app .ou-digit, .app .ou-side { min-height: 36px; }
+  .app .digit-distribution { gap: 8px 5px; }
+  .app .distribution-circle { width: clamp(35px, 10vw, 44px); height: clamp(35px, 10vw, 44px); }
+  .app .digit-stream { gap: 4px; }
+  .app .digit { width: 27px; height: 27px; }
+  .app .engine-panel { padding: 13px; }
+  .app .state { font-size: clamp(25px, 7vw, 30px); }
+}
+@media (max-width: 360px) {
+  .app { padding-left: 7px; padding-right: 7px; }
+  .app .live-card, .app .distribution-card, .app .engine-panel, .app .stream-card { border-radius: 13px; }
+  .app .price-grid strong,
+  .app .price-grid div:last-child strong { font-size: clamp(21px, 7vw, 27px); }
+  .app .engine-tab { font-size: 8px; }
+}
