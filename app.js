@@ -864,16 +864,20 @@ function updateLiveDigitCursor(digit){
   if(!host||!Number.isInteger(digit)||digit<0||digit>9)return;
   const target=host.querySelector('.distribution-digit[data-digit="'+digit+'"]');
   if(!target)return;
-  const circle=target.querySelector(".distribution-circle");
-  if(!circle)return;
-  // Attach the cursor to the active circle itself so it is always positioned
-  // directly underneath that digit, independent of grid rows or offset parents.
+  const percent=target.querySelector(".distribution-percent");
+  if(!percent)return;
+  // Attach to the digit button and position relative to the percentage text,
+  // so the pointer sits just below the percentage rather than below the circle.
   host.querySelectorAll(".live-digit-cursor").forEach(node=>node.remove());
   const cursor=document.createElement("span");
   cursor.className="live-digit-cursor";
   cursor.setAttribute("aria-hidden","true");
   cursor.innerHTML='<span class="live-digit-cursor-tip"></span>';
-  circle.appendChild(cursor);
+  const targetRect=target.getBoundingClientRect();
+  const percentRect=percent.getBoundingClientRect();
+  cursor.style.left=(percentRect.left+percentRect.width/2-targetRect.left)+"px";
+  cursor.style.top=(percentRect.bottom-targetRect.top+3)+"px";
+  target.appendChild(cursor);
   host.querySelectorAll(".distribution-digit.live-digit-current").forEach(node=>node.classList.remove("live-digit-current"));
   target.classList.add("live-digit-current");
 }
