@@ -1659,41 +1659,65 @@ function riseFallAnalysis(prices){
   const recentMoves=moves.slice(-60),recentDirectional=directional(recentMoves);
   const recentRate=rate(recentMoves);
   const totalMagnitude=recentDirectional.reduce((sum,x)=>sum+x.magnitude,0);
-  const recentMove=totalMagnitude?recentDirectional.filter(x=>x.direction==="R").reduce((sum,x)=>sum+x.magnitude,0)/totalMagnitude:.5;
+  const riseMoveShare=totalMagnitude?recentDirectional.filter(x=>x.direction==="R").reduce((sum,x)=>sum+x.magnitude,0)/totalMagnitude:.5;
   const shortRate=rate(moves.slice(-20)),midRate=rate(moves.slice(-100)),longRate=rate(moves.slice(-Math.min(500,moves.length)));
-  const digitEvidence=riseFallDigitPatternEvidence(clean,state.selectedRiseFall==="RISE"?"R":"F");
-  const digitSupport=digitEvidence?.qualified?Math.max(0,Math.min(.12,(digitEvidence.lift||0)*.6)):0;
-  const momentum=Math.max(0,Math.min(1,.5+(shortRate-longRate)*2));
-  const trendRate=Math.max(0,Math.min(1,.5+(shortRate-midRate)*.7+(midRate-longRate)*.8));
-  const recentTarget=state.selectedRiseFall==="RISE"?recentRate:1-recentRate;
-  const shortTarget=state.selectedRiseFall==="RISE"?shortRate:1-shortRate;
-  const midTarget=state.selectedRiseFall==="RISE"?midRate:1-midRate;
-  const longTarget=state.selectedRiseFall==="RISE"?longRate:1-longRate;
-  const targetMoves=directional(moves.slice(-20));
-  let streak=0;
-  const targetDir=state.selectedRiseFall==="RISE"?"R":"F";
-  for(let i=moves.length-1;i>=0&&moves[i].direction===targetDir;i--)streak++;
-  const persistence=targetMoves.length?targetMoves.filter(x=>x.direction===targetDir).length/targetMoves.length:.5;
+  const recentTargetFor=dir=>dir==="R"?recentRate:1-recentRate;
+  const shortTargetFor=dir=>dir==="R"?shortRate:1-shortRate;
+  const midTargetFor=dir=>dir==="R"?midRate:1-midRate;
+  const longTargetFor=dir=>dir==="R"?longRate:1-longRate;
+  const persistenceFor=dir=>{const a=directional(moves.slice(-20));return a.length?a.filter(x=>x.direction===dir).length/a.length:.5};
   let reversals=0,adjacent=0;
   for(let i=Math.max(1,moves.length-60);i<moves.length;i++){
     if(moves[i].direction==="X"||moves[i-1].direction==="X")continue;
     adjacent++;if(moves[i].direction!==moves[i-1].direction)reversals++;
   }
   const reversalPressure=adjacent?reversals/adjacent:0;
-  const evidence=Math.max(0,Math.min(1,
-    .24*recentTarget+.19*shortTarget+.14*midTarget+.09*longTarget+
-    .12*persistence+.10*(state.selectedRiseFall==="RISE"?recentMove:1-recentMove)+.08*(1-reversalPressure)+digitSupport
-  ));
+  const digitEvidenceByDir={
+    R:riseFallDigitPatternEvidence(clean,"R"),
+    F:riseFallDigitPatternEvidence(clean,"F")
+  };
+  const strengthFor=dir=>{
+    const digitEvidence=digitEvidenceByDir[dir];
+    const digitSupport=digitEvidence?.qualified?Math.max(0,Math.min(.04,(digitEvidence.lift||0)*.2)):0;
+    const movementShare=dir==="R"?riseMoveShare:1-riseMoveShare;
+    const raw=.24*recentTargetFor(dir)+.19*shortTargetFor(dir)+.14*midTargetFor(dir)+.09*longTargetFor(dir)
+      +.12*persistenceFor(dir)+.10*movementShare+.08*(1-reversalPressure)+digitSupport;
+    return Math.max(0,Math.min(1,raw));
+  };
+  const riseStrength=strengthFor("R"),fallStrength=strengthFor("F");
+  // Analyse both directions every render; select the stronger candidate automatically.
+  const selected=riseStrength>=fallStrength?"RISE":"FALL";
+  const targetDir=selected==="RISE"?"R":"F";
+  const recentTarget=recentTargetFor(targetDir),shortTarget=shortTargetFor(targetDir);
+  const midTarget=midTargetFor(targetDir),longTarget=longTargetFor(targetDir);
+  const persistence=persistenceFor(targetDir);
+  let streak=0;
+  for(let i=moves.length-1;i>=0&&moves[i].direction===targetDir;i--)streak++;
+  const momentum=Math.max(0,Math.min(1,.5+(shortTarget-longTarget)*2));
+  const trendRate=Math.max(0,Math.min(1,.5+(shortTarget-midTarget)*.7+(midTarget-longTarget)*.8));
+  const recentMove=selected==="RISE"?riseMoveShare:1-riseMoveShare;
+  const digitEvidence=digitEvidenceByDir[targetDir];
+  const evidence=selected==="RISE"?riseStrength:fallStrength;
+  const strengthGap=Math.abs(riseStrength-fallStrength);
+  const insufficient=clean.length<100||recentDirectional.length<15||stats.some(x=>x.size<=100&&x.directional<10);
   const conflict=(recentTarget<.45&&longTarget>.55)||(Math.abs(recentTarget-longTarget)>=.16&&recentTarget<.5)||(shortTarget<.43&&midTarget>.56);
+  // Directional strength is a hard gate: the winner must be strong enough
+  // and separated from the other side before any signal can be issued.
+  const strengthGatePassed=Math.max(riseStrength,fallStrength)>=.56&&strengthGap>=.06;
   let signal="WAIT";
-  if(clean.length<100||recentDirectional.length<15||stats.some(x=>x.size<=100&&x.directional<10))signal="WAIT";
+  if(insufficient)signal="WAIT";
+  else if(!strengthGatePassed)signal="WAIT";
   else if(conflict)signal="WAIT";
   else if(recentTarget<.43||shortTarget<.42||persistence<.38)signal="AVOID";
-  else if(evidence>=.67&&recentTarget>=.57&&shortTarget>=.54&&midTarget>=.51&&persistence>=.53&&clean.length>=200)signal="STRONG SIGNAL";
-  else if(evidence>=.52&&recentTarget>=.50&&shortTarget>=.48&&persistence>=.42)signal="SIGNAL";
+  else if(evidence>=.67&&recentTarget>=.57&&shortTarget>=.54&&midTarget>=.51&&persistence>=.53&&clean.length>=200&&Math.max(riseStrength,fallStrength)>=.68&&strengthGap>=.12)signal="STRONG SIGNAL";
+  else if(evidence>=.56&&recentTarget>=.50&&shortTarget>=.48&&persistence>=.42)signal="SIGNAL";
   else if(evidence<.43)signal="AVOID";
-  const aiDecision=mavenAIDecisionLayer("risefall",signal,evidence,[recentTarget,shortTarget,midTarget,longTarget,persistence,1-reversalPressure,recentMove,trendRate,momentum],conflict,clean.length<100||recentDirectional.length<15||stats.some(x=>x.size<=100&&x.directional<10),clean.length);signal=aiDecision.signal;
-  return {selected:state.selectedRiseFall,stats,recentRate,recentMove:aiDecision.adjustedAlignment[6]??recentMove,trendRate:aiDecision.adjustedAlignment[7]??trendRate,momentum:aiDecision.adjustedAlignment[8]??momentum,persistence:aiDecision.adjustedAlignment[4]??persistence,streak,reversalPressure,digitEvidence,evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,recentTarget:aiDecision.adjustedAlignment[0]??recentTarget,shortTarget:aiDecision.adjustedAlignment[1]??shortTarget,midTarget:aiDecision.adjustedAlignment[2]??midTarget,longTarget:aiDecision.adjustedAlignment[3]??longTarget};
+  const aiDecision=mavenAIDecisionLayer("risefall",signal,evidence,[recentTarget,shortTarget,midTarget,longTarget,persistence,1-reversalPressure,recentMove,trendRate,momentum],conflict||!strengthGatePassed,insufficient,clean.length);
+  signal=aiDecision.signal;
+  // Re-apply the strength gate after the AI layer so it cannot manufacture a signal.
+  if(!strengthGatePassed||insufficient||conflict)signal=insufficient||!strengthGatePassed||conflict?"WAIT":signal;
+  const directionSignal=(signal==="SIGNAL"||signal==="STRONG SIGNAL")?selected+" "+signal:signal;
+  return {selected,stats,recentRate,recentMove:aiDecision.adjustedAlignment[6]??recentMove,trendRate:aiDecision.adjustedAlignment[7]??trendRate,momentum:aiDecision.adjustedAlignment[8]??momentum,persistence:aiDecision.adjustedAlignment[4]??persistence,streak,reversalPressure,digitEvidence,digitEvidenceByDir,riseStrength,fallStrength,strengthGap,strengthGatePassed,evidence:aiDecision.adjustedEvidence,conflict,signal,directionSignal,baseSignal:aiDecision.baseSignal,aiDecision,recentTarget:aiDecision.adjustedAlignment[0]??recentTarget,shortTarget:aiDecision.adjustedAlignment[1]??shortTarget,midTarget:aiDecision.adjustedAlignment[2]??midTarget,longTarget:aiDecision.adjustedAlignment[3]??longTarget};
 }
 
 function riseFallEntry(prices,analysis){
