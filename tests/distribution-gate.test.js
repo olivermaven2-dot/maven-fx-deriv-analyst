@@ -455,7 +455,7 @@ test('Even/Odd entry independently qualifies exact 2-run and 3-run patterns agai
   const twoRun = run(twoRunData, 'EVEN');
   assert.ok(twoRun, 'qualified O-O pattern should allow EVEN entry');
   assert.match(twoRun.main, /2 consecutive ODD results → ENTER EVEN/);
-  assert.match(twoRun.evidence, /exact live pattern qualified/);
+  assert.match(twoRun.evidence, /relaxed evidence thresholds passed for the matching live pattern/);
 
   const threeRunData = [];
   for (let i = 0; i < 60; i++) threeRunData.push(2, 1, 3, 5, 2, 4);
