@@ -1466,8 +1466,8 @@ function parityReactionEntry(d,selectedSide){
 }
 
 function selectParityEntry(d,selectedSide){
-  // Entry rule: after exactly 2 or 3 consecutive opposite-parity results,
-  // predict the selected parity on the next tick.
+  // Independently qualify exact 2-run and exact 3-run patterns. Only the
+  // historical pattern matching the current live run may trigger an entry.
   if(!Array.isArray(d)||d.length<30)return null;
   const target=selectedSide==="EVEN"?"E":"O";
   const opposite=target==="E"?"O":"E";
@@ -1480,8 +1480,8 @@ function selectParityEntry(d,selectedSide){
     let total=0,hits=0,recentTotal=0,recentHits=0;
     for(let i=runLength;i<recent.length;i++){
       if(!recent.slice(i-runLength,i).every(v=>v===opposite))continue;
+      // Exclude longer runs so length 2 and length 3 are evaluated separately.
       if(i-runLength-1>=0&&recent[i-runLength-1]===opposite)continue;
-      if(recent[i]===opposite)continue;
       total++;
       if(recent[i]===target)hits++;
       if(i>=recent.length-160){recentTotal++;if(recent[i]===target)recentHits++;}
@@ -1492,15 +1492,15 @@ function selectParityEntry(d,selectedSide){
     const lift=rate-baseline;
     const recentLift=recentRate-baseline;
     const score=100*(Math.max(0,lift)*.65+Math.max(0,recentLift)*.25+Math.min(1,total/40)*.10);
-    candidates.push({runLength,total,rate,recentRate,lift,recentLift,score});
+    candidates.push({runLength,total,rate,recentRate,lift,recentLift,score,
+      qualified:total>=8&&lift>=.015&&recentLift>=-.04});
   }
-  candidates.sort((a,b)=>b.score-a.score||b.total-a.total);
-  const best=candidates[0];
-  if(!best||best.total<8||best.lift<.015||best.recentLift<-.04)return null;
 
   let liveRun=0;
   for(let i=recent.length-1;i>=0&&recent[i]===opposite;i--)liveRun++;
   if(liveRun!==2&&liveRun!==3)return null;
+  const best=candidates.find(c=>c.runLength===liveRun&&c.qualified);
+  if(!best)return null;
 
   const confidence=Math.max(65,Math.min(90,Math.round(68+best.score*.45+Math.min(8,best.total/8))));
   const triggerLabel=opposite==="E"?"EVEN":"ODD";
@@ -1509,11 +1509,11 @@ function selectParityEntry(d,selectedSide){
     type:"PARITY_RUN",
     status:"ENTRY READY",
     trigger:opposite,
-    main:"2–3 "+triggerLabel+" results → ENTER "+selectedSide,
+    main:liveRun+" consecutive "+triggerLabel+" results → ENTER "+selectedSide,
     confidence:confidence+"%",
     score:best.score,
-    reason:"The live stream has "+liveRun+" consecutive "+triggerLabel+" results. Historical outcomes after "+best.runLength+" consecutive "+triggerLabel+" results reached "+selectedSide+" "+ratePct+"% of the time (baseline "+Math.round(baseline*100)+"%).",
-    evidence:best.total+" historical run observations • "+ratePct+"% next-tick "+selectedSide+" rate • live opposite-parity run matched."
+    reason:"The live stream has exactly "+liveRun+" consecutive "+triggerLabel+" results. The independently evaluated "+liveRun+"-run pattern produced "+selectedSide+" "+ratePct+"% of the time across "+best.total+" historical observations (overall baseline "+Math.round(baseline*100)+"%).",
+    evidence:best.total+" historical observations • "+ratePct+"% next-tick "+selectedSide+" rate • exact live pattern qualified."
   };
 }
 
