@@ -1119,3 +1119,27 @@ body {
 .digit-distribution .distribution-cell.least .distribution-tag{
   visibility:hidden!important;
 }
+
+
+/* Final adjustment: tone down the live cursor highlight while keeping it centered and readable. */
+.digit-distribution .distribution-digit.live-digit-current .distribution-circle{
+  border-color:rgba(96,165,250,.72)!important;
+  box-shadow:0 0 0 1px rgba(96,165,250,.18),0 0 5px rgba(96,165,250,.14)!important;
+}
+.digit-distribution .distribution-digit.live-digit-current .distribution-circle::before{
+  border-color:rgba(96,165,250,.45)!important;
+  box-shadow:none!important;
+}
+.digit-distribution .distribution-digit.live-digit-current .distribution-circle span{
+  color:#f1f5f9!important;
+  text-shadow:none!important;
+}
+.digit-distribution .distribution-digit.live-digit-current .distribution-percent{
+  color:#93c5fd!important;
+  text-shadow:0 0 2px rgba(96,165,250,.18)!important;
+}
+.digit-distribution .distribution-digit.live-digit-current .live-digit-pointer{
+  border-bottom-color:#93c5fd!important;
+  filter:drop-shadow(0 0 1px rgba(147,197,253,.25))!important;
+  opacity:.88!important;
+}
