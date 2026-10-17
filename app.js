@@ -47,7 +47,7 @@ function renderOverUnder(root,d,c,last,n){
   const activeSignal=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   // Entry Engine evaluates candidates independently of the Over/Under Final Signal.
   // The signal and complementary-probability gate control permission, not candidate discovery.
-  const rawEntry=n>=100?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
+  const rawEntry=activeSignal&&n>=100?overUnderEntry(d,state.selectedDigit,state.selectedSide):null;
   const entry=rawEntry;
   const entryPermitted=activeSignal&&!e.probabilityConflict;
   state.ouEntrySnapshot={key:ouValidationKey(),tickCount:state.liveTickSequence,active:!!entry&&entryPermitted,digits:entry&&entryPermitted?entry.entries.map(x=>x.digit):[],validationDigits:entry&&entryPermitted?entry.entries.map(x=>x.digit):[],candidateDigits:entry?entry.entries.map(x=>x.digit):[],confidence:Number(e.aiDecision?.confidence),blockedReason:e.probabilityConflict?"Complementary probability gate failed":!activeSignal?"Final Signal is not SIGNAL or STRONG SIGNAL":""};
@@ -65,8 +65,10 @@ function renderOverUnder(root,d,c,last,n){
   let entryDisplay;
   if(entry){
     entryDisplay={...entry,status:entryPermitted?entry.status:"CANDIDATES ONLY — ENTRY BLOCKED",reason:entryPermitted?entry.reason:(e.probabilityConflict?"Entry candidates are evaluated independently, but the complementary-probability gate currently blocks entry permission.":"Entry candidates are evaluated independently. Entry permission remains blocked until the Over/Under Final Signal is SIGNAL or STRONG SIGNAL."),evidence:entry.evidence+" • Permission: "+(entryPermitted?"allowed by current signal and probability gate":"blocked by separate signal/probability permission gate")};
+  }else if(!activeSignal){
+    entryDisplay={label:"OVER/UNDER ENTRY",blank:true,reason:"Entry digits appear only when the analysed setup's Final Signal is SIGNAL or STRONG SIGNAL.",evidence:"Waiting for a qualifying Final Signal."};
   }else{
-    entryDisplay={label:"OVER/UNDER ENTRY",main:entryPermitted?"SIGNAL ACTIVE — WAITING FOR QUALIFIED ENTRY":activeSignal?"SIGNAL BLOCKED — NO ENTRY PERMISSION":"NO QUALIFIED ENTRY DIGITS",confidence:"—",status:entryPermitted?"WAITING FOR ENTRY DIGIT":activeSignal?"ENTRY BLOCKED":"NO ENTRY",reason:n<100?"Entry Engine is collecting enough ticks for independent candidate analysis.":entryPermitted?"The Final Signal is active and the complementary-probability gate has passed, but no entry digit has yet passed the independent reaction, holdout and consistency checks.":"No candidate digit currently passes the Entry Engine's own reaction, holdout and consistency checks. Entry qualification never changes the Final Signal.",evidence:"Independent Entry Engine • max two qualified candidates • Final Signal and complementary-probability gate remain mandatory for entry permission."};
+    entryDisplay={label:"OVER/UNDER ENTRY",main:"",confidence:"—",status:entryPermitted?"NO QUALIFIED ENTRY DIGITS":"ENTRY BLOCKED",reason:entryPermitted?"The Final Signal is active, but no entry digit has passed the independent reaction, holdout and consistency checks yet.": "The Final Signal is active, but the complementary-probability gate blocks entry permission.",evidence:"Independent Entry Engine • max two qualified candidates • complementary-probability gate remains mandatory for entry permission."};
   }
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
     "Selected setup: "+setup,
@@ -1343,6 +1345,7 @@ function panel(stateText,reason,entry,why,n){
   return `<section class="engine-panel"><div class="decision-summary"><div class="panel-kicker">FINAL SIGNAL</div><div class="state ${cls}">${esc(stateText)}</div><div class="spike-risk-banner spike-risk-unknown"><strong>SPIKE STATUS: CHECKING</strong></div>${entry?entryHtml(entry):""}</div><details class="why-details"><summary>Why this state?</summary><div class="why-content"><div class="why-section"><strong>Signal reason</strong><p class="reason">${esc(reason)}</p></div><div class="why-section"><strong class="spike-reason-label">Spike assessment</strong><p class="spike-risk-reason">Checking recent market movement.</p></div><div class="why-section"><strong>Entry reason</strong><p class="entry-reason">${esc(entryReason)}</p><p class="entry-evidence">${esc(entryEvidence)}</p></div><div class="why"><div class="why-title">Analysis checks</div><ul>${why.map(x=>`<li class="${x[0]==="×"?"block":""}">${esc(x)}</li>`).join("")}</ul></div><details class="analysis-details"><summary>Technical details</summary><div class="stats"><div class="stat"><span>Sample</span><strong>${n}</strong></div><div class="stat"><span>Evidence</span><strong>${entryEvidence}</strong></div><div class="stat"><span>Data quality</span><strong>${n>=500?"GOOD":n>=100?"BUILDING":"INSUFFICIENT"}</strong></div><div class="stat"><span>Last digit</span><strong>${state.digits?.at(-1)??"—"}</strong></div></div></details></div></details></section>`;
 }
 function entryHtml(e){
+  if(e.blank)return '<div class="entry"><div class="entry-head">'+esc(e.label||"ENTRY DIGITS")+'</div></div>';
   let cards;
   if(Array.isArray(e.entries)){
     const candidateCards=e.entries.map(x=>'<div class="entry-candidate"><strong>'+esc(x.digit)+'</strong><span>SCORE '+esc(x.score)+'/100</span></div>').join("");
