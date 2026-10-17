@@ -830,9 +830,9 @@ function renderStream(incremental=false){
   if(incremental&&host.children.length===expectedPreviousCount&&d.length>0){
     const previous=host.lastElementChild;if(previous)previous.classList.remove("latest");
     if(host.children.length>=STREAM_SIZE)host.firstElementChild.remove();
-    const node=document.createElement("span");node.className="digit latest";node.textContent=displayTick(d[d.length-1]);node.title=parityMode?"Last digit "+d[d.length-1]:"";host.appendChild(node);
+    const node=document.createElement("span");node.className="digit latest"+(parityMode?(d[d.length-1]%2===0?" parity-even":" parity-odd"):"");node.textContent=displayTick(d[d.length-1]);node.title=parityMode?"Last digit "+d[d.length-1]:"";host.appendChild(node);
   }else{
-    host.innerHTML=d.map((x,i)=>`<span class="digit ${i===d.length-1?"latest":""}" title="${parityMode?"Last digit "+x:""}">${displayTick(x)}</span>`).join("");
+    host.innerHTML=d.map((x,i)=>`<span class="digit ${i===d.length-1?"latest":""}${parityMode?(x%2===0?" parity-even":" parity-odd"):""}" title="${parityMode?"Last digit "+x:""}">${displayTick(x)}</span>`).join("");
   }
   const now=Date.now();
   if(!incremental||now-lastDistributionRenderAt>=2500){renderDigitDistribution();lastDistributionRenderAt=now;}
