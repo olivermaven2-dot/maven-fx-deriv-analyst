@@ -214,3 +214,21 @@
   .topbar { padding-left:18px !important; padding-right:18px !important; }
   .app { padding-left:18px !important; padding-right:18px !important; }
 }
+
+
+/* Restore the original desktop arrangement: Digit Distribution on the left,
+   Final Signal on the right, both directly below LIVE MARKET DATA and engine tabs. */
+@media (min-width:1024px) {
+  .app {
+    grid-template-areas:
+      "live live"
+      "nav nav"
+      "distribution engine"
+      "validation validation"
+      "diagnostics diagnostics" !important;
+  }
+  .app > .distribution-card { grid-area:distribution !important; }
+  .app > #engineRoot { grid-area:engine !important; }
+  .app > #ouValidationCard { grid-area:validation !important; }
+  .app > .details { grid-area:diagnostics !important; }
+}
