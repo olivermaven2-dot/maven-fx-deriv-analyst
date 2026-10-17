@@ -864,50 +864,19 @@ function updateLiveDigitCursor(digit){
   if(!host||!Number.isInteger(digit)||digit<0||digit>9)return;
   const target=host.querySelector('.distribution-digit[data-digit="'+digit+'"]');
   if(!target)return;
-  const percent=target.querySelector(".distribution-percent");
-  if(!percent)return;
+  const circle=target.querySelector(".distribution-circle");
+  if(!circle)return;
 
-  // Keep exactly one cursor, attached to the active digit button so grid
-  // layout and parent offset calculations cannot move it to another digit.
+  // A single small blue pointer, positioned immediately below the digit circle.
   host.querySelectorAll(".live-digit-cursor").forEach(node=>node.remove());
-  target.style.setProperty("position","relative","important");
-  target.style.setProperty("overflow","visible","important");
   const cursor=document.createElement("span");
   cursor.className="live-digit-cursor";
   cursor.setAttribute("aria-hidden","true");
   cursor.innerHTML='<span class="live-digit-cursor-tip"></span>';
-  const targetRect=target.getBoundingClientRect();
-  const percentRect=percent.getBoundingClientRect();
-  const setImportant=(el,prop,value)=>el.style.setProperty(prop,value,"important");
-  setImportant(cursor,"position","absolute");
-  setImportant(cursor,"display","block");
-  setImportant(cursor,"left",(percentRect.left+percentRect.width/2-targetRect.left)+"px");
-  setImportant(cursor,"top",(percentRect.bottom-targetRect.top+3)+"px");
-  setImportant(cursor,"right","auto");
-  setImportant(cursor,"bottom","auto");
-  setImportant(cursor,"width","0");
-  setImportant(cursor,"height","0");
-  setImportant(cursor,"margin","0");
-  setImportant(cursor,"padding","0");
-  setImportant(cursor,"transform","translateX(-50%)");
-  setImportant(cursor,"overflow","visible");
-  setImportant(cursor,"z-index","9999");
-  setImportant(cursor,"opacity","1");
-  setImportant(cursor,"visibility","visible");
-  setImportant(cursor,"pointer-events","none");
-  const tip=cursor.querySelector(".live-digit-cursor-tip");
-  setImportant(tip,"display","block");
-  setImportant(tip,"width","0");
-  setImportant(tip,"height","0");
-  setImportant(tip,"margin","0");
-  setImportant(tip,"border-left","3px solid transparent");
-  setImportant(tip,"border-right","3px solid transparent");
-  setImportant(tip,"border-top","0");
-  setImportant(tip,"border-bottom","4px solid #60a5fa");
-  setImportant(tip,"filter","drop-shadow(0 0 1px #dbeafe)");
-  target.appendChild(cursor);
-  host.querySelectorAll(".distribution-digit.live-digit-current").forEach(node=>node.classList.remove("live-digit-current"));
+  circle.appendChild(cursor);
   target.classList.add("live-digit-current");
+  host.querySelectorAll(".distribution-digit:not([data-digit=\""+digit+"\"]).live-digit-current")
+    .forEach(node=>node.classList.remove("live-digit-current"));
 }
 function counts(d){return d.reduce((a,x)=>(a[x]=(a[x]||0)+1,a),{})}
 function rate(a,b){return b?Math.round(a/b*100):0}
