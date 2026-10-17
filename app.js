@@ -1466,28 +1466,55 @@ function parityReactionEntry(d,selectedSide){
 }
 
 function selectParityEntry(d,selectedSide){
-  const pattern=parityPatternStats(d,selectedSide),reaction=parityReactionEntry(d,selectedSide);
-  if(!pattern&&!reaction)return null;
-  const candidate=!pattern?reaction:!reaction?pattern:(reaction.score>=pattern.score?reaction:pattern);
-  // Live follow-through is a confidence booster, not a rigid 3-tick gate.
-  // Statistical trigger quality remains mandatory; weaker evidence cannot use this relaxation.
+  // Entry rule: after exactly 2 or 3 consecutive opposite-parity results,
+  // predict the selected parity on the next tick.
+  if(!Array.isArray(d)||d.length<30)return null;
+  const target=selectedSide==="EVEN"?"E":"O";
+  const opposite=target==="E"?"O":"E";
   const key=x=>(x%2===0?"E":"O");
   const recent=d.slice(-500).map(key);
-  const triggerPattern=candidate.type==="PATTERN"?String(candidate.main).split(" → ").slice(0,-1):[candidate.trigger];
-  const score=Number(candidate.score)||0;
-  const confidence=parseInt(candidate.confidence,10)||0;
-  const strongHistorical=score>=6&&confidence>=78;
-  let depth=0;
-  for(const k of [3,2,1]){
-    if(recent.length<triggerPattern.length+k)continue;
-    const start=recent.length-triggerPattern.length-k;
-    const matched=triggerPattern.every((v,i)=>recent[start+i]===v);
-    const follow=recent.slice(start+triggerPattern.length);
-    if(matched&&follow.length===k&&follow.every(v=>v===(selectedSide==="EVEN"?"E":"O"))){depth=k;break;}
+  const baseline=recent.length?recent.filter(x=>x===target).length/recent.length:.5;
+  const candidates=[];
+
+  for(const runLength of [2,3]){
+    let total=0,hits=0,recentTotal=0,recentHits=0;
+    for(let i=runLength;i<recent.length;i++){
+      if(!recent.slice(i-runLength,i).every(v=>v===opposite))continue;
+      if(i-runLength-1>=0&&recent[i-runLength-1]===opposite)continue;
+      if(recent[i]===opposite)continue;
+      total++;
+      if(recent[i]===target)hits++;
+      if(i>=recent.length-160){recentTotal++;if(recent[i]===target)recentHits++;}
+    }
+    if(total<8)continue;
+    const rate=hits/total;
+    const recentRate=recentTotal?recentHits/recentTotal:rate;
+    const lift=rate-baseline;
+    const recentLift=recentRate-baseline;
+    const score=100*(Math.max(0,lift)*.65+Math.max(0,recentLift)*.25+Math.min(1,total/40)*.10);
+    candidates.push({runLength,total,rate,recentRate,lift,recentLift,score});
   }
-  if(!strongHistorical||!depth||(depth<2&&score<8)||(depth<3&&score<7))return null;
-  const confirmation=depth===3?"3-tick live follow-through confirmed":depth===2?"2-tick live follow-through confirmed":"1-tick live follow-through confirmed; 2–3 ticks remain confidence boosters";
-  return {...candidate,reason:candidate.reason+" Current trigger pattern and "+confirmation+" for "+selectedSide+".",evidence:candidate.evidence+" • live trigger matched • "+confirmation+"."};
+  candidates.sort((a,b)=>b.score-a.score||b.total-a.total);
+  const best=candidates[0];
+  if(!best||best.total<8||best.lift<.015||best.recentLift<-.04)return null;
+
+  let liveRun=0;
+  for(let i=recent.length-1;i>=0&&recent[i]===opposite;i--)liveRun++;
+  if(liveRun!==2&&liveRun!==3)return null;
+
+  const confidence=Math.max(65,Math.min(90,Math.round(68+best.score*.45+Math.min(8,best.total/8))));
+  const triggerLabel=opposite==="E"?"EVEN":"ODD";
+  const ratePct=Math.round(best.rate*100);
+  return {
+    type:"PARITY_RUN",
+    status:"ENTRY READY",
+    trigger:opposite,
+    main:"2–3 "+triggerLabel+" results → ENTER "+selectedSide,
+    confidence:confidence+"%",
+    score:best.score,
+    reason:"The live stream has "+liveRun+" consecutive "+triggerLabel+" results. Historical outcomes after "+best.runLength+" consecutive "+triggerLabel+" results reached "+selectedSide+" "+ratePct+"% of the time (baseline "+Math.round(baseline*100)+"%).",
+    evidence:best.total+" historical run observations • "+ratePct+"% next-tick "+selectedSide+" rate • live opposite-parity run matched."
+  };
 }
 
 function renderEvenOdd(root,d,last,n){
