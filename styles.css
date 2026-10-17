@@ -572,3 +572,8 @@ button:focus-visible,select:focus-visible,input:focus-visible,.ou-digit:focus-vi
 .parity-strength-fill.even{background:#16a34a}
 .parity-strength-fill.odd{background:#d97706}
 .parity-strength-note{margin-top:7px;font-size:10px;line-height:1.35;opacity:.72}
+
+
+/* Even/Odd live stream parity colors */
+#digitStream .digit.parity-even{color:#ef4444;border-color:rgba(239,68,68,.5);background:rgba(239,68,68,.12)}
+#digitStream .digit.parity-odd{color:#22c55e;border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.12)}
