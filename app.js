@@ -1521,7 +1521,8 @@ function selectParityEntry(d,selectedSide){
   )[0];
   if(!best)return null;
 
-  const label=best.pattern.split("").map(x=>x==="E"?"EVEN":"ODD").join(" → ");
+  const parts=best.pattern.split("");
+  const label=parts.every(x=>x===parts[0])?best.len+" consecutive "+(parts[0]==="E"?"EVEN":"ODD")+" results":parts.map(x=>x==="E"?"EVEN":"ODD").join(" → ");
   const pct=x=>Math.round(x*100)+"%";
   return {
     type:"VALIDATED_PARITY_PATTERN",
