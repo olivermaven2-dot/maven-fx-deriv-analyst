@@ -1362,8 +1362,8 @@ function parityStats(d,selectedSide){
   if(n<100)signal="WAIT";
   else if(conflict)signal="WAIT";
   else if(!transitionSampleReady)signal="WAIT";
-  else if(evidence>=.68&&strength>=.55&&recent>=.56&&short50>=.53&&long>=.49&&recentTransitionRate>=.52&&consistency>=.58&&n>=250&&transitions>=50)signal="STRONG SIGNAL";
-  else if(evidence>=.53&&strength>=.52&&recent>=.52&&short50>=.49&&recentTransitionRate>=.49&&consistency>=.46&&transitions>=30)signal="SIGNAL";
+  else if(evidence>=.62&&strength>=.55&&recent>=.53&&short50>=.50&&recentTransitionRate>=.50&&consistency>=.50&&n>=200&&transitions>=40)signal="STRONG SIGNAL";
+  else if(evidence>=.48&&strength>=.52&&recent>=.49&&short50>=.47&&recentTransitionRate>=.46&&consistency>=.40&&transitions>=30)signal="SIGNAL";
   else if(evidence<.38||strength<.44||recent<.44)signal="AVOID";
   const aiDecision=mavenAIDecisionLayer("evenodd",signal,evidence,[probability,momentumScore,trendScore,transition,clustering,recency,consistency,historical,context,strength],conflict,n<100||!transitionSampleReady,n);signal=aiDecision.signal;
   return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,strength:aiDecision.adjustedAlignment[9]??strength,probability:aiDecision.adjustedAlignment[0]??probability,momentumScore:aiDecision.adjustedAlignment[1]??momentumScore,trendScore:aiDecision.adjustedAlignment[2]??trendScore,transition:aiDecision.adjustedAlignment[3]??transition,historical:aiDecision.adjustedAlignment[7]??historical,recency:aiDecision.adjustedAlignment[5]??recency,context:aiDecision.adjustedAlignment[8]??context,evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,target,other};
@@ -1518,39 +1518,50 @@ function selectParityEntry(d,selectedSide){
 }
 
 function renderEvenOdd(root,d,last,n){
-  const e=parityStats(d,state.selectedParity);
+  // Analyze both directions on every render and automatically use the stronger
+  // parity. The weighted 20/50/100/250/500 strength remains a hard signal gate.
+  const evenStats=parityStats(d,"EVEN");
+  const oddStats=parityStats(d,"ODD");
+  const evenStrength=.35*evenStats.recent+.25*evenStats.short50+.20*evenStats.medium+.10*evenStats.mid250+.10*evenStats.long;
+  const oddStrength=.35*oddStats.recent+.25*oddStats.short50+.20*oddStats.medium+.10*oddStats.mid250+.10*oddStats.long;
+  const chosen=evenStrength>=oddStrength?evenStats:oddStats;
+  state.selectedParity=chosen.target;
+  renderParityControls();
+  const e=chosen;
   const entryActive=e.signal==="SIGNAL"||e.signal==="STRONG SIGNAL";
   const rawEntry=entryActive?selectParityEntry(d,state.selectedParity):null;
   const entry=mavenAIReviewEntry("evenodd",rawEntry,e.aiDecision);
   setOtherValidationForecast("evenodd",state.selectedParity,e.signal,!!entry,state.liveTickSequence,e.aiDecision?.confidence);
   setSignalValidationForecast("evenodd",state.selectedParity,e.signal,state.liveTickSequence,e.aiDecision?.confidence);
-  const entryDisplay=entry||{main:entryActive?"NO STRONG ENTRY":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No trigger has enough conditional lift toward the selected Final Signal.":"Entry activates only when the selected parity has SIGNAL or STRONG SIGNAL."};
+  const entryDisplay=entry||{main:entryActive?"NO STRONG ENTRY":"NO ACTIVE ENTRY",confidence:"—",reason:entryActive?"No 2–3 opposite-parity run currently qualifies for the selected Final Signal.":"Entry activates when EVEN or ODD passes the strength gate and signal checks."};
   const pattern=d.slice(-6).map(x=>x%2===0?"E":"O").join(" → ");
-  const reason=e.conflict?"WAIT: recent and longer-window parity behaviour conflict. The AI will wait for stronger agreement.":e.transitions<30||e.recentTransitions<10?"WAIT: parity continuation sample is still small ("+e.transitions+" total and "+e.recentTransitions+" recent transitions; needs at least 30 total and 10 recent).":e.signal==="STRONG SIGNAL"?"Multiple parity evidence layers are aligned for "+state.selectedParity+".":e.signal==="SIGNAL"?"The selected parity has sufficient multi-factor evidence, but it is not at STRONG SIGNAL level.":e.signal==="AVOID"?"The selected parity has unfavorable evidence.":"Evidence for the selected parity is still developing.";
+  const reason=e.strength<.52
+    ?"WAIT: neither parity has passed the 52% strength gate for a SIGNAL."
+    :e.conflict
+      ?"WAIT: recent and longer-window parity behaviour conflict."
+      :e.transitions<30||e.recentTransitions<10
+        ?"WAIT: parity transition sample is still small ("+e.transitions+" total and "+e.recentTransitions+" recent transitions)."
+        :e.signal==="STRONG SIGNAL"
+          ?"EVEN and ODD were both evaluated; "+state.selectedParity+" has the stronger weighted strength and aligned evidence."
+          :e.signal==="SIGNAL"
+            ?"EVEN and ODD were both evaluated; "+state.selectedParity+" passed the strength gate and the relaxed signal thresholds."
+            :e.signal==="AVOID"?"The selected parity has unfavorable evidence.":"Neither parity currently qualifies for a signal.";
   root.innerHTML=panel(e.signal,reason,entryDisplay,[
-    "Selected parity: "+state.selectedParity,
+    "Automatically compared EVEN and ODD; selected: "+state.selectedParity,
     "Recent parity: "+pattern,
     "20/50/100/250/500 rates: "+e.windows.map(x=>Math.round(x.rate*100)+"%").join(" / "),
     "Probability "+Math.round(e.probability*100)+" • momentum "+Math.round(e.momentumScore*100)+" • trend "+Math.round(e.trendScore*100)+" • transitions "+Math.round(e.transition*100),
-    "EVEN/ODD strength "+Math.round(e.strength*100)+"% • clustering "+Math.round(e.clustering*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
+    "Selected "+state.selectedParity+" strength "+Math.round(e.strength*100)+"% • EVEN strength "+Math.round(evenStrength*100)+"% • ODD strength "+Math.round(oddStrength*100)+"%",
+    "Clustering "+Math.round(e.clustering*100)+" • recency "+Math.round(e.recency*100)+" • consistency "+Math.round(e.consistency*100),
     "Streak "+e.streak+" • evidence "+Math.round(e.evidence*100),
     "Maven AI decision: "+e.aiDecision.baseSignal+" → "+e.aiDecision.signal+" • confidence "+Math.round(e.aiDecision.confidence*100)+"% • "+e.aiDecision.reason,
-    entry?"✓ STRONG ENTRY: trigger has measurable lift toward the Final Signal":"× No strong trigger passed conditional validation"
+    entry?"✓ ENTRY: opposite-parity run trigger passed validation":"× Waiting for a qualifying 2–3 opposite-parity run"
   ],n);
-  // Keep status styling tied to the signal state, but explicitly name its EVEN/ODD direction.
   const finalSignalLabel=root.querySelector(".state");
   if(finalSignalLabel)finalSignalLabel.textContent=e.signal+" — "+state.selectedParity;
-  const otherParity=parityStats(d,state.selectedParity==="EVEN"?"ODD":"EVEN");
-  const parityScore=stats=>.35*stats.recent+.25*stats.short50+.20*stats.medium+.10*stats.mid250+.10*stats.long;
-  const evenStats=state.selectedParity==="EVEN"?e:otherParity;
-  const oddStats=state.selectedParity==="ODD"?e:otherParity;
-  const evenRaw=parityScore(evenStats),oddRaw=parityScore(oddStats);
-  const totalStrength=evenRaw+oddRaw;
-  const evenStrength=totalStrength?Math.round(evenRaw/totalStrength*100):50;
-  const oddStrength=100-evenStrength;
-  root.insertAdjacentHTML("beforeend",'<section class="parity-strength" aria-label="Even and odd strength"><div class="parity-strength-heading">EVEN vs ODD STRENGTH</div><div class="parity-strength-row"><span>EVEN</span><div class="parity-strength-track"><div class="parity-strength-fill even" style="width:'+evenStrength+'%"></div></div><strong>'+evenStrength+'%</strong></div><div class="parity-strength-row"><span>ODD</span><div class="parity-strength-track"><div class="parity-strength-fill odd" style="width:'+oddStrength+'%"></div></div><strong>'+oddStrength+'%</strong></div><div class="parity-strength-note">Relative strength from weighted 20/50/100/250/500-tick parity rates; descriptive, not a win probability.</div></section>');
+  const evenPct=Math.round(evenStrength*100),oddPct=Math.round(oddStrength*100);
+  root.insertAdjacentHTML("beforeend",'<section class="parity-strength" aria-label="Even and odd strength"><div class="parity-strength-heading">EVEN vs ODD STRENGTH</div><div class="parity-strength-row"><span>EVEN</span><div class="parity-strength-track"><div class="parity-strength-fill even" style="width:'+evenPct+'%"></div></div><strong>'+evenPct+'%</strong></div><div class="parity-strength-row"><span>ODD</span><div class="parity-strength-track"><div class="parity-strength-fill odd" style="width:'+oddPct+'%"></div></div><strong>'+oddPct+'%</strong></div><div class="parity-strength-note">Both parities are evaluated continuously. The stronger parity is selected automatically; the 52% strength gate remains required for SIGNAL.</div></section>');
 }
-
 function riseFallAnalysis(prices){
   if(!Array.isArray(prices)||prices.length<30)return null;
   const clean=prices.map(Number).filter(Number.isFinite);
