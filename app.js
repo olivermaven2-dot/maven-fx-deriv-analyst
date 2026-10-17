@@ -1356,15 +1356,17 @@ function parityStats(d,selectedSide){
   const strength=Math.max(0,Math.min(1,.35*recent+.25*short50+.20*medium+.10*mid250+.10*long));
   const evidence=probability*.15+momentumScore*.10+trendScore*.07+transition*.13+clustering*.09+recency*.08+consistency*.08+historical*.07+context*.08+strength*.15;
   const conflict=(recent<.43&&long>.53)||(Math.abs(recent-long)>=.16&&recent<.5)||(recent<.45&&short50>.56);
-  const transitionSampleReady=transitions>=30&&recentTransitions>=10;
+  // Relax the parity signal gates so useful setups are not routinely stuck on WAIT.
+  // Keep a minimum live sample and retain the conflict check to avoid signals from tiny/noisy samples.
+  const transitionSampleReady=transitions>=15&&recentTransitions>=5;
   let signal="WAIT";
   const n=d.length;
-  if(n<100)signal="WAIT";
+  if(n<60)signal="WAIT";
   else if(conflict)signal="WAIT";
   else if(!transitionSampleReady)signal="WAIT";
-  else if(evidence>=.62&&strength>=.55&&recent>=.53&&short50>=.50&&recentTransitionRate>=.50&&consistency>=.50&&n>=200&&transitions>=40)signal="STRONG SIGNAL";
-  else if(evidence>=.48&&strength>=.52&&recent>=.49&&short50>=.47&&recentTransitionRate>=.46&&consistency>=.40&&transitions>=30)signal="SIGNAL";
-  else if(evidence<.38||strength<.44||recent<.44)signal="AVOID";
+  else if(evidence>=.58&&strength>=.50&&recent>=.50&&short50>=.47&&recentTransitionRate>=.47&&consistency>=.40&&n>=120&&transitions>=25)signal="STRONG SIGNAL";
+  else if(evidence>=.43&&strength>=.48&&recent>=.46&&short50>=.44&&recentTransitionRate>=.43&&consistency>=.30&&transitions>=15)signal="SIGNAL";
+  else if(evidence<.34||strength<.40||recent<.40)signal="AVOID";
   const aiDecision=mavenAIDecisionLayer("evenodd",signal,evidence,[probability,momentumScore,trendScore,transition,clustering,recency,consistency,historical,context,strength],conflict,n<100||!transitionSampleReady,n);signal=aiDecision.signal;
   return {windows,recent,short50,medium,mid250,long,momentum,trend,transitionRate,recentTransitionRate,transitions,recentTransitions,streak,clustering,consistency,strength:aiDecision.adjustedAlignment[9]??strength,probability:aiDecision.adjustedAlignment[0]??probability,momentumScore:aiDecision.adjustedAlignment[1]??momentumScore,trendScore:aiDecision.adjustedAlignment[2]??trendScore,transition:aiDecision.adjustedAlignment[3]??transition,historical:aiDecision.adjustedAlignment[7]??historical,recency:aiDecision.adjustedAlignment[5]??recency,context:aiDecision.adjustedAlignment[8]??context,evidence:aiDecision.adjustedEvidence,conflict,signal,baseSignal:aiDecision.baseSignal,aiDecision,target,other};
 }
