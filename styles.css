@@ -988,18 +988,19 @@ body {
 }
 
 /* Clear compact cursor: centered below the live digit, using the interface's cyan-blue accent. */
-.digit-distribution .distribution-circle{position:relative;overflow:visible!important;}
-.digit-distribution .distribution-circle > .live-digit-cursor{
-  position:absolute!important;left:50%!important;top:calc(100% + 2px)!important;
+/* Compact pointer directly below each digit's percentage, centered on the digit. */
+.digit-distribution .distribution-digit{position:relative!important;overflow:visible!important;}
+.digit-distribution .distribution-digit > .live-digit-cursor{
+  position:absolute!important;left:50%!important;top:calc(100% + 1px)!important;
   display:block!important;width:0!important;height:0!important;margin:0!important;padding:0!important;
   border:0!important;transform:translateX(-50%)!important;z-index:30!important;
   pointer-events:none!important;opacity:1!important;visibility:visible!important;
 }
-.digit-distribution .distribution-circle > .live-digit-cursor > .live-digit-cursor-tip{
+.digit-distribution .distribution-digit > .live-digit-cursor > .live-digit-cursor-tip{
   display:block!important;position:relative!important;width:0!important;height:0!important;
   margin:0!important;padding:0!important;
-  border-left:5px solid transparent!important;border-right:5px solid transparent!important;
-  border-top:0!important;border-bottom:7px solid #60a5fa!important;
+  border-left:4px solid transparent!important;border-right:4px solid transparent!important;
+  border-top:0!important;border-bottom:6px solid #60a5fa!important;
   filter:drop-shadow(0 0 2px #60a5fa) drop-shadow(0 0 1px #ffffff)!important;
 }
 .digit-distribution .distribution-digit.live-digit-current .distribution-circle{
