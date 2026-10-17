@@ -987,24 +987,26 @@ body {
   .topbar { background:rgba(13,18,25,.98) !important; }
 }
 
-/* Compact live cursor: centered directly beneath the digit, matching Maven blue. */
+/* Clear compact cursor: centered below the live digit, using the interface's cyan-blue accent. */
 .digit-distribution .distribution-circle{position:relative;overflow:visible!important;}
 .digit-distribution .distribution-circle > .live-digit-cursor{
   position:absolute!important;left:50%!important;top:calc(100% + 2px)!important;
   display:block!important;width:0!important;height:0!important;margin:0!important;padding:0!important;
-  border:0!important;transform:translateX(-50%)!important;z-index:20!important;
+  border:0!important;transform:translateX(-50%)!important;z-index:30!important;
   pointer-events:none!important;opacity:1!important;visibility:visible!important;
 }
 .digit-distribution .distribution-circle > .live-digit-cursor > .live-digit-cursor-tip{
   display:block!important;position:relative!important;width:0!important;height:0!important;
   margin:0!important;padding:0!important;
-  border-left:4px solid transparent!important;border-right:4px solid transparent!important;
-  border-top:0!important;border-bottom:5px solid #60a5fa!important;
-  filter:drop-shadow(0 0 1px #f1f7ff)!important;
+  border-left:5px solid transparent!important;border-right:5px solid transparent!important;
+  border-top:0!important;border-bottom:7px solid #60a5fa!important;
+  filter:drop-shadow(0 0 2px #60a5fa) drop-shadow(0 0 1px #ffffff)!important;
 }
 .digit-distribution .distribution-digit.live-digit-current .distribution-circle{
   border-color:#60a5fa!important;
-  box-shadow:0 0 0 1px rgba(96,165,250,.55),0 0 7px rgba(96,165,250,.32)!important;
+  box-shadow:0 0 0 1px rgba(96,165,250,.85),0 0 9px rgba(96,165,250,.5)!important;
 }
-.digit-distribution .distribution-digit.live-digit-current .distribution-circle span{color:inherit!important;}
+.digit-distribution .distribution-digit.live-digit-current .distribution-circle span{
+  color:#eaf6ff!important;text-shadow:0 0 5px rgba(96,165,250,.75)!important;
+}
 @media(prefers-reduced-motion:reduce){.live-digit-cursor{transition:none!important}}
